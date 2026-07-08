@@ -101,7 +101,7 @@ class PreviewRequest(BaseModel):
 
 
 class DeleteRequest(BaseModel):
-    ids: list[str]
+    ids: list[str] = Field(min_length=1)
     document_id: str | None = None
 
 
@@ -125,6 +125,10 @@ class DuplicateRequest(BaseModel):
     offset_x: float = 0.0
     offset_y: float = 0.0
     fill: str | None = None
+    stroke: str | None = None
+    stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
+    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
+    smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
     z_index: int | None = None
 
 
@@ -148,6 +152,10 @@ class DuplicateRequest(BaseModel):
     offset_x: float = 0.0
     offset_y: float = 0.0
     fill: str | None = None
+    stroke: str | None = None
+    stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
+    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
+    smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
     z_index: int | None = None
 
 
@@ -187,7 +195,6 @@ class CheckpointRequest(BaseModel):
 
 
 @app.get("/documents")
-@app.post("/tools/list_documents")
 async def list_documents():
     """List all documents (in-memory + stored)."""
     graph = _get_graph()
@@ -229,7 +236,7 @@ async def batch(req: BatchRequest):
     return ToolResponse(data={"results": results})
 
 
-@app.get("/tools/checkpoint", response_model=ToolResponse)
+@app.post("/tools/checkpoint", response_model=ToolResponse)
 async def checkpoint(req: CheckpointRequest):
     graph = _get_graph()
     if not graph.has_document():
@@ -287,7 +294,6 @@ async def get_document_rest(document_id: str):
     }
 
 
-@app.get("/tools/document/{document_id}", response_model=ToolResponse)
 @app.post("/tools/document", response_model=ToolResponse)
 async def get_document(document_id: str | None = None):
     """Get document metadata and render preview."""
@@ -427,7 +433,9 @@ async def duplicate_region(req: DuplicateRequest):
             region_id=req.region_id, new_region_id=req.new_region_id,
             document_id=doc_id,
             offset_x=req.offset_x, offset_y=req.offset_y,
-            fill=req.fill, z_index=req.z_index,
+            fill=req.fill, stroke=req.stroke,
+            stroke_width=req.stroke_width, opacity=req.opacity,
+            smoothness=req.smoothness, z_index=req.z_index,
         )
         return ToolResponse(data={"region_id": dup.id, "source": req.region_id})
     except ValueError as e:

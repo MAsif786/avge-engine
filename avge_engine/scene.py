@@ -421,6 +421,10 @@ class SceneGraph:
         offset_y: float = 0.0,
         z_index: int | None = None,
         fill: str | None = None,
+        stroke: str | None = None,
+        stroke_width: float | None = None,
+        opacity: float | None = None,
+        smoothness: float | None = None,
     ) -> RegionNode:
         """Duplicate a region with optional offset and overrides."""
         doc_id = self._resolve_doc(document_id)
@@ -433,18 +437,26 @@ class SceneGraph:
             raise ValueError(f"Region '{rid}' already exists")
         new_outline = [(x + offset_x, y + offset_y) for x, y in original.outline]
         new_fill = fill if fill is not None else original.style.fill
+        new_constraints = original.constraints
+        if smoothness is not None:
+            new_constraints = CurveConstraints(
+                smoothness=smoothness,
+                closed=original.constraints.closed,
+                corner_style=original.constraints.corner_style,
+            )
+        new_style_obj = Style(
+            fill=new_fill,
+            stroke=stroke if stroke is not None else original.style.stroke,
+            stroke_width=stroke_width if stroke_width is not None else original.style.stroke_width,
+            opacity=opacity if opacity is not None else original.style.opacity,
+        )
         dup = RegionNode(
             id=rid,
             layer=original.layer,
             z_index=z_index if z_index is not None else original.z_index + 1,
             outline=new_outline,
-            constraints=original.constraints,
-            style=Style(
-                fill=new_fill,
-                stroke=original.style.stroke,
-                stroke_width=original.style.stroke_width,
-                opacity=original.style.opacity,
-            ),
+            constraints=new_constraints,
+            style=new_style_obj,
             transform=original.transform,
         )
         regions[rid] = dup

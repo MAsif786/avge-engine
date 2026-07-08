@@ -9,7 +9,11 @@
     "document_id": {"type": "string"},
     "offset_x": {"type": "number", "default": 0},
     "offset_y": {"type": "number", "default": 0},
-    "fill": {"type": "string"}
+    "fill": {"type": "string"},
+    "stroke": {"type": "string"},
+    "stroke_width": {"type": "number", "minimum": 0, "maximum": 0.1},
+    "opacity": {"type": "number", "minimum": 0, "maximum": 1},
+    "smoothness": {"type": "number", "minimum": 0, "maximum": 1}
   },
   "required": ["region_id"]
 }
