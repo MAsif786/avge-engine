@@ -67,7 +67,7 @@ class DocumentRequest(BaseModel):
 
 
 class RegionRequest(BaseModel):
-    outline: list[tuple[float, float]]
+    outline: list[tuple[float, float]] = Field(min_length=2, max_length=2000)
     document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
@@ -118,6 +118,27 @@ class EditRequest(BaseModel):
     layer: str | None = None
 
 
+class FindRequest(BaseModel):
+    document_id: str | None = None
+    fill: str | None = None
+    min_x: float | None = Field(default=None, ge=0, le=1)
+    max_x: float | None = Field(default=None, ge=0, le=1)
+    min_y: float | None = Field(default=None, ge=0, le=1)
+    max_y: float | None = Field(default=None, ge=0, le=1)
+    min_w: float | None = Field(default=None, ge=0, le=1)
+    max_w: float | None = Field(default=None, ge=0, le=1)
+    layer: str | None = None
+    has_stroke: bool | None = None
+
+
+class TransformRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=200)
+    document_id: str | None = None
+    dx: float = 0.0
+    dy: float = 0.0
+    scale: float = 1.0
+
+
 class DuplicateRequest(BaseModel):
     region_id: str
     new_region_id: str | None = None
@@ -143,6 +164,27 @@ class EditRequest(BaseModel):
     opacity: float | None = Field(default=None, ge=0.0, le=1.0)
     z_index: int | None = None
     layer: str | None = None
+
+
+class FindRequest(BaseModel):
+    document_id: str | None = None
+    fill: str | None = None
+    min_x: float | None = Field(default=None, ge=0, le=1)
+    max_x: float | None = Field(default=None, ge=0, le=1)
+    min_y: float | None = Field(default=None, ge=0, le=1)
+    max_y: float | None = Field(default=None, ge=0, le=1)
+    min_w: float | None = Field(default=None, ge=0, le=1)
+    max_w: float | None = Field(default=None, ge=0, le=1)
+    layer: str | None = None
+    has_stroke: bool | None = None
+
+
+class TransformRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=200)
+    document_id: str | None = None
+    dx: float = 0.0
+    dy: float = 0.0
+    scale: float = 1.0
 
 
 class DuplicateRequest(BaseModel):
@@ -185,7 +227,7 @@ from fastapi.responses import Response
 
 
 class BatchRequest(BaseModel):
-    ops: list[dict] = Field(min_length=1)
+    ops: list[dict] = Field(min_length=1, max_length=200)
     document_id: str | None = None
     atomic: bool = False
 
@@ -224,6 +266,33 @@ async def preview_active():
         return Response(content=png, media_type="image/png")
     except Exception as e:
         return Response(f"Error: {e}", status_code=500)
+
+
+@app.post("/tools/transform_objects", response_model=ToolResponse)
+async def transform_objects(req: TransformRequest):
+    graph = _get_graph()
+    if not req.document_id:
+        raise HTTPException(status_code=400, detail="document_id is required")
+    if not graph.has_document(req.document_id):
+        raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
+    affected = graph.transform_objects(req.ids, req.document_id, dx=req.dx, dy=req.dy, scale=req.scale)
+    return ToolResponse(data={"affected": affected, "count": len(affected)})
+
+
+@app.post("/tools/find_objects", response_model=ToolResponse)
+async def find_objects(req: FindRequest):
+    graph = _get_graph()
+    if not req.document_id:
+        raise HTTPException(status_code=400, detail="document_id is required")
+    if not graph.has_document(req.document_id):
+        raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
+    results = graph.find_objects(
+        req.document_id, fill=req.fill,
+        min_x=req.min_x, max_x=req.max_x, min_y=req.min_y, max_y=req.max_y,
+        min_w=req.min_w, max_w=req.max_w,
+        layer=req.layer, has_stroke=req.has_stroke,
+    )
+    return ToolResponse(data={"results": results, "count": len(results)})
 
 
 @app.post("/tools/batch", response_model=ToolResponse)

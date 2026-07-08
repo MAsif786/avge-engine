@@ -281,6 +281,89 @@ class SceneGraph:
                 deleted.append(rid)
         return deleted
 
+    # ── Transform operations ───────────────────────────────────────
+
+    def transform_objects(
+        self,
+        ids: list[str],
+        document_id: str | None = None,
+        *,
+        dx: float = 0.0,
+        dy: float = 0.0,
+        scale: float = 1.0,
+    ) -> list[str]:
+        """Move and/or scale existing regions. Returns list of affected IDs.
+
+        Applies translation (dx, dy) and uniform scale to each region's
+        outline points. Scale is relative to each region's center.
+        """
+        doc_id = self._resolve_doc(document_id)
+        regions = self._regions_for(doc_id)
+        affected: list[str] = []
+        for rid in ids:
+            region = regions.get(rid)
+            if region is None:
+                continue
+            cx = sum(p[0] for p in region.outline) / len(region.outline)
+            cy = sum(p[1] for p in region.outline) / len(region.outline)
+            new_outline = [
+                ((x - cx) * scale + cx + dx, (y - cy) * scale + cy + dy)
+                for x, y in region.outline
+            ]
+            region.outline = normalize_outline(new_outline)
+            region.version += 1
+            affected.append(rid)
+        if affected:
+            self.get_document(doc_id).version += 1
+            self._auto_checkpoint(doc_id, "transform_objects", str(affected))
+            self._persist(doc_id)
+        return affected
+
+    # ── Find objects ────────────────────────────────────────────────
+
+    def find_objects(
+        self,
+        document_id: str | None = None,
+        *,
+        fill: str | None = None,
+        min_x: float | None = None, max_x: float | None = None,
+        min_y: float | None = None, max_y: float | None = None,
+        min_w: float | None = None, max_w: float | None = None,
+        min_h: float | None = None, max_h: float | None = None,
+        has_stroke: bool | None = None,
+        layer: str | None = None,
+    ) -> list[dict]:
+        """Query regions by visual properties and bounds. Returns matching region summaries."""
+        doc_id = self._resolve_doc(document_id)
+        regions = self._regions_for(doc_id)
+        results: list[dict] = []
+        for r in regions.values():
+            if fill is not None and r.style.fill != fill:
+                continue
+            if layer is not None and r.layer != layer:
+                continue
+            if has_stroke is not None:
+                if has_stroke and r.style.stroke is None:
+                    continue
+                if not has_stroke and r.style.stroke is not None:
+                    continue
+            b = compute_bounds(r.outline)
+            if b is None:
+                continue
+            if min_x is not None and b["x"] < min_x: continue
+            if max_x is not None and b["x"] > max_x: continue
+            if min_y is not None and b["y"] < min_y: continue
+            if max_y is not None and b["y"] > max_y: continue
+            if min_w is not None and b["w"] < min_w: continue
+            if max_w is not None and b["w"] > max_w: continue
+            if min_h is not None and b["h"] < min_h: continue
+            if max_h is not None and b["h"] > max_h: continue
+            results.append({
+                "id": r.id, "fill": r.style.fill, "stroke": r.style.stroke,
+                "bounds": b, "layer": r.layer, "z_index": r.z_index,
+            })
+        return results
+
     # ── Batch operations ────────────────────────────────────────────
 
     def batch(self, ops: list[dict], document_id: str | None = None) -> list[dict]:
