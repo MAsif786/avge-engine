@@ -56,6 +56,20 @@ def svg_serialize(scene: SceneGraph) -> str:
         lines.extend(gradient_defs)
         lines.append("  </defs>")
 
+    # Clip path defs
+    for region in regions:
+        if region.clip_to:
+            clip_r = next((r for r in regions if r.id == region.clip_to), None)
+            if clip_r and clip_r.outline:
+                segs = fit_curves(clip_r.outline, closed=clip_r.constraints.closed,
+                    smoothness=clip_r.constraints.smoothness,
+                    tensions=list(clip_r.constraints.tensions) if clip_r.constraints.tensions else None)
+                if segs:
+                    pd = _build_path_data(segs, doc.width, doc.height, clip_r.constraints.closed)
+                    lines.append(f'  <clipPath id="clip_{region.clip_to}">')
+                    lines.append(f'    <path d="{pd}"/>')
+                    lines.append(f'  </clipPath>')
+
     # Path elements
     for region in regions:
         svg_elem = _region_to_path(region, doc.width, doc.height)
@@ -93,6 +107,12 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
 
     if region.style.opacity < 1.0:
         parts.append(f' opacity="{_fmt(region.style.opacity)}"')
+
+    if region.style.blend_mode:
+        parts.append(f' style="mix-blend-mode:{region.style.blend_mode}"')
+
+    if region.clip_to:
+        parts.append(f' clip-path="url(#clip_{region.clip_to})"')
 
     # Transform
     tx, ty = region.transform.translate

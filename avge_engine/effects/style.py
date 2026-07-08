@@ -107,6 +107,7 @@ class Style:
     stroke: str | None = "#333333"
     stroke_width: float = 0.005
     opacity: float = 1.0
+    blend_mode: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "stroke_width", max(0.0, min(0.1, self.stroke_width)))
@@ -122,6 +123,12 @@ class Style:
         # Validate stroke
         if self.stroke is not None and not _is_hex(self.stroke):
             raise ValueError(f"Invalid stroke color: {self.stroke}")
+        # Validate blend mode
+        if self.blend_mode is not None:
+            valid = ("normal","multiply","screen","overlay","darken","lighten",
+                     "color-dodge","color-burn","soft-light","hard-light")
+            if self.blend_mode not in valid:
+                raise ValueError(f"Invalid blend_mode: {self.blend_mode}. Valid: {valid}")
 
 
 def resolve_stroke(stroke: str | None) -> str:

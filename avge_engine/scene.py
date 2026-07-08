@@ -41,6 +41,7 @@ class RegionNode:
     type: str = "region"
     layer: str = "default"
     z_index: int = 0
+    clip_to: str | None = None
     outline: list[Point2D] = field(default_factory=list)
     constraints: CurveConstraints = field(default_factory=CurveConstraints)
     style: Style = field(default_factory=Style)
@@ -215,6 +216,7 @@ class SceneGraph:
         region_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
+        clip_to: str | None = None,
         constraints: CurveConstraints | None = None,
         style: Style | None = None,
         transform: Transform | None = None,
@@ -233,6 +235,7 @@ class SceneGraph:
             id=rid,
             layer=layer,
             z_index=z_index,
+            clip_to=clip_to,
             outline=norm_outline,
             constraints=constraints or CurveConstraints(),
             style=style or Style(),
@@ -282,6 +285,17 @@ class SceneGraph:
             if self.delete_region(document_id, rid):
                 deleted.append(rid)
         return deleted
+
+    # ── Style presets ──────────────────────────────────────────────
+
+    PRESETS: dict[str, dict] = {
+        "warm_shaded": {"fill_gradient": '{"type":"linear","x1":0,"y1":0,"x2":1,"y2":1,"stops":[{"offset":0,"color":"#F5E6D0"},{"offset":1,"color":"#D4B898"}]}', "opacity": 1.0},
+        "cool_shaded": {"fill_gradient": '{"type":"linear","x1":0,"y1":0,"x2":1,"y2":1,"stops":[{"offset":0,"color":"#D0E4F0"},{"offset":1,"color":"#8AB0C8"}]}', "opacity": 1.0},
+        "metallic": {"fill_gradient": '{"type":"linear","x1":0,"y1":0,"x2":0,"y2":1,"stops":[{"offset":0,"color":"#E8E8E8"},{"offset":0.5,"color":"#C0C0C0"},{"offset":1,"color":"#888888"}]}', "opacity": 1.0},
+        "glow": {"fill": "#FFE8A0", "opacity": 0.6, "blend_mode": "screen"},
+        "shadow": {"fill": "#000000", "opacity": 0.2, "blend_mode": "multiply"},
+        "wood": {"fill_gradient": '{"type":"linear","x1":0,"y1":0,"x2":0,"y2":1,"stops":[{"offset":0,"color":"#D4A868"},{"offset":1,"color":"#A07840"}]}', "opacity": 1.0},
+    }
 
     # ── Boolean operations (union/subtract/intersect/xor) ───────────
 
@@ -582,6 +596,7 @@ class SceneGraph:
             results.append({
                 "id": r.id, "fill": r.style.fill, "stroke": r.style.stroke,
                 "bounds": b, "layer": r.layer, "z_index": r.z_index,
+                "clip_to": r.clip_to,
             })
         return results
 
@@ -677,6 +692,8 @@ class SceneGraph:
         stroke_width: float | None = None,
         opacity: float | None = None,
         z_index: int | None = None,
+        clip_to: str | None = None,
+        blend_mode: str | None = None,
         layer: str | None = None,
     ) -> bool:
         """Modify an existing region's properties. Only provided fields are changed."""
@@ -695,16 +712,19 @@ class SceneGraph:
                 corner_style=old_c.corner_style,
                 tensions=tensions if tensions is not None else old_c.tensions,
             )
-        if fill is not None or stroke is not None or stroke_width is not None or opacity is not None:
+        if fill is not None or stroke is not None or stroke_width is not None or opacity is not None or blend_mode is not None:
             old_s = region.style
             region.style = Style(
                 fill=fill if fill is not None else old_s.fill,
                 stroke=stroke if stroke is not None else old_s.stroke,
                 stroke_width=stroke_width if stroke_width is not None else old_s.stroke_width,
                 opacity=opacity if opacity is not None else old_s.opacity,
+                blend_mode=blend_mode if blend_mode is not None else old_s.blend_mode,
             )
         if z_index is not None:
             region.z_index = z_index
+        if clip_to is not None:
+            region.clip_to = clip_to
         if layer is not None:
             region.layer = layer
         region.version += 1
@@ -826,6 +846,7 @@ class SceneGraph:
                 "type": r.type,
                 "layer": r.layer,
                 "z_index": r.z_index,
+                "clip_to": r.clip_to,
                 "outline_point_count": len(r.outline),
                 "closed": r.constraints.closed,
                 "smoothness": r.constraints.smoothness,
@@ -834,6 +855,7 @@ class SceneGraph:
                     "stroke": r.style.stroke,
                     "stroke_width": r.style.stroke_width,
                     "opacity": r.style.opacity,
+                    "blend_mode": r.style.blend_mode,
                 },
                 "bounds": compute_bounds(r.outline),
                 "version": r.version,

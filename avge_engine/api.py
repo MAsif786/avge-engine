@@ -72,6 +72,7 @@ class RegionRequest(BaseModel):
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
+    clip_to: str | None = None
     closed: bool = True
     smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
     fill: str | None = "#CCCCCC"
@@ -115,6 +116,8 @@ class EditRequest(BaseModel):
     stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
     opacity: float | None = Field(default=None, ge=0.0, le=1.0)
     z_index: int | None = None
+    clip_to: str | None = None
+    blend_mode: str | None = None
     layer: str | None = None
 
 
@@ -192,6 +195,8 @@ class EditRequest(BaseModel):
     stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
     opacity: float | None = Field(default=None, ge=0.0, le=1.0)
     z_index: int | None = None
+    clip_to: str | None = None
+    blend_mode: str | None = None
     layer: str | None = None
 
 
@@ -538,6 +543,7 @@ async def create_region(req: RegionRequest):
             region_id=req.region_id,
             layer=req.layer,
             z_index=req.z_index,
+            clip_to=req.clip_to,
             constraints=constraints,
             style=style,
         )
@@ -586,7 +592,7 @@ async def edit_region(req: EditRequest):
             outline=req.outline, smoothness=req.smoothness,
             fill=req.fill, stroke=req.stroke,
             stroke_width=req.stroke_width, opacity=req.opacity,
-            z_index=req.z_index, layer=req.layer,
+            z_index=req.z_index, clip_to=req.clip_to, blend_mode=req.blend_mode, layer=req.layer,
         )
         return ToolResponse(data={"region_id": req.region_id, "updated": True})
     except ValueError as e:
