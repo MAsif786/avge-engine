@@ -131,6 +131,26 @@ class FindRequest(BaseModel):
     has_stroke: bool | None = None
 
 
+class GroupRequest(BaseModel):
+    group_name: str
+    region_ids: list[str] = Field(min_length=1)
+    document_id: str | None = None
+
+
+class LayerListRequest(BaseModel):
+    document_id: str | None = None
+
+
+class LayerReorderRequest(BaseModel):
+    layer: str
+    z_offset: int = 0
+    document_id: str | None = None
+
+
+class CriticRequest(BaseModel):
+    document_id: str | None = None
+
+
 class TransformRequest(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=200)
     document_id: str | None = None
@@ -177,6 +197,26 @@ class FindRequest(BaseModel):
     max_w: float | None = Field(default=None, ge=0, le=1)
     layer: str | None = None
     has_stroke: bool | None = None
+
+
+class GroupRequest(BaseModel):
+    group_name: str
+    region_ids: list[str] = Field(min_length=1)
+    document_id: str | None = None
+
+
+class LayerListRequest(BaseModel):
+    document_id: str | None = None
+
+
+class LayerReorderRequest(BaseModel):
+    layer: str
+    z_offset: int = 0
+    document_id: str | None = None
+
+
+class CriticRequest(BaseModel):
+    document_id: str | None = None
 
 
 class TransformRequest(BaseModel):
@@ -277,6 +317,33 @@ async def transform_objects(req: TransformRequest):
         raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
     affected = graph.transform_objects(req.ids, req.document_id, dx=req.dx, dy=req.dy, scale=req.scale)
     return ToolResponse(data={"affected": affected, "count": len(affected)})
+
+
+@app.post("/tools/group_regions", response_model=ToolResponse)
+async def group_regions(req: GroupRequest):
+    graph = _get_graph()
+    if not req.document_id:
+        raise HTTPException(status_code=400, detail="document_id required")
+    ids = graph.group_regions(req.group_name, req.region_ids, req.document_id)
+    return ToolResponse(data={"group": req.group_name, "region_ids": ids, "count": len(ids)})
+
+
+@app.post("/tools/list_layers", response_model=ToolResponse)
+async def list_layers(req: LayerListRequest):
+    graph = _get_graph()
+    if not req.document_id:
+        raise HTTPException(status_code=400, detail="document_id required")
+    layers = graph.list_layers(req.document_id)
+    return ToolResponse(data={"layers": layers})
+
+
+@app.post("/tools/critique_composition", response_model=ToolResponse)
+async def critique_composition(req: CriticRequest):
+    graph = _get_graph()
+    if not req.document_id:
+        raise HTTPException(status_code=400, detail="document_id required")
+    findings = graph.critique_composition(req.document_id)
+    return ToolResponse(data={"findings": findings, "count": len(findings)})
 
 
 @app.post("/tools/find_objects", response_model=ToolResponse)

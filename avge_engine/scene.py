@@ -281,6 +281,122 @@ class SceneGraph:
                 deleted.append(rid)
         return deleted
 
+    # ── Group operations ───────────────────────────────────────────
+
+    def group_regions(self, group_name: str, region_ids: list[str], document_id: str | None = None) -> list[str]:
+        """Group regions under a name. Creates or appends to an existing group."""
+        doc_id = self._resolve_doc(document_id)
+        if not hasattr(self, '_groups'):
+            self._groups: dict[str, list[str]] = {}
+        key = f"{doc_id}::{group_name}"
+        existing = self._groups.get(key, [])
+        for rid in region_ids:
+            if self.has_region(rid, doc_id) and rid not in existing:
+                existing.append(rid)
+        self._groups[key] = existing
+        return existing
+
+    def ungroup_regions(self, group_name: str, document_id: str | None = None) -> bool:
+        """Remove a group. Returns True if existed."""
+        doc_id = self._resolve_doc(document_id)
+        if not hasattr(self, '_groups'):
+            return False
+        key = f"{doc_id}::{group_name}"
+        return self._groups.pop(key, None) is not None
+
+    def get_group(self, group_name: str, document_id: str | None = None) -> list[dict]:
+        """Get regions in a group with their IDs and bounds."""
+        doc_id = self._resolve_doc(document_id)
+        if not hasattr(self, '_groups'):
+            return []
+        key = f"{doc_id}::{group_name}"
+        ids = self._groups.get(key, [])
+        result = []
+        for rid in ids:
+            try:
+                r = self.get_region(rid, doc_id)
+                result.append({'id': rid, 'bounds': compute_bounds(r.outline)})
+            except ValueError:
+                pass
+        return result
+
+    def list_groups(self, document_id: str | None = None) -> list[dict]:
+        """List all groups and their sizes."""
+        doc_id = self._resolve_doc(document_id)
+        if not hasattr(self, '_groups'):
+            return []
+        prefix = f"{doc_id}::"
+        return [{'name': k[len(prefix):], 'count': len(v)}
+                for k, v in self._groups.items() if k.startswith(prefix)]
+
+    # ── Layer operations ───────────────────────────────────────────
+
+    def list_layers(self, document_id: str | None = None) -> list[dict]:
+        """List all unique layers and their region counts."""
+        doc_id = self._resolve_doc(document_id)
+        regions = self._regions_for(doc_id)
+        layers: dict[str, int] = {}
+        for r in regions.values():
+            layers[r.layer] = layers.get(r.layer, 0) + 1
+        return [{'layer': k, 'count': v} for k, v in sorted(layers.items())]
+
+    def reorder_layer(self, layer: str, z_offset: int, document_id: str | None = None) -> int:
+        """Shift all regions in a layer by z_offset. Returns count affected."""
+        doc_id = self._resolve_doc(document_id)
+        regions = self._regions_for(doc_id)
+        count = 0
+        for r in regions.values():
+            if r.layer == layer:
+                r.z_index += z_offset
+                r.version += 1
+                count += 1
+        if count:
+            self.get_document(doc_id).version += 1
+        return count
+
+    # ── Critique composition (design skill Rule 7 auto-check) ──────
+
+    def critique_composition(self, document_id: str | None = None) -> list[str]:
+        """Auto-check the scene against design skill rules. Returns list of findings."""
+        doc_id = self._resolve_doc(document_id)
+        regions = self._regions_for(doc_id)
+        findings: list[str] = []
+
+        # Rule 1: Depth — count gradient-filled vs flat-filled regions
+        flat_cnt = sum(1 for r in regions.values()
+                      if isinstance(r.style.fill, str) and r.style.fill and r.style.opacity >= 0.95)
+        grad_cnt = sum(1 for r in regions.values()
+                      if isinstance(r.style.fill, dict))
+        if flat_cnt > grad_cnt * 3 and flat_cnt > 5:
+            findings.append(f"Rule 1 (depth): {flat_cnt} flat fills, only {grad_cnt} gradients — consider more depth shading")
+
+        # Rule 2: Stroke hierarchy — check for uniform stroke widths
+        widths = [r.style.stroke_width for r in regions.values() if r.style.stroke]
+        if len(widths) > 3:
+            unique = len(set(f'{w:.4f}' for w in widths))
+            if unique <= 1:
+                findings.append(f"Rule 2 (stroke hierarchy): all {len(widths)} stroked regions use the same width — vary by silhouette vs detail")
+
+        # Rule 3: Palette size
+        fills = [str(r.style.fill) for r in regions.values() if r.style.fill and isinstance(r.style.fill, str)]
+        unique_fills = len(set(fills))
+        if unique_fills > 8:
+            findings.append(f"Rule 3 (palette): {unique_fills} unique fill colors — aim for 3-5 cohesive colors")
+        if unique_fills <= 1 and len(fills) > 5:
+            findings.append(f"Rule 3 (palette): only 1 fill color across {len(fills)} regions — add variation")
+
+        # Rule 4: Off-canvas
+        for r in regions.values():
+            b = compute_bounds(r.outline)
+            if b and (b['x'] + b['w'] < 0 or b['x'] > 1 or b['y'] + b['h'] < 0 or b['y'] > 1):
+                findings.append(f"Rule 4 (grounding): region '{r.id}' is off-canvas")
+
+        # General: empty scene
+        if not regions:
+            findings.append("Scene is empty — nothing to critique")
+
+        return findings
+
     # ── Transform operations ───────────────────────────────────────
 
     def transform_objects(
