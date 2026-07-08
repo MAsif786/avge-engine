@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=1.26",
     "cairosvg>=2.7",
     "Pillow>=10.0",
+    "shapely>=2.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
     "pydantic>=2.5",

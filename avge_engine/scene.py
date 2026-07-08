@@ -22,7 +22,9 @@ from avge_engine.geometry import (
     Point2D,
     Transform,
     compute_bounds,
+    fit_curves,
     normalize_outline,
+    sample_curve,
 )
 from avge_engine.effects import Style
 from avge_engine.storage import StorageAdapter
@@ -280,6 +282,109 @@ class SceneGraph:
             if self.delete_region(document_id, rid):
                 deleted.append(rid)
         return deleted
+
+    # ── Boolean operations (union/subtract/intersect/xor) ───────────
+
+    def boolean_operation(
+        self,
+        operation: str,
+        region_ids: list[str],
+        new_region_id: str | None = None,
+        document_id: str | None = None,
+        *,
+        keep_originals: bool = False,
+        fill: str | None = None,
+    ) -> RegionNode:
+        """Perform boolean geometry on regions using shapely.
+
+        Args:
+            operation: "union", "subtract", "intersect", or "xor".
+            region_ids: IDs of at least 2 regions to combine.
+            new_region_id: ID for the result region.
+            keep_originals: If True, keep input regions (default False).
+            fill: Fill color for the result.
+
+        Returns the new RegionNode.
+        """
+        import shapely
+        from shapely.geometry import Polygon
+        from shapely.ops import unary_union
+
+        doc_id = self._resolve_doc(document_id)
+        regions = self._regions_for(doc_id)
+        if len(region_ids) < 2:
+            raise ValueError("Need at least 2 regions for boolean operation")
+
+        # Sample each region's fitted curve to get boundary polygon
+        polys: list[Polygon] = []
+        for rid in region_ids:
+            r = regions.get(rid)
+            if r is None:
+                raise ValueError(f"Region '{rid}' not found")
+            segments = fit_curves(
+                r.outline,
+                closed=r.constraints.closed,
+                smoothness=r.constraints.smoothness,
+                tensions=list(r.constraints.tensions) if r.constraints.tensions else None,
+            )
+            pts = sample_curve(segments, samples_per_segment=64)
+            if len(pts) < 3:
+                raise ValueError(f"Region '{rid}' has too few boundary points ({len(pts)})")
+            polys.append(Polygon(pts))
+
+        # Perform operation
+        try:
+            if operation == "union":
+                result = unary_union(polys)
+            elif operation == "intersect":
+                result = polys[0]
+                for p in polys[1:]:
+                    result = result.intersection(p)
+            elif operation == "subtract" or operation == "difference":
+                result = polys[0]
+                for p in polys[1:]:
+                    result = result.difference(p)
+            elif operation == "xor" or operation == "sym_diff":
+                result = polys[0]
+                for p in polys[1:]:
+                    result = result.symmetric_difference(p)
+            else:
+                raise ValueError(f"Unknown operation: {operation}")
+        except Exception as e:
+            raise RuntimeError(f"Boolean {operation} failed: {e}")
+
+        # Extract outline from result polygon
+        if result.is_empty or result.area < 0.0001:
+            raise RuntimeError(f"Boolean {operation} produced empty result")
+
+        # Get exterior coordinates, simplify slightly
+        coords = list(result.exterior.coords)
+        # shapely includes closing point; remove it
+        if len(coords) > 2 and coords[0] == coords[-1]:
+            coords = coords[:-1]
+
+        if len(coords) < 3:
+            raise RuntimeError("Boolean result has too few points")
+
+        rid = new_region_id or f"bool_{uuid.uuid4().hex[:6]}"
+        result_fill = fill if fill is not None else "#CCCCCC"
+        result_style = Style(fill=result_fill, stroke=None)
+        result_region = RegionNode(
+            id=rid,
+            outline=[(float(x), float(y)) for x, y in coords],
+            constraints=CurveConstraints(smoothness=0.3, closed=True),
+            style=result_style,
+        )
+        self._regions_for(doc_id)[rid] = result_region
+        self.get_document(doc_id).version += 1
+
+        if not keep_originals:
+            for rid in region_ids:
+                del regions[rid]
+
+        self._auto_checkpoint(doc_id, f"boolean_{operation}", rid)
+        self._persist(doc_id)
+        return result_region
 
     # ── Group operations ───────────────────────────────────────────
 

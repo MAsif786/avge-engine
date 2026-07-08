@@ -131,6 +131,15 @@ class FindRequest(BaseModel):
     has_stroke: bool | None = None
 
 
+class BooleanRequest(BaseModel):
+    operation: str  # union, subtract, intersect, xor
+    region_ids: list[str] = Field(min_length=2, max_length=10)
+    new_region_id: str | None = None
+    document_id: str | None = None
+    keep_originals: bool = False
+    fill: str | None = None
+
+
 class GroupRequest(BaseModel):
     group_name: str
     region_ids: list[str] = Field(min_length=1)
@@ -197,6 +206,15 @@ class FindRequest(BaseModel):
     max_w: float | None = Field(default=None, ge=0, le=1)
     layer: str | None = None
     has_stroke: bool | None = None
+
+
+class BooleanRequest(BaseModel):
+    operation: str  # union, subtract, intersect, xor
+    region_ids: list[str] = Field(min_length=2, max_length=10)
+    new_region_id: str | None = None
+    document_id: str | None = None
+    keep_originals: bool = False
+    fill: str | None = None
 
 
 class GroupRequest(BaseModel):
@@ -317,6 +335,23 @@ async def transform_objects(req: TransformRequest):
         raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
     affected = graph.transform_objects(req.ids, req.document_id, dx=req.dx, dy=req.dy, scale=req.scale)
     return ToolResponse(data={"affected": affected, "count": len(affected)})
+
+
+@app.post("/tools/boolean_operation", response_model=ToolResponse)
+async def boolean_operation(req: BooleanRequest):
+    graph = _get_graph()
+    if not req.document_id:
+        raise HTTPException(status_code=400, detail="document_id required")
+    if req.operation not in ("union", "subtract", "intersect", "xor", "difference", "sym_diff"):
+        raise HTTPException(status_code=400, detail=f"Unknown operation: {req.operation}")
+    try:
+        result = graph.boolean_operation(
+            req.operation, req.region_ids, req.new_region_id,
+            req.document_id, keep_originals=req.keep_originals, fill=req.fill,
+        )
+        return ToolResponse(data={"region_id": result.id, "outline_points": len(result.outline)})
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/tools/group_regions", response_model=ToolResponse)
