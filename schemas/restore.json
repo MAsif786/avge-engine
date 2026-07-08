@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/restore/v1.json",
+  "title": "restore",
+  "description": "Restore document state from a named checkpoint. Returns error if the checkpoint doesn't exist.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Checkpoint name to restore from (default \"default\").",
+      "default": "default"
+    }
+  },
+  "additionalProperties": false
+}

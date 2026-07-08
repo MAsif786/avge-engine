@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/describe_scene/v1.json",
+  "title": "describe_scene",
+  "description": "Get a structured text description of the current canvas contents. Returns object list, bounds, styles, and warnings.",
+  "type": "object",
+  "properties": {
+    "detail": {
+      "type": "string",
+      "description": "Level of detail. 'summary' excludes outline coordinates; 'full' includes them.",
+      "default": "summary",
+      "enum": ["summary", "full"]
+    },
+    "filter_layer": {
+      "type": "string",
+      "description": "Optional: only describe objects in this layer.",
+      "maxLength": 64
+    }
+  },
+  "additionalProperties": false
+}

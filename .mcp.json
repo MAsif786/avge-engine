@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "avge-engine": {
+      "command": "/Users/muhammadasif/Desktop/codes/avge/.venv/bin/python",
+      "args": ["-m", "avge_engine", "mcp"]
+    }
+  }
+}

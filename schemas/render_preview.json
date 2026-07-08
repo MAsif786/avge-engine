@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/render_preview/v1.json",
+  "title": "render_preview",
+  "description": "Get a visual PNG preview of the current canvas as a base64-encoded image. The image is rasterized server-side.",
+  "type": "object",
+  "properties": {
+    "scale": {
+      "type": "number",
+      "description": "Render scale factor. 1.0 = full canvas resolution, 0.5 = half, etc.",
+      "default": 1.0,
+      "minimum": 0.25,
+      "maximum": 2.0
+    },
+    "format": {
+      "type": "string",
+      "description": "Output format.",
+      "default": "png",
+      "enum": ["png"]
+    }
+  },
+  "additionalProperties": false
+}

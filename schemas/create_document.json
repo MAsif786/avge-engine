@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_document/v1.json",
+  "title": "create_document",
+  "description": "Create a new vector document / canvas. Must be called first before any other tool.",
+  "type": "object",
+  "properties": {
+    "width": {
+      "type": "integer",
+      "description": "Canvas width in pixels.",
+      "default": 1000,
+      "minimum": 100,
+      "maximum": 4000
+    },
+    "height": {
+      "type": "integer",
+      "description": "Canvas height in pixels.",
+      "default": 1000,
+      "minimum": 100,
+      "maximum": 4000
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement.",
+      "default": "px",
+      "enum": ["px", "in", "mm", "cm"]
+    },
+    "background": {
+      "type": "string",
+      "description": "Background color as hex string (e.g. \"#FFFFFF\").",
+      "default": "#FFFFFF",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    }
+  },
+  "additionalProperties": false
+}

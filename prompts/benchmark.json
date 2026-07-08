@@ -1,0 +1,32 @@
+[
+  {
+    "id": "01-coffee-cup",
+    "prompt": "Draw a coffee cup",
+    "description": "Simple single closed shape + handle",
+    "categories": ["simple", "single-object"]
+  },
+  {
+    "id": "02-house-icon",
+    "prompt": "Draw a house icon",
+    "description": "Compound of simple shapes — tests multi-region composition",
+    "categories": ["compound", "icon"]
+  },
+  {
+    "id": "03-smiley-face",
+    "prompt": "Draw a smiley face",
+    "description": "Tests proportion and placement of sub-elements",
+    "categories": ["compound", "proportion"]
+  },
+  {
+    "id": "04-tree",
+    "prompt": "Draw a simple tree",
+    "description": "Tests organic/non-geometric outline quality",
+    "categories": ["organic", "single-object"]
+  },
+  {
+    "id": "05-five-pointed-star",
+    "prompt": "Draw a five-pointed star",
+    "description": "Precision test — known correct answer (symmetry, point count)",
+    "categories": ["precision", "geometric"]
+  }
+]

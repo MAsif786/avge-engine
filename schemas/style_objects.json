@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/style_objects/v1.json",
+  "title": "style_objects",
+  "description": "Update the visual style of one or more existing regions. Only provided fields are changed; omitted fields are left untouched.",
+  "type": "object",
+  "properties": {
+    "ids": {
+      "type": "array",
+      "description": "Region IDs to restyle.",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 200
+    },
+    "fill": {
+      "oneOf": [
+        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        { "type": "null" }
+      ],
+      "description": "Fill color as hex string, or null for no fill."
+    },
+    "stroke": {
+      "oneOf": [
+        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        { "type": "null" }
+      ],
+      "description": "Stroke color as hex string, or null for no stroke."
+    },
+    "stroke_width": {
+      "type": "number",
+      "description": "Stroke width in normalized units.",
+      "minimum": 0.0,
+      "maximum": 0.1
+    },
+    "opacity": {
+      "type": "number",
+      "description": "Object opacity 0.0–1.0.",
+      "minimum": 0.0,
+      "maximum": 1.0
+    }
+  },
+  "required": ["ids"],
+  "additionalProperties": false,
+  "anyOf": [
+    { "required": ["fill"] },
+    { "required": ["stroke"] },
+    { "required": ["stroke_width"] },
+    { "required": ["opacity"] }
+  ]
+}

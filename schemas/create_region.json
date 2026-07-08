@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_region/v1.json",
+  "title": "create_region",
+  "description": "Create a vector region from a coarse point outline. The engine fits smooth Bézier curves to the outline using the supplied geometric constraints.",
+  "type": "object",
+  "properties": {
+    "outline": {
+      "type": "array",
+      "description": "Point coordinate pairs in normalized space (0.0–1.0). Keep to 3–30 points for best quality.",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "x-coordinate" },
+          { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "y-coordinate" }
+        ],
+        "minItems": 2,
+        "maxItems": 2000
+      },
+      "minItems": 2
+    },
+    "region_id": {
+      "type": "string",
+      "description": "Optional unique ID (auto-generated if omitted).",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"
+    },
+    "layer": {
+      "type": "string",
+      "description": "Layer name for organization.",
+      "default": "default",
+      "maxLength": 64
+    },
+    "type": {
+      "type": "string",
+      "description": "Object type discriminator.",
+      "default": "region",
+      "enum": ["region"]
+    },
+    "closed": {
+      "type": "boolean",
+      "description": "Whether the outline forms a closed loop (last point connects to first).",
+      "default": true
+    },
+    "smoothness": {
+      "type": "number",
+      "description": "Curve smoothness 0.0–1.0. 0.0 = sharp/polygonal, 0.2–0.5 = mixed rigid/organic, 0.6–0.8 = organic/curved, 1.0 = very loose. See §4.5d for per-category guidance.",
+      "default": 0.5,
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "corner_style": {
+      "type": "string",
+      "description": "Corner treatment.",
+      "default": "round",
+      "enum": ["round", "sharp", "bevel"]
+    },
+    "fill": {
+      "oneOf": [
+        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        { "type": "null" }
+      ],
+      "description": "Fill color as hex string, or null/omitted for no fill.",
+      "default": "#CCCCCC"
+    },
+    "stroke": {
+      "oneOf": [
+        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        { "type": "null" }
+      ],
+      "description": "Stroke color as hex string, or null/omitted for no stroke.",
+      "default": "#333333"
+    },
+    "stroke_width": {
+      "type": "number",
+      "description": "Stroke width in normalized units (as fraction of shorter canvas dimension).",
+      "default": 0.005,
+      "minimum": 0.0,
+      "maximum": 0.1
+    },
+    "opacity": {
+      "type": "number",
+      "description": "Object opacity 0.0–1.0.",
+      "default": 1.0,
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "metadata_tags": {
+      "type": "array",
+      "description": "Optional semantic tags (stored as opaque strings — engine never interprets).",
+      "items": { "type": "string", "maxLength": 64 },
+      "maxItems": 32
+    }
+  },
+  "required": ["outline"],
+  "additionalProperties": false
+}

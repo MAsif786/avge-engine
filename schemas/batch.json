@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "batch",
+  "description": "Execute multiple create/region operations in one call.",
+  "type": "object",
+  "properties": {
+    "ops": {
+      "type": "array",
+      "items": {"type": "object"},
+      "minItems": 1
+    },
+    "document_id": {"type": "string"}
+  },
+  "required": ["ops"]
+}

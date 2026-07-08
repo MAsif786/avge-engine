@@ -1,0 +1,160 @@
+"""
+Style engine — fill, stroke, opacity, and effects resolution.
+
+§6.3: Effects are composable and order-preserving. The engine applies
+them in array order (first = bottom, last = top in paint order).
+
+Gradient fills (§6.3): fill may be a hex string or a dict with
+gradient parameters. Two types are supported:
+  Linear: {"type": "linear", "x1":0, "y1":0, "x2":1, "y2":0,
+            "stops": [{"offset":0, "color":"#000"}, {"offset":1, "color":"#FFF"}]}
+  Radial: {"type": "radial", "cx":0.5, "cy":0.5, "r":0.5,
+            "stops": [...]}
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from typing import Any
+
+
+# ── Gradient type ───────────────────────────────────────────────────
+
+type GradientDef = dict[str, Any]
+"""A gradient definition dict. See module docstring for structure."""
+
+
+def is_gradient(value: Any) -> bool:
+    """Check if a value is a gradient dict rather than a hex string."""
+    return isinstance(value, dict) and "type" in value and "stops" in value
+
+
+def validate_gradient(g: GradientDef) -> list[str]:
+    """Validate a gradient definition. Returns list of error messages (empty = valid)."""
+    errs: list[str] = []
+    gtype = g.get("type")
+    if gtype not in ("linear", "radial"):
+        errs.append(f"gradient type must be 'linear' or 'radial', got '{gtype}'")
+        return errs  # can't validate further
+
+    stops = g.get("stops", [])
+    if not stops or len(stops) < 2:
+        errs.append("gradient must have at least 2 stops")
+        return errs
+
+    for i, stop in enumerate(stops):
+        if "offset" not in stop:
+            errs.append(f"stop {i} missing 'offset'")
+        elif not (0.0 <= stop["offset"] <= 1.0):
+            errs.append(f"stop {i} offset {stop['offset']} out of range [0,1]")
+        color = stop.get("color", "")
+        if not _is_hex(color):
+            errs.append(f"stop {i} invalid color '{color}'")
+
+    if gtype == "linear":
+        for key in ("x1", "y1", "x2", "y2"):
+            if key not in g:
+                errs.append(f"linear gradient missing '{key}'")
+
+    if gtype == "radial":
+        for key in ("cx", "cy", "r"):
+            if key not in g:
+                errs.append(f"radial gradient missing '{key}'")
+
+    return errs
+
+
+def resolve_fill(fill: str | GradientDef | None) -> str:
+    """Resolve a fill value to an SVG-compatible string.
+
+    Returns "none", a hex color, or a gradient reference URL like
+    "url(#grad_xxx)".
+    """
+    if fill is None:
+        return "none"
+    if is_gradient(fill):
+        return f"url(#{_gradient_id(fill)})"
+    return fill  # hex string
+
+
+# ── Style dataclass ────────────────────────────────────────────────
+
+GLOBAL_GRADIENT_COUNTER: int = 0
+
+
+def _gradient_id(g: GradientDef) -> str:
+    """Generate a stable-ish gradient ID based on content hash."""
+    raw = json.dumps(g, sort_keys=True)
+    h = str(hash(raw) & 0xFFFFFFFF)
+    return f"grad_{h}"
+
+
+@dataclass(frozen=True)
+class Style:
+    """Visual style for a region.
+
+    Fill may be:
+    - None (transparent / no fill)
+    - A hex color string like "#FF0000"
+    - A gradient dict {"type": "linear"|"radial", ...}
+
+    Stroke is always a hex color or None.
+    The engine never interprets semantic meaning from style values.
+    """
+
+    fill: str | GradientDef | None = "#CCCCCC"
+    stroke: str | None = "#333333"
+    stroke_width: float = 0.005
+    opacity: float = 1.0
+
+    def __post_init__(self):
+        object.__setattr__(self, "stroke_width", max(0.0, min(0.1, self.stroke_width)))
+        object.__setattr__(self, "opacity", max(0.0, min(1.0, self.opacity)))
+        # Validate fill
+        if self.fill is not None:
+            if is_gradient(self.fill):
+                errs = validate_gradient(self.fill)
+                if errs:
+                    raise ValueError(f"Invalid gradient: {'; '.join(errs)}")
+            elif not _is_hex(self.fill):
+                raise ValueError(f"Invalid fill: {self.fill}")
+        # Validate stroke
+        if self.stroke is not None and not _is_hex(self.stroke):
+            raise ValueError(f"Invalid stroke color: {self.stroke}")
+
+
+def resolve_stroke(stroke: str | None) -> str:
+    """Resolve a stroke value to an SVG-compatible string."""
+    if stroke is None:
+        return "none"
+    return stroke
+
+
+def _is_hex(value: str) -> bool:
+    return bool(value.startswith("#") and len(value) in (4, 7))
+
+
+# ── Gradient SVG generation ────────────────────────────────────────
+
+def gradient_to_svg_def(g: GradientDef) -> str:
+    """Generate an SVG <linearGradient> or <radialGradient> element string."""
+    gid = _gradient_id(g)
+    stops_xml = "".join(
+        f'    <stop offset="{s["offset"]}" stop-color="{s["color"]}"/>\n'
+        for s in g.get("stops", [])
+    )
+    if g["type"] == "linear":
+        return (
+            f'  <linearGradient id="{gid}" '
+            f'x1="{g.get("x1", 0)}" y1="{g.get("y1", 0)}" '
+            f'x2="{g.get("x2", 1)}" y2="{g.get("y2", 1)}">\n'
+            f'{stops_xml}  </linearGradient>\n'
+        )
+    else:  # radial
+        return (
+            f'  <radialGradient id="{gid}" '
+            f'cx="{g.get("cx", 0.5)}" cy="{g.get("cy", 0.5)}" '
+            f'r="{g.get("r", 0.5)}">\n'
+            f'{stops_xml}  </radialGradient>\n'
+        )

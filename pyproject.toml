@@ -1,0 +1,35 @@
+[project]
+name = "avge"
+version = "0.5.0"
+description = "AI-Native Vector Graphics Engine — M0b Production Build"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.0.0",
+    "numpy>=1.26",
+    "cairosvg>=2.7",
+    "Pillow>=10.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
+    "pydantic>=2.5",
+    "jsonschema>=4.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.26",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["avge_mvp*", "avge_engine*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.py"]

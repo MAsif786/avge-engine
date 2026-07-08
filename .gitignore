@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project data
+.avge_data/
+
+# Test / temp
+.pytest_cache/
+*.log
+/tmp/
+
+# Generated artifacts
+output/*.png
+output/*.svg
+output/text_only/
+output/prompts/
+output/svg/
+output/svg_text_only/
+output/cup_comparison/
+
+# One-off build/test scripts
+build_boy*.py
+build_girl.py
+room_test.py
+improve_cup.py
+compare_cups.py
+gen_svgs*.py
+gen_room_svg.py
+sunlight_room.py
+run_benchmarks.py
+run_text_only.py
+agent_test.py
+eval_harness.py
+
+# Personal settings
+.claude/

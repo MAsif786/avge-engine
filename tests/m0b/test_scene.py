@@ -1,0 +1,255 @@
+"""
+M0b test suite — scene graph, geometry engine, and determinism tests.
+"""
+
+import math
+
+import pytest
+
+from avge_engine.scene import SceneGraph, CurveConstraints, Style, RegionNode
+from avge_engine.geometry import fit_curves, compute_bounds, normalize_outline
+from avge_engine.renderer import svg_serialize
+
+
+class TestSceneGraph:
+    def test_create_document(self):
+        scene = SceneGraph()
+        doc = scene.create_document(800, 600, background="#F0F0F0")
+        assert doc.id.startswith("doc_")
+        assert doc.width == 800
+        assert doc.height == 600
+        assert doc.unit == "px"
+
+    def test_no_document_by_default(self):
+        scene = SceneGraph()
+        assert scene.has_document() is False
+
+    def test_create_document_twice(self):
+        """Multi-document: creating twice works, returns different IDs."""
+        scene = SceneGraph()
+        doc1 = scene.create_document()
+        doc2 = scene.create_document()
+        assert doc1.id != doc2.id
+
+    def test_create_region(self):
+        scene = SceneGraph()
+        scene.create_document()
+        region = scene.create_region(
+            outline=[(0.1, 0.1), (0.5, 0.8), (0.9, 0.1)],
+            region_id="tri",
+        )
+        assert region.id == "tri"
+        assert len(region.outline) == 3
+
+    def test_create_region_no_document(self):
+        scene = SceneGraph()
+        with pytest.raises(RuntimeError):
+            scene.create_region(outline=[(0, 0), (1, 1)])
+
+    def test_create_region_duplicate_id(self):
+        scene = SceneGraph()
+        scene.create_document()
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+        with pytest.raises(ValueError):
+            scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+
+    def test_get_region(self):
+        scene = SceneGraph()
+        scene.create_document()
+        r = scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+        assert scene.get_region("r1").id == "r1"
+
+    def test_get_region_not_found(self):
+        scene = SceneGraph()
+        scene.create_document()
+        with pytest.raises(ValueError):
+            scene.get_region("nonexistent")
+
+    def test_region_count(self):
+        scene = SceneGraph()
+        scene.create_document()
+        assert scene.region_count() == 0
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)])
+        assert scene.region_count() == 1
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)])
+        assert scene.region_count() == 2
+
+    def test_style_objects(self):
+        scene = SceneGraph()
+        scene.create_document()
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r2")
+
+        affected = scene.style_objects(["r1", "r2"], fill="#00FF00")
+        assert len(affected) == 2
+        assert scene.get_region("r1").style.fill == "#00FF00"
+        assert scene.get_region("r2").style.fill == "#00FF00"
+
+    def test_style_objects_partial_update(self):
+        scene = SceneGraph()
+        scene.create_document()
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+
+        scene.style_objects(["r1"], stroke_width=0.02, opacity=0.5)
+        r = scene.get_region("r1")
+        assert r.style.stroke_width == 0.02
+        assert r.style.opacity == 0.5
+        assert r.style.fill == "#CCCCCC"  # unchanged
+        assert r.style.stroke == "#333333"  # unchanged
+
+    def test_describe_scene_structure(self):
+        scene = SceneGraph()
+        scene.create_document()
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+
+        desc = scene.describe_scene()
+        assert desc["region_count"] == 1
+        assert len(desc["regions"]) == 1
+        assert desc["regions"][0]["id"] == "r1"
+        assert "document" in desc
+        assert "warnings" in desc
+
+    def test_describe_scene_empty(self):
+        scene = SceneGraph()
+        scene.create_document()
+        desc = scene.describe_scene()
+        assert desc["region_count"] == 0
+
+    def test_reset(self):
+        scene = SceneGraph()
+        scene.create_document()
+        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)])
+        scene.reset()
+        assert scene.has_document() is False
+        # region_count raises RuntimeError after reset (no doc)
+        import pytest
+        with pytest.raises(RuntimeError):
+            scene.region_count()
+
+
+class TestCurveEngine:
+    def test_closed_curve(self):
+        segments = fit_curves([(0, 0), (0.5, 1), (1, 0)], closed=True, smoothness=0.5)
+        assert len(segments) == 3  # 3 points → 3 segments
+        for seg in segments:
+            assert len(seg) == 4  # each has 4 control points
+
+    def test_open_curve(self):
+        segments = fit_curves([(0, 0), (0.5, 0.5), (1, 0)], closed=False, smoothness=0.5)
+        assert len(segments) == 2  # 3 points → 2 segments
+
+    def test_two_points(self):
+        segments = fit_curves([(0, 0), (1, 1)], closed=False)
+        assert len(segments) == 1
+        # Should be a straight line
+        assert segments[0][0] == (0, 0)
+        assert segments[0][3] == (1, 1)
+
+    def test_single_point(self):
+        segments = fit_curves([(0.5, 0.5)], closed=False)
+        assert segments == []
+
+    def test_empty_outline(self):
+        segments = fit_curves([], closed=False)
+        assert segments == []
+
+    def test_smoothness_zero_polygonal(self):
+        """smoothness=0 should keep tangent vectors at zero → polygonal."""
+        outline = [(0, 0), (0.5, 1), (1, 0)]
+        segments = fit_curves(outline, closed=True, smoothness=0.0)
+        for seg in segments:
+            # At smoothness=0, control points 1 and 2 equal the endpoints
+            assert seg[0] == seg[1]
+            assert seg[2] == seg[3]
+
+    def test_smoothness_high(self):
+        """smoothness=1 should pull control points further."""
+        outline = [(0, 0), (0.5, 1), (1, 0)]
+        seg_low = fit_curves(outline, closed=True, smoothness=0.0)
+        seg_high = fit_curves(outline, closed=True, smoothness=1.0)
+        # Higher smoothness should move control points further from endpoints
+        for i in range(len(seg_low)):
+            d_low = abs(seg_low[i][1][0] - seg_low[i][0][0])
+            d_high = abs(seg_high[i][1][0] - seg_high[i][0][0])
+            assert d_high >= d_low
+
+    def test_star_geometric(self):
+        """Star at smoothness=0 should have control points at vertices."""
+        pts = []
+        for i in range(10):
+            angle = -math.pi / 2 + i * math.pi / 5
+            r = 0.4 if i % 2 == 0 else 0.17
+            pts.append((0.5 + r * math.cos(angle), 0.5 + r * math.sin(angle)))
+        segments = fit_curves(pts, closed=True, smoothness=0.0)
+        for seg in segments:
+            assert seg[0] == seg[1]  # sharp corners
+
+
+class TestGeometry:
+    def test_compute_bounds(self):
+        bounds = compute_bounds([(0.1, 0.2), (0.5, 0.8), (0.9, 0.1)])
+        assert bounds["x"] == 0.1
+        assert bounds["y"] == 0.1
+        assert bounds["w"] == 0.8
+        assert bounds["h"] == 0.7
+
+    def test_compute_bounds_empty(self):
+        assert compute_bounds([]) is None
+
+    def test_normalize_outline(self):
+        outline = normalize_outline([(0.5, 0.5), (1.5, -0.5)])
+        assert outline[0] == (0.5, 0.5)
+        assert outline[1] == (1.0, 0.0)  # clamped
+
+    def test_normalize_outline_too_few(self):
+        with pytest.raises(ValueError):
+            normalize_outline([(0.5, 0.5)])
+
+    def test_normalize_outline_too_many(self):
+        pts = [(i / 3000, i / 3000) for i in range(3000)]
+        with pytest.raises(ValueError):
+            normalize_outline(pts, max_points=2000)
+
+
+class TestDeterminism:
+    def _make_scene(self):
+        scene = SceneGraph()
+        scene.create_document(1000, 1000)
+        scene.create_region(
+            region_id="r1",
+            outline=[(0.1, 0.2), (0.5, 0.8), (0.9, 0.3)],
+            constraints=CurveConstraints(smoothness=0.3, closed=True),
+            style=Style(fill="#FF0000", stroke="#000000"),
+        )
+        scene.create_region(
+            region_id="r2",
+            outline=[(0.2, 0.1), (0.4, 0.5), (0.7, 0.4)],
+            constraints=CurveConstraints(smoothness=0.7, closed=False),
+            style=Style(fill=None, stroke="#333333", stroke_width=0.01),
+        )
+        return scene
+
+    def test_byte_identical_svg(self):
+        """Same scene must produce byte-identical SVG every time."""
+        scene = self._make_scene()
+        svg1 = svg_serialize(scene)
+        svg2 = svg_serialize(scene)
+        assert svg1 == svg2
+
+    def test_deterministic_across_multiple_renders(self):
+        """Multiple renders should all be identical."""
+        scene = self._make_scene()
+        svgs = [svg_serialize(scene) for _ in range(5)]
+        for i in range(1, 5):
+            assert svgs[0] == svgs[i]
+
+    def test_curve_fitting_deterministic(self):
+        """Same input must produce identical curve segments every time."""
+        outline = [(0.1, 0.2), (0.5, 0.8), (0.9, 0.3), (0.4, 0.1), (0.2, 0.6)]
+        segments1 = fit_curves(outline, closed=True, smoothness=0.4)
+        segments2 = fit_curves(outline, closed=True, smoothness=0.4)
+        assert segments1 == segments2
+        # Verify float precision
+        for s1, s2 in zip(segments1, segments2):
+            for p1, p2 in zip(s1, s2):
+                assert p1 == p2

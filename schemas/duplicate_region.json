@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "duplicate_region",
+  "description": "Duplicate an existing region with optional offset and recolor.",
+  "type": "object",
+  "properties": {
+    "region_id": {"type": "string"},
+    "new_region_id": {"type": "string"},
+    "document_id": {"type": "string"},
+    "offset_x": {"type": "number", "default": 0},
+    "offset_y": {"type": "number", "default": 0},
+    "fill": {"type": "string"}
+  },
+  "required": ["region_id"]
+}

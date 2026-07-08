@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/export_svg/v1.json",
+  "title": "export_svg",
+  "description": "Export the current canvas as an SVG file on disk. Returns the file path and SVG size.",
+  "type": "object",
+  "properties": {
+    "filepath": {
+      "type": "string",
+      "description": "Path to save the SVG file (default \"output/scene.svg\"). Relative paths resolve from project root.",
+      "default": "output/scene.svg",
+      "maxLength": 512
+    }
+  },
+  "additionalProperties": false
+}
