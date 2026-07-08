@@ -18,8 +18,8 @@ from pydantic import BaseModel, Field
 
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.scene import SceneGraph, CurveConstraints, Style, Transform
-from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
 from avge_engine.schema_registry import validate_input, list_tool_names
+from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
 
 
 # ── Global scene graph (single-process, M0b) ───────────────────────
