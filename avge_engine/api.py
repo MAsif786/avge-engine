@@ -84,7 +84,7 @@ class DeleteDocumentRequest(BaseModel):
 
 class CreateRegionRequest(BaseModel):
     outline: list[list[float]] | None = None
-    document_id: str | None = None
+    document_id: str
     region_id: str | None = None
     layer: str = "default"
     closed: bool = True
@@ -105,7 +105,7 @@ class CreateRegionRequest(BaseModel):
 
 class EditRegionRequest(BaseModel):
     region_id: str
-    document_id: str | None = None
+    document_id: str
     outline: list[list[float]] | None = None
     smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
     smoothness_per_point: list[float] | None = None
@@ -124,14 +124,14 @@ class EditRegionRequest(BaseModel):
 
 class DeleteRegionRequest(BaseModel):
     ids: list[str] = Field(min_length=1)
-    document_id: str | None = None
+    document_id: str
     confirm: bool = False
 
 
 class DuplicateRegionRequest(BaseModel):
     region_id: str
     new_region_id: str | None = None
-    document_id: str | None = None
+    document_id: str
     offset_x: float = 0.0
     offset_y: float = 0.0
     fill: str | None = None
@@ -152,7 +152,7 @@ class DuplicateRegionRequest(BaseModel):
 
 class StyleObjectsRequest(BaseModel):
     ids: list[str] | None = None
-    document_id: str | None = None
+    document_id: str
     fill: str | None = None
     stroke: str | None = None
     stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
@@ -166,7 +166,7 @@ class StyleObjectsRequest(BaseModel):
 class ApplyStylePresetRequest(BaseModel):
     preset: PRESET_NAMES
     ids: list[str] = Field(min_length=1)
-    document_id: str | None = None
+    document_id: str
 
 
 # ── Scene ops ──────────────────────────────────────────────────────
@@ -175,7 +175,7 @@ class BooleanOpRequest(BaseModel):
     operation: BOOLEAN_OPS = "union"
     region_ids: list[str] = Field(min_length=2)
     new_region_id: str | None = None
-    document_id: str | None = None
+    document_id: str
     keep_originals: bool = False
     fill: str | None = None
     stroke: str | None = None
@@ -185,7 +185,7 @@ class BooleanOpRequest(BaseModel):
 
 class TransformObjectsRequest(BaseModel):
     ids: list[str] | None = None
-    document_id: str | None = None
+    document_id: str
     dx: float = 0.0
     dy: float = 0.0
     scale: float = 1.0
@@ -206,12 +206,12 @@ class ManageGroupRequest(BaseModel):
     action: GROUP_ACTION = "create"
     group_name: str
     region_ids: list[str] | None = None
-    document_id: str | None = None
+    document_id: str
 
 
 class DuplicateGroupRequest(BaseModel):
     group_name: str
-    document_id: str | None = None
+    document_id: str
     new_prefix: str | None = None
     dx: float = 0.0
     dy: float = 0.0
@@ -238,7 +238,7 @@ class SubPartsDef(BaseModel):
 
 class CreateCompositeRegionRequest(BaseModel):
     outline: list[list[float]] = Field(min_length=2)
-    document_id: str | None = None
+    document_id: str
     region_id: str | None = None
     layer: str = "default"
     closed: bool = True
@@ -253,7 +253,7 @@ class CreateCompositeRegionRequest(BaseModel):
 
 class ExtrudeOutlineRequest(BaseModel):
     region_id: str
-    document_id: str | None = None
+    document_id: str
     segment_indices: list[int] | None = None
     extrusion_length: float = 0.03
     extrusion_width: float = 0.02
@@ -267,11 +267,11 @@ class ExtrudeOutlineRequest(BaseModel):
 class DescribeSceneRequest(BaseModel):
     detail: DETAIL_LEVEL = "summary"
     filter_layer: str | None = None
-    document_id: str | None = None
+    document_id: str
 
 
 class FindObjectsRequest(BaseModel):
-    document_id: str | None = None
+    document_id: str
     fill: str | None = None
     min_x: float | None = None
     max_x: float | None = None
@@ -288,35 +288,35 @@ class FindObjectsRequest(BaseModel):
 
 class PreviewRequest(BaseModel):
     scale: float = Field(default=1.0, ge=0.25, le=2.0)
-    document_id: str | None = None
+    document_id: str
 
 
 class ExportSvgRequest(BaseModel):
     filepath: str = "output/scene.svg"
-    document_id: str | None = None
+    document_id: str
 
 
 class ReorderLayerRequest(BaseModel):
     layer: str
     z_offset: int
-    document_id: str | None = None
+    document_id: str
 
 
 # ── History ────────────────────────────────────────────────────────
 
 class CheckpointRequest(BaseModel):
     name: str = "default"
-    document_id: str | None = None
+    document_id: str
 
 
 class BatchRequest(BaseModel):
     ops: list[dict] = Field(min_length=1, max_length=200)
-    document_id: str | None = None
+    document_id: str
 
 
 class CreateCurveRequest(BaseModel):
     points: list[list[float]] = Field(min_length=2, max_length=100)
-    document_id: str | None = None
+    document_id: str
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -330,7 +330,7 @@ class CreateCurveRequest(BaseModel):
 
 class MirrorRegionRequest(BaseModel):
     region_id: str
-    document_id: str | None = None
+    document_id: str
     new_region_id: str | None = None
     axis_x: float = 0.5
     offset_x: float = 0.0
@@ -339,10 +339,21 @@ class MirrorRegionRequest(BaseModel):
 
 class AddShadowRequest(BaseModel):
     region_id: str
-    document_id: str | None = None
+    document_id: str
     offset_x: float = 0.015
     offset_y: float = 0.015
     opacity: float = 0.25
+
+
+class DocIdBody(BaseModel):
+    """Body for endpoints needing only a document_id."""
+    document_id: str
+
+
+class DocIdLimitBody(BaseModel):
+    """Body for endpoints needing document_id + limit."""
+    document_id: str
+    limit: int = 20
 
 
 # ── Health ─────────────────────────────────────────────────────────
@@ -415,17 +426,17 @@ async def delete_document(req: DeleteDocumentRequest):
 
 
 @app.post("/tools/load_document", response_model=ToolResponse)
-async def load_document(document_id: str):
+async def load_document(req: DocIdBody):
     from avge_engine.services.engine import load_stored_document
-    if load_stored_document(document_id):
+    if load_stored_document(req.document_id):
         scene = get_graph()
-        desc = scene.describe_scene(document_id)
+        desc = scene.describe_scene(req.document_id)
         return ToolResponse(data={
-            "document_id": document_id,
+            "document_id": req.document_id,
             "region_count": desc["region_count"],
             "version": desc["document"]["version"],
         })
-    raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
+    raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
 
 
 @app.get("/documents")
@@ -582,7 +593,7 @@ class CreateRectRequest(BaseModel):
     width: float
     height: float
     rx: float = 0.0
-    document_id: str | None = None
+    document_id: str
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -598,7 +609,7 @@ class CreateEllipseRequest(BaseModel):
     cy: float
     rx: float
     ry: float | None = None
-    document_id: str | None = None
+    document_id: str
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -614,7 +625,7 @@ class CreateLineRequest(BaseModel):
     y1: float
     x2: float
     y2: float
-    document_id: str | None = None
+    document_id: str
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -933,11 +944,11 @@ async def manage_group(req: ManageGroupRequest):
 
 
 @app.post("/tools/list_groups", response_model=ToolResponse)
-async def list_groups(document_id: str | None = None):
+async def list_groups(req: DocIdBody):
     graph = get_graph()
-    if not graph.has_document(document_id):
+    if not graph.has_document(req.document_id):
         raise HTTPException(status_code=404, detail="Document not found")
-    groups = graph.list_groups(document_id)
+    groups = graph.list_groups(req.document_id)
     return ToolResponse(data={"groups": groups, "count": len(groups)})
 
 
@@ -1042,20 +1053,20 @@ async def find_objects(req: FindObjectsRequest):
 
 
 @app.post("/tools/critique_composition", response_model=ToolResponse)
-async def critique_composition(document_id: str | None = None):
+async def critique_composition(req: DocIdBody):
     graph = get_graph()
-    if not graph.has_document(document_id):
+    if not graph.has_document(req.document_id):
         raise HTTPException(status_code=404, detail="Document not found")
-    findings = graph.critique_composition(document_id)
+    findings = graph.critique_composition(req.document_id)
     return ToolResponse(data={"findings": findings, "count": len(findings)})
 
 
 @app.post("/tools/list_layers", response_model=ToolResponse)
-async def list_layers(document_id: str | None = None):
+async def list_layers(req: DocIdBody):
     graph = get_graph()
-    if not graph.has_document(document_id):
+    if not graph.has_document(req.document_id):
         raise HTTPException(status_code=404, detail="Document not found")
-    layers = graph.list_layers(document_id)
+    layers = graph.list_layers(req.document_id)
     return ToolResponse(data={"layers": layers})
 
 
@@ -1154,17 +1165,15 @@ async def restore(req: CheckpointRequest):
 
 
 @app.post("/tools/get_history", response_model=ToolResponse)
-async def get_history(document_id: str | None = None, limit: int = 20):
+async def get_history(req: DocIdLimitBody):
     graph = get_graph()
-    try:
-        from avge_engine.services.engine import resolve_doc
-        doc_id = resolve_doc(document_id)
-    except RuntimeError:
-        raise HTTPException(status_code=400, detail="No active document")
+    if not graph.has_document(req.document_id):
+        raise HTTPException(status_code=400, detail="Document not found")
+    doc_id = req.document_id
     history = graph.list_checkpoints(doc_id)
     meta_store = getattr(graph, "_checkpoint_meta", {})
     entries = []
-    for name in history[:limit]:
+    for name in history[:req.limit]:
         entry = meta_store.get(f"{doc_id}::{name}", {})
         entries.append({
             "name": name,
@@ -1188,15 +1197,12 @@ async def batch(req: BatchRequest):
 
 
 @app.post("/tools/get_document_stats")
-async def get_document_stats_api(document_id: str | None = None):
+async def get_document_stats_api(req: DocIdBody):
     """Get tool usage stats for a document."""
     graph = get_graph()
-    from avge_engine.services.engine import resolve_doc
-    try:
-        doc_id = resolve_doc(document_id) if document_id else None
-    except RuntimeError:
+    if not graph.has_document(req.document_id):
         raise HTTPException(status_code=400, detail="No active document")
-    stats = graph.get_doc_stats(document_id)
+    stats = graph.get_doc_stats(req.document_id)
     return ToolResponse(data=stats)
 
 
