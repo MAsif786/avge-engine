@@ -484,6 +484,60 @@ def create_tools(mcp):
             return f"Error: {e}"
 
     @mcp.tool(
+        name="mirror_region",
+        description="Create a mirrored copy of a region across a vertical axis "
+        "(default x=0.5 = canvas center). "
+        "💡 Build one side of a symmetrical character (right arm, right eye, "
+        "right leg), then mirror_region to create the left side instantly — "
+        "no need to author both halves manually. "
+        "Preserves ellipse/rect primitives when possible.",
+    )
+    def mirror_region(
+        region_id: str,
+        document_id: str | None = None,
+        new_region_id: str | None = None,
+        axis_x: float = 0.5,
+        offset_x: float = 0.0,
+        offset_y: float = 0.0,
+    ) -> str:
+        """Mirror a region across a vertical axis.
+
+        Args:
+            region_id: Region to mirror.
+            document_id: Document UUID (omit for active doc).
+            new_region_id: ID for the mirrored copy.
+            axis_x: X coordinate of the mirror axis (default 0.5 = center).
+            offset_x: Additional X offset after mirroring.
+            offset_y: Additional Y offset after mirroring.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+
+        try:
+            region = scene.get_region(region_id, doc_id)
+            cx = sum(p[0] for p in region.outline) / len(region.outline)
+            dist = axis_x - cx
+            dx = 2 * dist + offset_x
+
+            dup = scene.duplicate_region(
+                region_id=region_id,
+                new_region_id=new_region_id,
+                document_id=doc_id,
+                offset_x=dx,
+                offset_y=offset_y,
+                mirror_x=True,
+            )
+            return (
+                f"Mirrored '{region_id}' as '{dup.id}' "
+                f"(axis_x={axis_x}, dx={dx:.4f}, dy={offset_y})"
+            )
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+
+    @mcp.tool(
         name="move_to_front",
         description="Move a region to the highest z-index (frontmost layer). "
         "Use when an object is hidden behind another and should render on top.",

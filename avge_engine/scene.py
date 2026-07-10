@@ -848,13 +848,27 @@ class SceneGraph:
                 new_outline.append((rx + cx + dx, ry + cy + dy))
 
             region.outline = normalize_outline(new_outline)
-            # If the region has a primitive dict and the transform actually
-            # changed position/scale/rotation, drop the primitive so the
-            # updated outline becomes the source of truth for rendering.
-            if region.primitive and (abs(dx) > 0.001 or abs(dy) > 0.001 or
-                                     abs(scale_x - 1) > 0.001 or abs(scale_y - 1) > 0.001 or
-                                     abs(rotate) > 0.001 or mirror_x or mirror_y):
-                region.primitive = None
+            # If the region has a primitive dict, update its coordinates instead
+            # of dropping it — this preserves clean SVG elements (ellipse, rect).
+            if region.primitive:
+                needs_drop = (abs(scale_x - 1) > 0.001 or abs(scale_y - 1) > 0.001 or
+                              abs(rotate) > 0.001 or mirror_x or mirror_y)
+                if needs_drop:
+                    region.primitive = None
+                elif abs(dx) > 0.001 or abs(dy) > 0.001:
+                    # Pure translation: update primitive coords in-place
+                    p = region.primitive
+                    if p.get("type") == "ellipse":
+                        p["cx"] += dx
+                        p["cy"] += dy
+                    elif p.get("type") == "rect":
+                        p["x"] += dx
+                        p["y"] += dy
+                    elif p.get("type") == "line":
+                        p["x1"] += dx
+                        p["y1"] += dy
+                        p["x2"] += dx
+                        p["y2"] += dy
             region.version += 1
             affected.append(rid)
 
@@ -1283,6 +1297,45 @@ class SceneGraph:
             opacity=opacity if opacity is not None else original.style.opacity,
             blend_mode=blend_mode if blend_mode is not None else original.style.blend_mode,
         )
+        # Preserve primitive if possible (update coords for mirror/scale/rotate)
+        new_primitive = None
+        if original.primitive:
+            p = original.primitive
+            copy_p = dict(p)
+            simple_transform = (abs(scale - 1) <= 0.001 and abs(rotate) <= 0.001)
+            if simple_transform and (mirror_x or mirror_y):
+                # Mirror ellipse/rect primitives by flipping their center point
+                if copy_p.get("type") == "ellipse":
+                    if mirror_x:
+                        copy_p["cx"] = 2 * cx - copy_p["cx"]
+                    if mirror_y:
+                        copy_p["cy"] = 2 * cy - copy_p["cy"]
+                    new_primitive = copy_p
+                elif copy_p.get("type") == "rect":
+                    if mirror_x:
+                        orig_right = copy_p["x"] + copy_p["width"]
+                        copy_p["x"] = 2 * cx - orig_right
+                    if mirror_y:
+                        orig_bottom = copy_p["y"] + copy_p["height"]
+                        copy_p["y"] = 2 * cy - orig_bottom
+                    new_primitive = copy_p
+            elif not mirror_x and not mirror_y and abs(scale - 1) <= 0.001 and abs(rotate) <= 0.001:
+                # Pure translation — update coords
+                if copy_p.get("type") == "ellipse":
+                    copy_p["cx"] += offset_x
+                    copy_p["cy"] += offset_y
+                    new_primitive = copy_p
+                elif copy_p.get("type") == "rect":
+                    copy_p["x"] += offset_x
+                    copy_p["y"] += offset_y
+                    new_primitive = copy_p
+                elif copy_p.get("type") == "line":
+                    copy_p["x1"] += offset_x
+                    copy_p["y1"] += offset_y
+                    copy_p["x2"] += offset_x
+                    copy_p["y2"] += offset_y
+                    new_primitive = copy_p
+
         dup = RegionNode(
             id=rid,
             layer=layer if layer is not None else original.layer,
@@ -1291,6 +1344,7 @@ class SceneGraph:
             constraints=new_constraints,
             style=new_style_obj,
             transform=original.transform,
+            primitive=new_primitive,
         )
         regions[rid] = dup
         self.get_document(doc_id).version += 1
