@@ -1061,6 +1061,19 @@ async def batch(req: BatchRequest):
 
 
 
+@app.post("/tools/get_document_stats")
+async def get_document_stats_api(document_id: str | None = None):
+    """Get tool usage stats for a document."""
+    graph = get_graph()
+    from avge_engine.services.engine import resolve_doc
+    try:
+        doc_id = resolve_doc(document_id) if document_id else None
+    except RuntimeError:
+        raise HTTPException(status_code=400, detail="No active document")
+    stats = graph.get_doc_stats(document_id)
+    return ToolResponse(data=stats)
+
+
 @app.post("/tools/reset")
 async def reset():
     """Reset the scene graph (test/debug endpoint)."""

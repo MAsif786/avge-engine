@@ -31,6 +31,55 @@ from avge_engine.storage import StorageAdapter
 from typing import TYPE_CHECKING
 
 
+# ── Per-document tool stats ─────────────────────────────────────
+_DocStats = dict[str, dict[str, int]]
+
+
+class ToolStats:
+    """Per-document tool usage and error tracking."""
+
+    def __init__(self) -> None:
+        self._calls: _DocStats = {}
+        self._errors: list[dict] = []
+        self._max_errors: int = 200
+
+    def track_call(self, doc_id: str, tool_name: str) -> None:
+        if doc_id not in self._calls:
+            self._calls[doc_id] = {}
+        self._calls[doc_id][tool_name] = self._calls[doc_id].get(tool_name, 0) + 1
+
+    def track_error(self, doc_id: str, tool_name: str, error: str) -> None:
+        self.track_call(doc_id, tool_name)
+        if len(self._errors) < self._max_errors:
+            self._errors.append({
+                "doc_id": doc_id, "tool": tool_name,
+                "error": str(error)[:200],
+                "time": __import__("datetime").datetime.now().isoformat(),
+            })
+
+    def get_doc_calls(self, doc_id: str) -> dict[str, int]:
+        return dict(self._calls.get(doc_id, {}))
+
+    def get_doc_errors(self, doc_id: str) -> list[dict]:
+        return [e for e in self._errors if e["doc_id"] == doc_id]
+
+    def to_metadata(self) -> dict:
+        return {
+            "calls": {k: dict(v) for k, v in self._calls.items()},
+            "errors": list(self._errors),
+        }
+
+    def from_metadata(self, data: dict) -> None:
+        for doc_id, tools in data.get("calls", {}).items():
+            if doc_id not in self._calls:
+                self._calls[doc_id] = {}
+            self._calls[doc_id].update(tools)
+        seen = {e.get("time") for e in self._errors if e.get("time")}
+        for e in data.get("errors", []):
+            if e.get("time") not in seen and len(self._errors) < self._max_errors:
+                self._errors.append(e)
+
+
 # ── Core data objects ──────────────────────────────────────────────
 
 @dataclass
@@ -83,6 +132,7 @@ class SceneGraph:
         self._auto_enabled: bool = True
         self._last_doc_id: str | None = None
         self._storage: StorageAdapter | None = None
+        self.tool_stats: ToolStats = ToolStats()
 
     def attach_storage(self, adapter: StorageAdapter) -> None:
         self._storage = adapter
@@ -102,10 +152,14 @@ class SceneGraph:
             for key, val in self._groups.items():
                 if key.startswith(prefix):
                     groups_data[key[len(prefix):]] = val
+        ts = __import__("datetime").datetime.now().isoformat()
         self._storage.save(doc_id, {
             "document": asdict(doc) if doc else {},
             "regions": {k: asdict(v) for k, v in regions.items()},
-            "metadata": {"updated": __import__("datetime").datetime.now().isoformat()},
+            "metadata": {
+                "updated": ts,
+                "tool_stats": self.tool_stats.to_metadata(),
+            },
             "groups": groups_data,
         })
 
@@ -137,6 +191,10 @@ class SceneGraph:
             prefix = f"{document_id}::"
             for name, ids in groups_data.items():
                 self._groups[f"{prefix}{name}"] = list(ids)
+        # Restore tool stats from metadata
+        meta = data.get("metadata", {})
+        if "tool_stats" in meta:
+            self.tool_stats.from_metadata(meta["tool_stats"])
         return True
 
     def list_stored_documents(self) -> list[dict]:
@@ -1668,6 +1726,33 @@ class SceneGraph:
                     f"consider increasing smoothness or reducing point count)"
                 )
         return notes
+
+    # ── Tool usage tracking ────────────────────────────────────
+
+    def track_op(self, document_id: str | None, tool: str) -> None:
+        """Record a tool call for the given document."""
+        doc_id = self._resolve_doc(document_id) if document_id else self._last_doc_id
+        if doc_id:
+            self.tool_stats.track_call(doc_id, tool)
+
+    def track_err(self, document_id: str | None, tool: str, error: str) -> None:
+        """Record a tool error for the given document."""
+        doc_id = self._resolve_doc(document_id) if document_id else self._last_doc_id
+        if doc_id:
+            self.tool_stats.track_error(doc_id, tool, error)
+
+    def get_doc_stats(self, document_id: str | None = None) -> dict:
+        """Return tool call counts + error summary for a document."""
+        doc_id = self._resolve_doc(document_id)
+        calls = self.tool_stats.get_doc_calls(doc_id)
+        errors = self.tool_stats.get_doc_errors(doc_id)
+        return {
+            "document_id": doc_id,
+            "tool_calls": calls,
+            "total_calls": sum(calls.values()),
+            "error_count": len(errors),
+            "errors": errors[-20:],
+        }
 
     # ── Reset (for tests) ───────────────────────────────────────────
 

@@ -186,3 +186,32 @@ def create_tools(mcp):
             f"Reordered {count} region(s) in layer '{layer}' "
             f"(z_offset={z_offset:+d})"
         )
+
+    @mcp.tool(
+        name="get_document_stats",
+        description="View tool usage stats and errors for a document. "
+        "Shows call counts per tool, total operations, and recent errors.",
+    )
+    def get_document_stats(document_id: str | None = None) -> str:
+        """Show tool call counts and errors for a document."""
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        stats = scene.get_doc_stats(doc_id)
+        lines = [
+            f"Stats for {stats['document_id']}:",
+            f"  Total tool calls: {stats['total_calls']}",
+            f"  Errors: {stats['error_count']}",
+        ]
+        if stats["tool_calls"]:
+            lines.append("  Calls by tool:")
+            for tool, count in sorted(stats["tool_calls"].items(),
+                                       key=lambda x: -x[1]):
+                lines.append(f"    {tool}: {count}")
+        if stats["errors"]:
+            lines.append("  Recent errors:")
+            for e in stats["errors"]:
+                lines.append(f"    [{e['tool']}] {e['error'][:120]}")
+        return "\n".join(lines)
