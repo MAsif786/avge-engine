@@ -5,12 +5,15 @@ Each document is a .json file named <doc_id>.json in a storage directory.
 Includes document metadata and all regions as serializable dicts.
 
 Supports hot-reload: saves every mutation, loads on demand.
+Uses atomic writes (write to .tmp → rename) to prevent race conditions
+when MCP and API servers access the same file concurrently.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,20 +35,26 @@ class FileStorageAdapter(StorageAdapter):
         return datetime.now(timezone.utc).isoformat()
 
     def save(self, doc_id: str, data: dict[str, Any]) -> bool:
-        """Serialize document dict to a JSON file.
+        """Atomically serialize document dict to a JSON file.
 
-        Args:
-            doc_id: Document UUID (used as filename).
-            data: Dict with 'document', 'regions', 'metadata' keys.
-
-        Returns:
-            True on success.
+        Writes to a temporary file then renames (atomic on POSIX)
+        to prevent partial reads from concurrent processes.
         """
         path = self._path(doc_id)
-        # Convert complex objects to serializable form
         serializable = _make_serializable(data)
         try:
-            path.write_text(json.dumps(serializable, indent=2, default=str))
+            content = json.dumps(serializable, indent=2, default=str)
+            fd, tmp_path = tempfile.mkstemp(dir=self._dir, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(content)
+                os.replace(tmp_path, path)
+            except Exception:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
             return True
         except (OSError, TypeError) as e:
             print(f"[FileStorage] Save error {doc_id}: {e}")
