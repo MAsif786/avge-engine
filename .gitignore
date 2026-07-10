@@ -54,3 +54,6 @@ eval_harness.py
 
 # Personal settings
 .claude/
+
+# Generated preview images
+scripts/preview_open_book.png
