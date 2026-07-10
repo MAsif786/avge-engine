@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -30,9 +29,6 @@ class FileStorageAdapter(StorageAdapter):
 
     def _path(self, doc_id: str) -> Path:
         return self._dir / f"{doc_id}.json"
-
-    def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
 
     def save(self, doc_id: str, data: dict[str, Any]) -> bool:
         """Atomically serialize document dict to a JSON file.

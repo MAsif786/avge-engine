@@ -949,7 +949,6 @@ async def render_preview(req: PreviewRequest):
     if not graph.has_document(req.document_id):
         raise HTTPException(status_code=404, detail="Document not found")
     svg = svg_serialize(graph, req.document_id)
-    from avge_engine.renderer import render_preview_base64
     try:
         b64 = render_preview_base64(svg, scale=max(0.25, min(2.0, req.scale)))
         return ToolResponse(data={"preview": b64})
