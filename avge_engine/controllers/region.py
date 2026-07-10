@@ -448,6 +448,88 @@ def create_tools(mcp):
             return f"Error: {e}"
 
     @mcp.tool(
+        name="create_curve",
+        description="Create a smooth curved line through 3+ control points. "
+        "Unlike create_region (filled shapes) or create_shape (primitives), "
+        "create_curve produces a thin stroked path that curves through your "
+        "points with Catmull-Rom interpolation. "
+        "💡 Hair strands: 4-6 points with smoothness=0.5, stroke='#3D2B1F', "
+        "stroke_width=0.003, stroke_linecap='round' "
+        "💡 Wrinkles/creases: 3-4 points with smoothness=0.4, "
+        "stroke_width=0.0015, stroke_linecap='round' "
+        "💡 Eyebrows, smile lines: 3 points, smoothness=0.6, "
+        "stroke_linecap='round'",
+    )
+    def create_curve(
+        points: list[list[float]],
+        document_id: str | None = None,
+        region_id: str | None = None,
+        layer: str = "default",
+        z_index: int = 0,
+        stroke: str | None = "#333333",
+        stroke_width: float = 0.005,
+        opacity: float = 1.0,
+        smoothness: float = 0.5,
+        blend_mode: BLEND_MODES | None = None,
+        stroke_linecap: str | None = "round",
+    ) -> str:
+        """Create a smooth curved line through 3+ control points.
+
+        Args:
+            points: List of [x, y] control points in normalized space (3+ required).
+            document_id: Document UUID (omit to use active document).
+            region_id: Optional unique ID.
+            layer: Layer name (default "default").
+            z_index: Paint order (higher = on top).
+            stroke: Stroke color (default "#333333").
+            stroke_width: Stroke width in normalized units.
+            opacity: Object opacity 0.0–1.0.
+            smoothness: Curve smoothness 0.0–1.0 (default 0.5).
+            blend_mode: CSS mix-blend-mode.
+            stroke_linecap: Line end style — "round" (default), "butt", or "square".
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document. Call create_document first."
+
+        if not points or len(points) < 2:
+            return "Error: Need at least 2 points"
+        if len(points) > 100:
+            return f"Error: Too many points ({len(points)}), max 100"
+
+        try:
+            if len(points) == 2:
+                x1, y1 = points[0]
+                x2, y2 = points[1]
+                lr = scene.create_line(
+                    x1, y1, x2, y2,
+                    document_id=doc_id, region_id=region_id,
+                    layer=layer, z_index=z_index,
+                    stroke=stroke, stroke_width=stroke_width,
+                    opacity=opacity, blend_mode=blend_mode,
+                    stroke_linecap=stroke_linecap,
+                )
+            else:
+                lr = scene.create_line(
+                    points=points,
+                    document_id=doc_id, region_id=region_id,
+                    layer=layer, z_index=z_index,
+                    stroke=stroke, stroke_width=stroke_width,
+                    opacity=opacity, blend_mode=blend_mode,
+                    stroke_linecap=stroke_linecap,
+                    smoothness=smoothness,
+                )
+            return (
+                f"Curve created: id={lr.id}, {len(points)} points, "
+                f"smoothness={smoothness}, stroke_width={stroke_width}, "
+                f"stroke_linecap='{stroke_linecap}'"
+            )
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+
+    @mcp.tool(
         name="duplicate_region",
         description="Duplicate an existing region with optional offset, mirror, and recolor. "
         "Use this for highlights and shadow slivers — clone the base "
@@ -469,8 +551,10 @@ def create_tools(mcp):
         z_index: int | None = None,
         mirror_x: bool = False,
         mirror_y: bool = False,
+        scale: float = 1.0,
+        rotate: float = 0.0,
     ) -> str:
-        """Duplicate a region with optional offset and overrides.
+        """Duplicate a region with optional offset, mirror, scale, rotation.
 
         Args:
             region_id: ID of the region to duplicate.
@@ -486,6 +570,8 @@ def create_tools(mcp):
             z_index: Z-index for the copy (defaults to original + 1).
             mirror_x: Mirror horizontally (flip around original's center).
             mirror_y: Mirror vertically (flip around original's center).
+            scale: Uniform scale factor (0.5 = half size, 2.0 = double).
+            rotate: Rotation in degrees (positive = clockwise around center).
         """
         scene = get_graph()
         try:
@@ -508,8 +594,14 @@ def create_tools(mcp):
                 z_index=z_index,
                 mirror_x=mirror_x,
                 mirror_y=mirror_y,
+                scale=scale,
+                rotate=rotate,
             )
             parts = [f"offset={offset_x},{offset_y}"]
+            if scale != 1.0:
+                parts.append(f"scale={scale}")
+            if rotate:
+                parts.append(f"rotate={rotate}°")
             if mirror_x:
                 parts.append("mirror_x")
             if mirror_y:

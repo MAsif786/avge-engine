@@ -140,6 +140,8 @@ class DuplicateRegionRequest(BaseModel):
     mirror_y: bool = False
     blend_mode: BLEND_MODES | None = None
     layer: str | None = None
+    scale: float = 1.0
+    rotate: float = 0.0
 
 
 # ── Style ──────────────────────────────────────────────────────────
@@ -526,6 +528,7 @@ async def duplicate_region(req: DuplicateRegionRequest):
             smoothness=req.smoothness, z_index=req.z_index,
             mirror_x=req.mirror_x, mirror_y=req.mirror_y,
             blend_mode=req.blend_mode, layer=req.layer,
+            scale=req.scale, rotate=req.rotate,
         )
         return ToolResponse(data={"region_id": dup.id, "source": req.region_id})
     except ValueError as e:

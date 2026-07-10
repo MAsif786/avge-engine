@@ -482,3 +482,45 @@ def create_tools(mcp):
             return "\n".join(lines)
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
+
+    @mcp.tool(
+        name="move_to_front",
+        description="Move a region to the highest z-index (frontmost layer). "
+        "Use when an object is hidden behind another and should render on top.",
+    )
+    def move_to_front(region_id: str, document_id: str | None = None) -> str:
+        """Move a region to the highest z-index.
+
+        Args:
+            region_id: Region to bring to front.
+            document_id: Document UUID (omit to use active document).
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if scene.move_to_front(region_id, doc_id):
+            return f"Region '{region_id}' moved to front"
+        return f"Error: Region '{region_id}' not found"
+
+    @mcp.tool(
+        name="move_to_back",
+        description="Move a region to the lowest z-index (backmost layer). "
+        "Use when an object should render behind all others.",
+    )
+    def move_to_back(region_id: str, document_id: str | None = None) -> str:
+        """Move a region to the lowest z-index.
+
+        Args:
+            region_id: Region to send to back.
+            document_id: Document UUID (omit to use active document).
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if scene.move_to_back(region_id, doc_id):
+            return f"Region '{region_id}' moved to back"
+        return f"Error: Region '{region_id}' not found"

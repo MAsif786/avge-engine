@@ -1064,6 +1064,8 @@ class SceneGraph:
                         z_index=op.get("z_index"),
                         mirror_x=op.get("mirror_x", False),
                         mirror_y=op.get("mirror_y", False),
+                        scale=op.get("scale", 1.0),
+                        rotate=op.get("rotate", 0.0),
                     )
                     results.append({"status": "ok", "region_id": d.id})
                 elif tool == "delete_region":
@@ -1226,12 +1228,17 @@ class SceneGraph:
         mirror_y: bool = False,
         blend_mode: str | None = None,
         layer: str | None = None,
+        scale: float = 1.0,
+        rotate: float = 0.0,
     ) -> RegionNode:
         """Duplicate a region with optional offset and overrides.
 
         When ``mirror_x`` or ``mirror_y`` is True, the outline is flipped
         around the original region's center before offset is applied.
+        ``scale`` and ``rotate`` apply uniform scale and rotation around
+        the original region's center before offset.
         """
+        import math
         doc_id = self._resolve_doc(document_id)
         regions = self._regions_for(doc_id)
         original = regions.get(region_id)
@@ -1244,11 +1251,23 @@ class SceneGraph:
         cx = sum(p[0] for p in original.outline) / len(original.outline)
         cy = sum(p[1] for p in original.outline) / len(original.outline)
 
+        angle = math.radians(rotate)
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+
         new_outline = []
         for x, y in original.outline:
+            # Mirror around center
             nx = (2 * cx - x) if mirror_x else x
             ny = (2 * cy - y) if mirror_y else y
-            new_outline.append((nx + offset_x, ny + offset_y))
+            # Scale around center
+            sx_val = (nx - cx) * scale + cx
+            sy_val = (ny - cy) * scale + cy
+            # Rotate around center
+            rx = (sx_val - cx) * cos_a - (sy_val - cy) * sin_a + cx
+            ry = (sx_val - cx) * sin_a + (sy_val - cy) * cos_a + cy
+            # Translate
+            new_outline.append((rx + offset_x, ry + offset_y))
         new_fill = fill if fill is not None else original.style.fill
         new_constraints = original.constraints
         if smoothness is not None:
@@ -1404,6 +1423,7 @@ class SceneGraph:
         opacity: float = 1.0,
         blend_mode: str | None = None,
         stroke_linecap: str | None = None,
+        smoothness: float | None = None,
     ) -> RegionNode:
         """Create a line/stroke region — renders as SVG <line> or path-based polyline.
 
@@ -1418,10 +1438,11 @@ class SceneGraph:
         if points is not None and len(points) > 2:
             # Multi-point polyline — path-based with smoothness
             surr = [(float(p[0]), float(p[1])) for p in points]
+            curve_smoothness = smoothness if smoothness is not None else 0.35
             region = RegionNode(
                 id=rid, layer=layer, z_index=z_index,
                 outline=surr,
-                constraints=CurveConstraints(smoothness=0.35, closed=False),
+                constraints=CurveConstraints(smoothness=curve_smoothness, closed=False),
                 style=Style(fill=None, stroke=stroke, stroke_width=max(0.001, min(0.1, stroke_width)),
                             opacity=max(0.0, min(1.0, opacity)), blend_mode=blend_mode,
                             stroke_linecap=stroke_linecap),
