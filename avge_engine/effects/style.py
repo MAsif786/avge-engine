@@ -108,21 +108,30 @@ class Style:
     stroke_width: float = 0.005
     opacity: float = 1.0
     blend_mode: str | None = None
+    stroke_linecap: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "stroke_width", max(0.0, min(0.1, self.stroke_width)))
         object.__setattr__(self, "opacity", max(0.0, min(1.0, self.opacity)))
+        # Validate stroke_linecap
+        if self.stroke_linecap is not None and self.stroke_linecap not in ("butt", "round", "square"):
+            raise ValueError(f"Invalid stroke_linecap: {self.stroke_linecap}. Valid: butt, round, square")
         # Validate fill
         if self.fill is not None:
-            if is_gradient(self.fill):
+            if self.fill == "none":
+                object.__setattr__(self, "fill", None)
+            elif is_gradient(self.fill):
                 errs = validate_gradient(self.fill)
                 if errs:
                     raise ValueError(f"Invalid gradient: {'; '.join(errs)}")
             elif not _is_hex(self.fill):
                 raise ValueError(f"Invalid fill: {self.fill}")
-        # Validate stroke
-        if self.stroke is not None and not _is_hex(self.stroke):
-            raise ValueError(f"Invalid stroke color: {self.stroke}")
+        # Validate stroke — "none" maps to None (no stroke)
+        if self.stroke is not None:
+            if self.stroke == "none":
+                object.__setattr__(self, "stroke", None)
+            elif not _is_hex(self.stroke):
+                raise ValueError(f"Invalid stroke color: {self.stroke}")
         # Validate blend mode
         if self.blend_mode is not None:
             valid = ("normal","multiply","screen","overlay","darken","lighten",
@@ -139,7 +148,14 @@ def resolve_stroke(stroke: str | None) -> str:
 
 
 def _is_hex(value: str) -> bool:
-    return bool(value.startswith("#") and len(value) in (4, 7))
+    """Check if value is a valid hex color (#RGB, #RRGGBB, or #RRGGBBAA)."""
+    if not value.startswith("#") or len(value) not in (4, 7, 9):
+        return False
+    try:
+        int(value[1:], 16)
+        return True
+    except ValueError:
+        return False
 
 
 # ── Gradient SVG generation ────────────────────────────────────────
