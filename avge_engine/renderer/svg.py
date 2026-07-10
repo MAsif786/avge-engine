@@ -22,15 +22,20 @@ from avge_engine.geometry import compute_bounds, fit_curves
 from avge_engine.effects import resolve_fill, resolve_stroke, is_gradient, gradient_to_svg_def
 
 
-def svg_serialize(scene: SceneGraph) -> str:
+def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
     """Produce a canonical SVG string from the scene graph.
+
+    Args:
+        scene: The scene graph instance.
+        document_id: Specific doc to render (uses last active if omitted).
 
     Returns byte-identical SVG for identical scene graph input.
     """
-    if not scene._last_doc_id or not scene.has_document(scene._last_doc_id):
+    doc_id = document_id or scene._last_doc_id
+    if not doc_id or not scene.has_document(doc_id):
         return ""  # No document to render
-    doc = scene.get_document(scene._last_doc_id)
-    regions = scene.get_all_regions(scene._last_doc_id)
+    doc = scene.get_document(doc_id)
+    regions = scene.get_all_regions(doc_id)
 
     # Collect gradient definitions
     gradient_defs: list[str] = []
@@ -56,9 +61,11 @@ def svg_serialize(scene: SceneGraph) -> str:
         lines.extend(gradient_defs)
         lines.append("  </defs>")
 
-    # Clip path defs
-    for region in regions:
-        if region.clip_to:
+    # Clip path defs (dedup by clip target ID)
+    seen_clips: set[str] = set()
+    for region in sorted(regions, key=lambda r: r.z_index):
+        if region.clip_to and region.clip_to not in seen_clips:
+            seen_clips.add(region.clip_to)
             clip_r = next((r for r in regions if r.id == region.clip_to), None)
             if clip_r and clip_r.outline:
                 segs = fit_curves(clip_r.outline, closed=clip_r.constraints.closed,
@@ -70,8 +77,8 @@ def svg_serialize(scene: SceneGraph) -> str:
                     lines.append(f'    <path d="{pd}"/>')
                     lines.append(f'  </clipPath>')
 
-    # Path elements
-    for region in regions:
+    # Path elements (sorted by z_index for proper layering)
+    for region in sorted(regions, key=lambda r: r.z_index):
         svg_elem = _region_to_path(region, doc.width, doc.height)
         if svg_elem:
             lines.append(svg_elem)
@@ -81,7 +88,96 @@ def svg_serialize(scene: SceneGraph) -> str:
 
 
 def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
-    """Convert a single region to an SVG <path> element or None."""
+    """Convert a single region to an SVG element. Handles both primitives and paths."""
+    canvas_min = min(canvas_w, canvas_h)
+
+    # Common style attributes
+    stroke = resolve_stroke(region.style.stroke)
+    sw = _fmt(region.style.stroke_width * canvas_min)
+    fill = resolve_fill(region.style.fill)
+
+    def _append_style(parts: list[str]) -> None:
+        parts.append(f' fill="{fill}" stroke="{stroke}" stroke-width="{sw}"')
+        if region.style.opacity < 1.0:
+            parts.append(f' opacity="{_fmt(region.style.opacity)}"')
+        if region.style.blend_mode:
+            parts.append(f' style="mix-blend-mode:{region.style.blend_mode}"')
+        if region.style.stroke_linecap:
+            parts.append(f' stroke-linecap="{region.style.stroke_linecap}"')
+        if region.clip_to:
+            parts.append(f' clip-path="url(#clip_{region.clip_to})"')
+
+    def _append_transform(parts: list[str], cx: float, cy: float) -> None:
+        tx, ty = region.transform.translate
+        rot = region.transform.rotate
+        sx, sy = region.transform.scale
+        t_parts = []
+        if sx != 1 or sy != 1:
+            t_parts.append(f"scale({_fmt(sx)},{_fmt(sy)})")
+        if rot != 0:
+            t_parts.append(f"rotate({_fmt(rot)},{_fmt(cx * canvas_w)},{_fmt(cy * canvas_h)})")
+        if tx != 0 or ty != 0:
+            t_parts.append(f"translate({_fmt(tx * canvas_w)},{_fmt(ty * canvas_h)})")
+        if t_parts:
+            parts.append(f' transform="{" ".join(t_parts)}"')
+
+    # ── Primitive shapes ───────────────────────────────────────────
+    if region.primitive:
+        ptype = region.primitive.get("type")
+        if ptype == "rect":
+            x = region.primitive["x"] * canvas_w
+            y = region.primitive["y"] * canvas_h
+            w = region.primitive["width"] * canvas_w
+            h = region.primitive["height"] * canvas_h
+            rx = region.primitive.get("rx", 0) * canvas_min
+            rx_attr = f' rx="{_fmt(rx)}"' if rx > 0 else ""
+            parts = [f'    <rect x="{_fmt(x)}" y="{_fmt(y)}" width="{_fmt(w)}" height="{_fmt(h)}"{rx_attr}']
+            _append_style(parts)
+            _append_transform(parts, region.primitive["x"] + region.primitive["width"] / 2,
+                              region.primitive["y"] + region.primitive["height"] / 2)
+            parts.append("/>")
+            return "".join(parts)
+
+        if ptype == "ellipse":
+            cx = region.primitive["cx"] * canvas_w
+            cy = region.primitive["cy"] * canvas_h
+            rxx = region.primitive["rx"] * canvas_w
+            ryy = region.primitive["ry"] * canvas_h
+            parts = [f'    <ellipse cx="{_fmt(cx)}" cy="{_fmt(cy)}" rx="{_fmt(rxx)}" ry="{_fmt(ryy)}"']
+            _append_style(parts)
+            _append_transform(parts, region.primitive["cx"], region.primitive["cy"])
+            parts.append("/>")
+            return "".join(parts)
+
+        if ptype == "line":
+            x1 = region.primitive["x1"] * canvas_w
+            y1 = region.primitive["y1"] * canvas_h
+            x2 = region.primitive["x2"] * canvas_w
+            y2 = region.primitive["y2"] * canvas_h
+            mid_x = (region.primitive["x1"] + region.primitive["x2"]) / 2
+            mid_y = (region.primitive["y1"] + region.primitive["y2"]) / 2
+            parts = [f'    <line x1="{_fmt(x1)}" y1="{_fmt(y1)}" x2="{_fmt(x2)}" y2="{_fmt(y2)}"']
+            _append_style(parts)
+            _append_transform(parts, mid_x, mid_y)
+            parts.append("/>")
+            return "".join(parts)
+
+    # ── Polygon / polyline mode (smoothness ≈ 0 — straight lines) ──
+    if region.constraints.smoothness <= 0.001 and region.outline and not region.primitive:
+        pts = " ".join(
+            f"{_fmt(p[0] * canvas_w)},{_fmt(p[1] * canvas_h)}"
+            for p in region.outline
+        )
+        tag = "polygon" if region.constraints.closed else "polyline"
+        parts = [f'    <{tag} points="{pts}"']
+        _append_style(parts)
+        bounds = compute_bounds(region.outline)
+        if bounds:
+            _append_transform(parts, bounds["x"] + bounds["w"] / 2, bounds["y"] + bounds["h"] / 2)
+        parts.append("/>")
+        return "".join(parts)
+
+    # ── Path-based regions (fallback) ──────────────────────────────
     if not region.outline:
         return None
 
@@ -94,44 +190,17 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
     if not segments:
         return None
 
-    # Build path data
     path_data = _build_path_data(segments, canvas_w, canvas_h, region.constraints.closed)
 
-    # Style
-    fill = resolve_fill(region.style.fill)
-    stroke = resolve_stroke(region.style.stroke)
-    sw = _fmt(region.style.stroke_width * min(canvas_w, canvas_h))
-
     parts = [f'    <path d="{path_data}"']
-    parts.append(f' fill="{fill}" stroke="{stroke}" stroke-width="{sw}"')
 
-    if region.style.opacity < 1.0:
-        parts.append(f' opacity="{_fmt(region.style.opacity)}"')
+    _append_style(parts)
 
-    if region.style.blend_mode:
-        parts.append(f' style="mix-blend-mode:{region.style.blend_mode}"')
-
-    if region.clip_to:
-        parts.append(f' clip-path="url(#clip_{region.clip_to})"')
-
-    # Transform
-    tx, ty = region.transform.translate
-    rot = region.transform.rotate
-    sx, sy = region.transform.scale
-    has_transform = tx != 0 or ty != 0 or rot != 0 or sx != 1 or sy != 1
-    if has_transform:
-        t_parts = []
-        if sx != 1 or sy != 1:
-            t_parts.append(f"scale({_fmt(sx)},{_fmt(sy)})")
-        if rot != 0:
-            bounds = compute_bounds(region.outline)
-            if bounds:
-                cx = _fmt((bounds["x"] + bounds["w"] / 2) * canvas_w)
-                cy = _fmt((bounds["y"] + bounds["h"] / 2) * canvas_h)
-                t_parts.append(f"rotate({_fmt(rot)},{cx},{cy})")
-        if tx != 0 or ty != 0:
-            t_parts.append(f"translate({_fmt(tx * canvas_w)},{_fmt(ty * canvas_h)})")
-        parts.append(f' transform="{" ".join(t_parts)}"')
+    # Transform (use center of bounds for path-based regions)
+    if region.outline:
+        bounds = compute_bounds(region.outline)
+        if bounds:
+            _append_transform(parts, bounds["x"] + bounds["w"] / 2, bounds["y"] + bounds["h"] / 2)
 
     parts.append("/>")
     return "".join(parts)
