@@ -6,7 +6,7 @@ Usage:
 """
 from __future__ import annotations
 
-from . import document, region, scene_view, style, history, scene_ops, query
+from . import document, region, scene_view, style, history, scene_ops, query, stats
 
 
 def register_all(mcp):
@@ -18,6 +18,7 @@ def register_all(mcp):
     history.create_tools(mcp)
     scene_ops.create_tools(mcp)
     query.create_tools(mcp)
+    stats.create_tools(mcp)
 
     # Wire up tool usage tracking for all registered tools
     from avge_engine.services.engine import track_tool_call, track_tool_error

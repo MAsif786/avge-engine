@@ -52,7 +52,7 @@ BLEND_MODES = Literal[
 BOOLEAN_OPS = Literal["union", "intersect", "subtract", "xor"]
 DETAIL_LEVEL = Literal["summary", "full"]
 GROUP_ACTION = Literal["create", "add", "remove", "delete"]
-PRESET_NAMES = Literal["warm_shaded", "cool_shaded", "metallic", "glow", "shadow", "wood"]
+PRESET_NAMES = Literal["warm_shaded", "cool_shaded", "metallic", "glow", "shadow", "wood", "car_paint", "deep_shadow", "chrome"]
 PIVOT_MODES = Literal["center", "base", "fixed"]
 
 
@@ -83,8 +83,8 @@ class DeleteDocumentRequest(BaseModel):
 # ── Region ─────────────────────────────────────────────────────────
 
 class CreateRegionRequest(BaseModel):
-    outline: list[list[float]] = Field(min_length=2, max_length=200)
-    document_id: str
+    outline: list[list[float]] | None = None
+    document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
     closed: bool = True
@@ -99,11 +99,13 @@ class CreateRegionRequest(BaseModel):
     clip_to: str | None = None
     blend_mode: BLEND_MODES | None = None
     tags: dict | None = None
+    shape: dict | None = None
+    stroke_linecap: str | None = None
 
 
 class EditRegionRequest(BaseModel):
     region_id: str
-    document_id: str
+    document_id: str | None = None
     outline: list[list[float]] | None = None
     smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
     smoothness_per_point: list[float] | None = None
@@ -116,18 +118,20 @@ class EditRegionRequest(BaseModel):
     clip_to: str | None = None
     layer: str | None = None
     tags: dict | None = None
+    shape: dict | None = None
+    stroke_linecap: str | None = None
 
 
 class DeleteRegionRequest(BaseModel):
     ids: list[str] = Field(min_length=1)
-    document_id: str
+    document_id: str | None = None
     confirm: bool = False
 
 
 class DuplicateRegionRequest(BaseModel):
     region_id: str
     new_region_id: str | None = None
-    document_id: str
+    document_id: str | None = None
     offset_x: float = 0.0
     offset_y: float = 0.0
     fill: str | None = None
@@ -148,7 +152,7 @@ class DuplicateRegionRequest(BaseModel):
 
 class StyleObjectsRequest(BaseModel):
     ids: list[str] | None = None
-    document_id: str
+    document_id: str | None = None
     fill: str | None = None
     stroke: str | None = None
     stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
@@ -162,7 +166,7 @@ class StyleObjectsRequest(BaseModel):
 class ApplyStylePresetRequest(BaseModel):
     preset: PRESET_NAMES
     ids: list[str] = Field(min_length=1)
-    document_id: str
+    document_id: str | None = None
 
 
 # ── Scene ops ──────────────────────────────────────────────────────
@@ -171,7 +175,7 @@ class BooleanOpRequest(BaseModel):
     operation: BOOLEAN_OPS = "union"
     region_ids: list[str] = Field(min_length=2)
     new_region_id: str | None = None
-    document_id: str
+    document_id: str | None = None
     keep_originals: bool = False
     fill: str | None = None
     stroke: str | None = None
@@ -181,7 +185,7 @@ class BooleanOpRequest(BaseModel):
 
 class TransformObjectsRequest(BaseModel):
     ids: list[str] | None = None
-    document_id: str
+    document_id: str | None = None
     dx: float = 0.0
     dy: float = 0.0
     scale: float = 1.0
@@ -202,12 +206,12 @@ class ManageGroupRequest(BaseModel):
     action: GROUP_ACTION = "create"
     group_name: str
     region_ids: list[str] | None = None
-    document_id: str
+    document_id: str | None = None
 
 
 class DuplicateGroupRequest(BaseModel):
     group_name: str
-    document_id: str
+    document_id: str | None = None
     new_prefix: str | None = None
     dx: float = 0.0
     dy: float = 0.0
@@ -234,7 +238,7 @@ class SubPartsDef(BaseModel):
 
 class CreateCompositeRegionRequest(BaseModel):
     outline: list[list[float]] = Field(min_length=2)
-    document_id: str
+    document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
     closed: bool = True
@@ -249,13 +253,13 @@ class CreateCompositeRegionRequest(BaseModel):
 
 class ExtrudeOutlineRequest(BaseModel):
     region_id: str
-    document_id: str
+    document_id: str | None = None
     segment_indices: list[int] | None = None
     extrusion_length: float = 0.03
     extrusion_width: float = 0.02
     angle_offset: float = 0.0
-    direction: Literal["outward", "inward"] = "outward"
-    shape: Literal["round", "sharp"] = "round"
+    direction: Literal["outward", "inward", "extrude"] = "outward"
+    shape: Literal["round", "sharp", "bevel"] = "round"
 
 
 # ── Query / View ───────────────────────────────────────────────────
@@ -263,11 +267,11 @@ class ExtrudeOutlineRequest(BaseModel):
 class DescribeSceneRequest(BaseModel):
     detail: DETAIL_LEVEL = "summary"
     filter_layer: str | None = None
-    document_id: str
+    document_id: str | None = None
 
 
 class FindObjectsRequest(BaseModel):
-    document_id: str
+    document_id: str | None = None
     fill: str | None = None
     min_x: float | None = None
     max_x: float | None = None
@@ -284,18 +288,18 @@ class FindObjectsRequest(BaseModel):
 
 class PreviewRequest(BaseModel):
     scale: float = Field(default=1.0, ge=0.25, le=2.0)
-    document_id: str
+    document_id: str | None = None
 
 
 class ExportSvgRequest(BaseModel):
     filepath: str = "output/scene.svg"
-    document_id: str
+    document_id: str | None = None
 
 
 class ReorderLayerRequest(BaseModel):
     layer: str
     z_offset: int
-    document_id: str
+    document_id: str | None = None
 
 
 # ── History ────────────────────────────────────────────────────────
@@ -307,7 +311,38 @@ class CheckpointRequest(BaseModel):
 
 class BatchRequest(BaseModel):
     ops: list[dict] = Field(min_length=1, max_length=200)
-    document_id: str
+    document_id: str | None = None
+
+
+class CreateCurveRequest(BaseModel):
+    points: list[list[float]] = Field(min_length=2, max_length=100)
+    document_id: str | None = None
+    region_id: str | None = None
+    layer: str = "default"
+    z_index: int = 0
+    stroke: str | None = "#333333"
+    stroke_width: float = Field(default=0.005, ge=0.001, le=0.1)
+    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
+    smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
+    blend_mode: BLEND_MODES | None = None
+    stroke_linecap: str | None = "round"
+
+
+class MirrorRegionRequest(BaseModel):
+    region_id: str
+    document_id: str | None = None
+    new_region_id: str | None = None
+    axis_x: float = 0.5
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+
+class AddShadowRequest(BaseModel):
+    region_id: str
+    document_id: str | None = None
+    offset_x: float = 0.015
+    offset_y: float = 0.015
+    opacity: float = 0.25
 
 
 # ── Health ─────────────────────────────────────────────────────────
@@ -402,7 +437,7 @@ async def list_documents_api():
 
 
 @app.get("/documents/{document_id}")
-async def get_document_info(document_id: str):
+async def get_document_info(document_id: str | None = None):
     """Get document metadata + preview link."""
     graph = get_graph()
     if not graph.has_document(document_id) and not graph.load_document(document_id):
@@ -421,9 +456,10 @@ async def get_document_info(document_id: str):
 @app.post("/tools/create_region", response_model=ToolResponse)
 async def create_region(req: CreateRegionRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
-    doc_id = req.document_id
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
+    # resolve for remainder of handler
 
     import json as _json
     resolved_fill = req.fill
@@ -479,8 +515,9 @@ async def create_region(req: CreateRegionRequest):
 @app.post("/tools/edit_region", response_model=ToolResponse)
 async def edit_region(req: EditRegionRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         metadata = None
         if req.tags:
@@ -507,8 +544,9 @@ async def edit_region(req: EditRegionRequest):
 @app.post("/tools/delete_region", response_model=ToolResponse)
 async def delete_region(req: DeleteRegionRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     deleted = graph.delete_regions(req.document_id, req.ids)
     return ToolResponse(data={"affected": deleted, "count": len(deleted)})
 
@@ -516,7 +554,8 @@ async def delete_region(req: DeleteRegionRequest):
 @app.post("/tools/duplicate_region", response_model=ToolResponse)
 async def duplicate_region(req: DuplicateRegionRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=400, detail="No document")
     try:
         dup = graph.duplicate_region(
@@ -543,7 +582,7 @@ class CreateRectRequest(BaseModel):
     width: float
     height: float
     rx: float = 0.0
-    document_id: str
+    document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -559,7 +598,7 @@ class CreateEllipseRequest(BaseModel):
     cy: float
     rx: float
     ry: float | None = None
-    document_id: str
+    document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -575,7 +614,7 @@ class CreateLineRequest(BaseModel):
     y1: float
     x2: float
     y2: float
-    document_id: str
+    document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
@@ -588,8 +627,9 @@ class CreateLineRequest(BaseModel):
 @app.post("/tools/create_rect", response_model=ToolResponse)
 async def create_rect(req: CreateRectRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         r = graph.create_rect(
             req.x, req.y, req.width, req.height, rx=req.rx,
@@ -607,8 +647,9 @@ async def create_rect(req: CreateRectRequest):
 @app.post("/tools/create_ellipse", response_model=ToolResponse)
 async def create_ellipse(req: CreateEllipseRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         e = graph.create_ellipse(
             req.cx, req.cy, req.rx, ry=req.ry,
@@ -626,8 +667,9 @@ async def create_ellipse(req: CreateEllipseRequest):
 @app.post("/tools/create_line", response_model=ToolResponse)
 async def create_line(req: CreateLineRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         lr = graph.create_line(
             req.x1, req.y1, req.x2, req.y2,
@@ -643,11 +685,82 @@ async def create_line(req: CreateLineRequest):
 
 # ── Style Endpoints ────────────────────────────────────────────────
 
+@app.post("/tools/create_curve", response_model=ToolResponse)
+async def create_curve(req: CreateCurveRequest):
+    graph = _get_graph()
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=400, detail="No active document")
+    try:
+        if len(req.points) == 2:
+            x1, y1 = req.points[0]
+            x2, y2 = req.points[1]
+            lr = graph.create_line(
+                x1, y1, x2, y2, document_id=doc_id, region_id=req.region_id,
+                layer=req.layer, z_index=req.z_index,
+                stroke=req.stroke, stroke_width=req.stroke_width,
+                opacity=req.opacity, blend_mode=req.blend_mode,
+                stroke_linecap=req.stroke_linecap,
+            )
+        else:
+            lr = graph.create_line(
+                points=req.points, document_id=doc_id, region_id=req.region_id,
+                layer=req.layer, z_index=req.z_index,
+                stroke=req.stroke, stroke_width=req.stroke_width,
+                opacity=req.opacity, blend_mode=req.blend_mode,
+                stroke_linecap=req.stroke_linecap,
+                smoothness=req.smoothness,
+            )
+        return ToolResponse(data={"region_id": lr.id, "points": len(req.points), "smoothness": req.smoothness})
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/tools/mirror_region", response_model=ToolResponse)
+async def mirror_region(req: MirrorRegionRequest):
+    graph = _get_graph()
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=400, detail="No active document")
+    try:
+        region = graph.get_region(req.region_id, doc_id)
+        cx = sum(p[0] for p in region.outline) / len(region.outline)
+        dx = 2 * (req.axis_x - cx) + req.offset_x
+        dup = graph.duplicate_region(
+            req.region_id, req.new_region_id, doc_id,
+            offset_x=dx, offset_y=req.offset_y, mirror_x=True,
+        )
+        return ToolResponse(data={"region_id": dup.id, "source": req.region_id, "dx": dx, "dy": req.offset_y})
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/tools/add_shadow", response_model=ToolResponse)
+async def add_shadow(req: AddShadowRequest):
+    graph = _get_graph()
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=400, detail="No active document")
+    try:
+        original = graph.get_region(req.region_id, doc_id)
+        shadow_id = req.region_id + "_shadow"
+        dup = graph.duplicate_region(
+            req.region_id, shadow_id, doc_id,
+            offset_x=req.offset_x, offset_y=req.offset_y,
+            fill="#000000", opacity=req.opacity,
+            z_index=-9999,
+        )
+        return ToolResponse(data={"region_id": dup.id, "source": req.region_id})
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/tools/style_objects", response_model=ToolResponse)
 async def style_objects(req: StyleObjectsRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     doc_id = req.document_id
 
     # Resolve group_name
@@ -702,8 +815,9 @@ async def style_objects(req: StyleObjectsRequest):
 @app.post("/tools/apply_style_preset", response_model=ToolResponse)
 async def apply_style_preset(req: ApplyStylePresetRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     doc_id = req.document_id
 
     presets = getattr(graph, "PRESETS", None)
@@ -738,8 +852,9 @@ async def apply_style_preset(req: ApplyStylePresetRequest):
 @app.post("/tools/boolean_operation", response_model=ToolResponse)
 async def boolean_operation(req: BooleanOpRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         result = graph.boolean_operation(
             operation=req.operation, region_ids=req.region_ids,
@@ -756,8 +871,9 @@ async def boolean_operation(req: BooleanOpRequest):
 @app.post("/tools/transform_objects", response_model=ToolResponse)
 async def transform_objects(req: TransformObjectsRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     doc_id = req.document_id
 
     ids = req.ids
@@ -787,8 +903,9 @@ async def transform_objects(req: TransformObjectsRequest):
 @app.post("/tools/manage_group", response_model=ToolResponse)
 async def manage_group(req: ManageGroupRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     doc_id = req.document_id
 
     if req.action == "delete":
@@ -816,7 +933,7 @@ async def manage_group(req: ManageGroupRequest):
 
 
 @app.post("/tools/list_groups", response_model=ToolResponse)
-async def list_groups(document_id: str):
+async def list_groups(document_id: str | None = None):
     graph = get_graph()
     if not graph.has_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found")
@@ -827,8 +944,9 @@ async def list_groups(document_id: str):
 @app.post("/tools/duplicate_group", response_model=ToolResponse)
 async def duplicate_group(req: DuplicateGroupRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         new_ids = graph.duplicate_group(
             group_name=req.group_name, document_id=req.document_id,
@@ -848,8 +966,9 @@ async def duplicate_group(req: DuplicateGroupRequest):
 @app.post("/tools/create_composite_region", response_model=ToolResponse)
 async def create_composite_region(req: CreateCompositeRegionRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         result = graph.create_composite_region(
             outline=req.outline, document_id=req.document_id,
@@ -868,8 +987,9 @@ async def create_composite_region(req: CreateCompositeRegionRequest):
 @app.post("/tools/extrude_region_outline", response_model=ToolResponse)
 async def extrude_region_outline(req: ExtrudeOutlineRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     try:
         graph.extrude_region_outline(
             region_id=req.region_id, document_id=req.document_id,
@@ -890,8 +1010,9 @@ async def extrude_region_outline(req: ExtrudeOutlineRequest):
 @app.post("/tools/describe_scene", response_model=ToolResponse)
 async def describe_scene(req: DescribeSceneRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     desc = graph.describe_scene(detail=req.detail, filter_layer=req.filter_layer, document_id=req.document_id)
     return ToolResponse(data={
         "document": desc["document"],
@@ -904,8 +1025,9 @@ async def describe_scene(req: DescribeSceneRequest):
 @app.post("/tools/find_objects", response_model=ToolResponse)
 async def find_objects(req: FindObjectsRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     parsed_tags = dict(req.tags) if req.tags else None
     results = graph.find_objects(
         document_id=req.document_id, fill=req.fill,
@@ -920,7 +1042,7 @@ async def find_objects(req: FindObjectsRequest):
 
 
 @app.post("/tools/critique_composition", response_model=ToolResponse)
-async def critique_composition(document_id: str):
+async def critique_composition(document_id: str | None = None):
     graph = get_graph()
     if not graph.has_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found")
@@ -929,7 +1051,7 @@ async def critique_composition(document_id: str):
 
 
 @app.post("/tools/list_layers", response_model=ToolResponse)
-async def list_layers(document_id: str):
+async def list_layers(document_id: str | None = None):
     graph = get_graph()
     if not graph.has_document(document_id):
         raise HTTPException(status_code=404, detail="Document not found")
@@ -940,8 +1062,9 @@ async def list_layers(document_id: str):
 @app.post("/tools/reorder_layer", response_model=ToolResponse)
 async def reorder_layer(req: ReorderLayerRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     count = graph.reorder_layer(req.layer, req.z_offset, req.document_id)
     return ToolResponse(data={"layer": req.layer, "z_offset": req.z_offset, "count": count})
 
@@ -949,8 +1072,9 @@ async def reorder_layer(req: ReorderLayerRequest):
 @app.post("/tools/render_preview", response_model=ToolResponse)
 async def render_preview(req: PreviewRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     svg = svg_serialize(graph, req.document_id)
     try:
         b64 = render_preview_base64(svg, scale=max(0.25, min(2.0, req.scale)))
@@ -963,8 +1087,9 @@ async def render_preview(req: PreviewRequest):
 async def export_svg(req: ExportSvgRequest):
     from pathlib import Path
     graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=404, detail="No active document")
     svg = svg_serialize(graph, req.document_id)
     path = Path(req.filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -975,7 +1100,7 @@ async def export_svg(req: ExportSvgRequest):
 # ── Preview (direct PNG) ───────────────────────────────────────────
 
 @app.get("/preview/{document_id}.png")
-async def preview_doc_png(document_id: str):
+async def preview_doc_png(document_id: str | None = None):
     """Render a PNG preview of a specific document by ID."""
     graph = get_graph()
     # Reload from disk on every render to pick up MCP-side edits
@@ -1054,7 +1179,8 @@ async def get_history(document_id: str | None = None, limit: int = 20):
 @app.post("/tools/batch", response_model=ToolResponse)
 async def batch(req: BatchRequest):
     graph = get_graph()
-    if not graph.has_document(req.document_id):
+    doc_id = req.document_id or graph._last_doc_id
+    if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=400, detail="No document")
     results = graph.batch(req.ops, req.document_id)
     return ToolResponse(data={"results": results})
