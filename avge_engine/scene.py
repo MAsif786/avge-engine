@@ -1304,20 +1304,30 @@ class SceneGraph:
             copy_p = dict(p)
             simple_transform = (abs(scale - 1) <= 0.001 and abs(rotate) <= 0.001)
             if simple_transform and (mirror_x or mirror_y):
-                # Mirror ellipse/rect primitives by flipping their center point
+                # Mirror ellipse/rect primitives by flipping their center point.
+                # offset_x/y must be applied so the primitive matches the outline
+                # after the offset that duplicate_region applies post-mirror.
                 if copy_p.get("type") == "ellipse":
+                    new_cx = copy_p["cx"]
+                    new_cy = copy_p["cy"]
                     if mirror_x:
-                        copy_p["cx"] = 2 * cx - copy_p["cx"]
+                        new_cx = 2 * cx - new_cx + offset_x
                     if mirror_y:
-                        copy_p["cy"] = 2 * cy - copy_p["cy"]
+                        new_cy = 2 * cy - new_cy + offset_y
+                    copy_p["cx"] = new_cx
+                    copy_p["cy"] = new_cy
                     new_primitive = copy_p
                 elif copy_p.get("type") == "rect":
                     if mirror_x:
                         orig_right = copy_p["x"] + copy_p["width"]
-                        copy_p["x"] = 2 * cx - orig_right
+                        copy_p["x"] = 2 * cx - orig_right + offset_x
                     if mirror_y:
                         orig_bottom = copy_p["y"] + copy_p["height"]
-                        copy_p["y"] = 2 * cy - orig_bottom
+                        copy_p["y"] = 2 * cy - orig_bottom + offset_y
+                    if not mirror_x:
+                        copy_p["x"] += offset_x
+                    if not mirror_y:
+                        copy_p["y"] += offset_y
                     new_primitive = copy_p
             elif not mirror_x and not mirror_y and abs(scale - 1) <= 0.001 and abs(rotate) <= 0.001:
                 # Pure translation — update coords
