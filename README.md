@@ -4,6 +4,8 @@
 
 Vector illustration tools for AI agents — create scenes, characters, and graphics with shapes, armatures, materials, and rendering. Runs as an MCP server.
 
+> [**View examples**](docs/examples.md) — fridge scene, bedroom, landscape, iPhone mockup, cat manga, and more with previews.
+
 ## Quick Start
 
 ```bash

@@ -60,17 +60,17 @@ A front-facing iPhone with screen, dynamic island, camera, and UI elements.
 
 ---
 
-## Manga Page
+## Cat Story Manga Page
 
-A multi-panel manga/comic page layout with characters and speech bubbles.
+A multi-panel manga page featuring a cat character in a comic story — panels, character art, speech bubbles, and backgrounds.
 
-![Manga Page](results/manga-page.png)
+![Cat Manga Page](results/cat-manga.png)
 
-- **253 regions** — 4 panels with borders, characters, backgrounds, speech bubbles, sfx
-- **Techniques**: `speech_bubble` for dialogue, `create_burst` for impact effects, panel borders via `create_region`
-- **Style**: Black-and-white manga with screen tones
+- **241 regions** — 4 panels with borders, cat character (body, head, ears, eyes, whiskers), speech bubbles, backgrounds
+- **Techniques**: `speech_bubble` for dialogue, `create_region` with smoothness for character curves, panel layout via coordinates
+- **Style**: Black-and-white manga with character-driven storytelling
 
-<div align="right">[SVG](results/manga-page.svg)</div>
+<div align="right">[SVG](results/cat-manga.svg)</div>
 
 ---
 
