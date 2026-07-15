@@ -195,6 +195,12 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
                 f' font-style="{font_style}"',
                 f' text-anchor="{text_anchor}"',
             ]
+            ls = region.primitive.get("letter_spacing")
+            if ls:
+                parts.append(f' letter-spacing="{_fmt(ls)}"')
+            top = region.primitive.get("opacity")
+            if top:
+                parts.append(f' opacity="{_fmt(top)}"')
             _append_style(parts)
             _append_transform(parts, region.primitive["x"], region.primitive["y"])
             parts.append(f">{_escape_xml(text)}</text>")

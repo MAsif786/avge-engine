@@ -1831,6 +1831,8 @@ class SceneGraph:
         font_weight: str = "normal",
         font_style: str = "normal",
         rotate: float = 0.0,
+        letter_spacing: float = 0.0,
+        opacity: float = 1.0,
     ) -> RegionNode:
         """Create a text label — renders as SVG <text>.
 
@@ -1851,6 +1853,8 @@ class SceneGraph:
                 "type": "text", "x": x, "y": y, "text": text,
                 "font_size": font_size, "font_family": font_family,
                 "text_anchor": text_anchor, "font_weight": font_weight, "font_style": font_style,
+                "letter_spacing": letter_spacing if letter_spacing else None,
+                "opacity": opacity if opacity < 1.0 else None,
             },
         )
         if abs(rotate) > 0.001:

@@ -754,7 +754,7 @@ def create_tools(mcp):
                 layer=layer, z_index=z_index,
                 fill=fill, font_size=font_size, font_family=font_family,
                 text_anchor=text_anchor, font_weight=font_weight, font_style=font_style,
-                rotate=rotate,
+                rotate=rotate, letter_spacing=letter_spacing, opacity=opacity,
             )
             if groups:
                 for g in groups:
