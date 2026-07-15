@@ -846,32 +846,57 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
     if not faces:
         return "Error: isometric_box produced no faces"
 
-    # Default fills: top light, left medium, right dark (3D lighting)
-    top_fill = params.get("top_fill", params.get("fill", "#FFD700"))
-    left_fill = params.get("left_fill", "#DAA520")
-    right_fill = params.get("right_fill", "#B8860B")
-    stroke = params.get("stroke", "#333333")
-    sw = params.get("stroke_width", 0.003)
-    z_base = params.get("z_index", 0)
+    # Unique region ID prefix (required for >1 box per document)
+    prefix = params.get("new_prefix") or params.get("region_id", "box")
+    if scene.has_region(f"{prefix}_top", doc_id):
+        # Auto-deduplicate by appending counter
+        counter = 0
+        while scene.has_region(f"{prefix}_{counter}_top", doc_id):
+            counter += 1
+        prefix = f"{prefix}_{counter}"
 
-    face_fills = {"top": top_fill, "left": left_fill, "right": right_fill}
+    # Per-face styles with sensible 3D defaults
+    face_conf = {
+        "top": {
+            "fill": params.get("top_fill", params.get("fill", "#FFD700")),
+            "stroke": params.get("top_stroke", params.get("stroke", "#333333")),
+            "sw": params.get("top_stroke_width", params.get("stroke_width", 0.003)),
+        },
+        "left": {
+            "fill": params.get("left_fill", "#DAA520"),
+            "stroke": params.get("left_stroke", params.get("stroke", "#333333")),
+            "sw": params.get("left_stroke_width", params.get("stroke_width", 0.003)),
+        },
+        "right": {
+            "fill": params.get("right_fill", "#B8860B"),
+            "stroke": params.get("right_stroke", params.get("stroke", "#333333")),
+            "sw": params.get("right_stroke_width", params.get("stroke_width", 0.003)),
+        },
+    }
+    layer = params.get("layer", "default")
+    z_base = params.get("z_index", 0)
+    opacity = params.get("opacity", 1.0)
+    blend_mode = params.get("blend_mode")
+
     created = []
-    for i, face in enumerate(faces):
+    for face in faces:
         fname = face["face"]
         outline = face["outline"]
+        cfg = face_conf[fname]
+        rid = f"{prefix}_{fname}"
         try:
             r = scene.create_region(
-                outline=outline,
-                region_id=f"box_{fname}_{i}",
-                document_id=doc_id,
-                layer=params.get("layer", "default"),
-                z_index=z_base + i,
+                outline=outline, region_id=rid,
+                document_id=doc_id, layer=layer,
+                z_index=z_base,
                 constraints=CurveConstraints(smoothness=0.0, closed=True),
-                style=Style(fill=face_fills.get(fname, "#CCC"),
-                            stroke=stroke, stroke_width=sw),
+                style=Style(fill=cfg["fill"], stroke=cfg["stroke"],
+                            stroke_width=cfg["sw"], opacity=opacity,
+                            blend_mode=blend_mode),
             )
             created.append(r.id)
         except (ValueError, RuntimeError) as e:
             return f"Error at face {fname}: {e}"
 
-    return f"isometric_box: {len(created)} face(s) ({', '.join(f['face'] for f in faces)})"
+    return (f"isometric_box: {len(created)} face(s) "
+            f"({', '.join(f['face'] for f in faces)})")

@@ -1311,12 +1311,20 @@ def isometric_box(
     (``"top"``, ``"left"``, ``"right"``). The controller should fill the
     top face lightest and side faces darker for the 3D effect.
 
+    Coordinate system:
+        ``(x, y)`` is the **topmost vertex** (back-top corner).
+        ``width`` extends **left-down** from the top vertex.
+        ``depth`` extends **right-down** from the top vertex.
+        ``height`` extends **straight down** (positive y in SVG coords).
+        So the box expands rightward and downward from the top vertex —
+        place ``(x, y)`` at the highest point of the box.
+
     Args:
-        x: X of the topmost corner (back-top point).
+        x: X of the topmost corner (back-top point — the highest point).
         y: Y of the topmost corner.
-        width: Box width along the left-forward axis.
-        depth: Box depth along the right-forward axis.
-        height: Box height (vertical).
+        width: Box width along the left-forward axis (extends left-down).
+        depth: Box depth along the right-forward axis (extends right-down).
+        height: Box height, extends straight down (positive y).
         angle: Isometric angle in degrees (default 30).
 
     Returns:
