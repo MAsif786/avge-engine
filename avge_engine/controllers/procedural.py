@@ -879,9 +879,16 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
     opacity = params.get("opacity", 1.0)
     blend_mode = params.get("blend_mode")
 
+    # Painter's algorithm: right face behind left face behind top face
+    z_order = {"right": 0, "left": 1, "top": 2}
+    # Skip hidden faces (e.g. table leg top face hidden inside table)
+    skip_faces = params.get("skip_faces") or params.get("hide", [])
+
     created = []
     for face in faces:
         fname = face["face"]
+        if fname in skip_faces:
+            continue
         outline = face["outline"]
         cfg = face_conf[fname]
         rid = f"{prefix}_{fname}"
@@ -889,7 +896,7 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
             r = scene.create_region(
                 outline=outline, region_id=rid,
                 document_id=doc_id, layer=layer,
-                z_index=z_base,
+                z_index=z_base + z_order.get(fname, 0),
                 constraints=CurveConstraints(smoothness=0.0, closed=True),
                 style=Style(fill=cfg["fill"], stroke=cfg["stroke"],
                             stroke_width=cfg["sw"], opacity=opacity,
