@@ -37,23 +37,35 @@ def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
     doc = scene.get_document(doc_id)
     regions = scene.get_all_regions(doc_id)
 
-    # Collect gradient definitions
+    # Collect gradient definitions (regions + document background)
     gradient_defs: list[str] = []
     for region in regions:
         if is_gradient(region.style.fill):
             gdef = gradient_to_svg_def(region.style.fill)
             if gdef not in gradient_defs:
                 gradient_defs.append(gdef)
+    if is_gradient(doc.background):
+        gdef = gradient_to_svg_def(doc.background)
+        if gdef not in gradient_defs:
+            gradient_defs.insert(0, gdef)  # background first
 
     lines: list[str] = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<svg xmlns="http://www.w3.org/2000/svg"',
+        '     xmlns:xlink="http://www.w3.org/1999/xlink"',
         f'     width="{doc.width}" height="{doc.height}"',
         f'     viewBox="0 0 {doc.width} {doc.height}">',
     ]
 
-    # Background
-    lines.append(f'  <rect width="100%" height="100%" fill="{doc.background}"/>')
+    # Background (hex color, image URL, or gradient)
+    bg = doc.background
+    if is_gradient(bg):
+        gid = f"bg_{hash(str(bg)) & 0xFFFFFFFF}"
+        lines.append(f'  <rect width="100%" height="100%" fill="url(#{gid})"/>')
+    elif isinstance(bg, str) and bg.startswith(("http://", "https://", "data:")):
+        lines.append(f'  <image width="100%" height="100%" preserveAspectRatio="xMidYMid slice" href="{_escape_xml(bg)}"/>')
+    else:
+        lines.append(f'  <rect width="100%" height="100%" fill="{bg}"/>')
 
     # Gradient defs (if any)
     if gradient_defs:
@@ -70,7 +82,9 @@ def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
             if clip_r and clip_r.outline:
                 segs = fit_curves(clip_r.outline, closed=clip_r.constraints.closed,
                     smoothness=clip_r.constraints.smoothness,
-                    tensions=list(clip_r.constraints.tensions) if clip_r.constraints.tensions else None)
+                    tensions=list(clip_r.constraints.tensions) if clip_r.constraints.tensions else None,
+                    handle_in=list(clip_r.constraints.handle_in) if clip_r.constraints.handle_in else None,
+                    handle_out=list(clip_r.constraints.handle_out) if clip_r.constraints.handle_out else None)
                 if segs:
                     pd = _build_path_data(segs, doc.width, doc.height, clip_r.constraints.closed)
                     lines.append(f'  <clipPath id="clip_{region.clip_to}">')
@@ -104,6 +118,8 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
             parts.append(f' style="mix-blend-mode:{region.style.blend_mode}"')
         if region.style.stroke_linecap:
             parts.append(f' stroke-linecap="{region.style.stroke_linecap}"')
+        if region.style.stroke_dasharray:
+            parts.append(f' stroke-dasharray="{region.style.stroke_dasharray}"')
         if region.clip_to:
             parts.append(f' clip-path="url(#clip_{region.clip_to})"')
 
@@ -162,6 +178,45 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
             parts.append("/>")
             return "".join(parts)
 
+        if ptype == "text":
+            tx = region.primitive["x"] * canvas_w
+            ty = region.primitive["y"] * canvas_h
+            text = region.primitive.get("text", "")
+            font_size = region.primitive.get("font_size", 0.04) * canvas_h
+            font_family = region.primitive.get("font_family", "sans-serif") + ", Apple Symbols, sans-serif"
+            text_anchor = region.primitive.get("text_anchor", "middle")
+            font_weight = region.primitive.get("font_weight", "normal")
+            font_style = region.primitive.get("font_style", "normal")
+            parts = [
+                f'    <text x="{_fmt(tx)}" y="{_fmt(ty)}"',
+                f' font-size="{_fmt(font_size)}"',
+                f' font-family="{font_family}"',
+                f' font-weight="{font_weight}"',
+                f' font-style="{font_style}"',
+                f' text-anchor="{text_anchor}"',
+            ]
+            _append_style(parts)
+            _append_transform(parts, region.primitive["x"], region.primitive["y"])
+            parts.append(f">{_escape_xml(text)}</text>")
+            return "".join(parts)
+
+        if ptype == "image":
+            ix = region.primitive["x"] * canvas_w
+            iy = region.primitive["y"] * canvas_h
+            iw = region.primitive["width"] * canvas_w
+            ih = region.primitive["height"] * canvas_h
+            href = region.primitive.get("href", "")
+            aspect = region.primitive.get("preserve_aspect_ratio", "xMidYMid meet")
+            parts = [f'    <image x="{_fmt(ix)}" y="{_fmt(iy)}"',
+                     f' width="{_fmt(iw)}" height="{_fmt(ih)}"',
+                     f' preserveAspectRatio="{aspect}"',
+                     f' href="{_escape_xml(href)}"',
+                     f' xlink:href="{_escape_xml(href)}"']
+            _append_transform(parts, region.primitive["x"] + region.primitive["width"] / 2,
+                              region.primitive["y"] + region.primitive["height"] / 2)
+            parts.append("/>")
+            return "".join(parts)
+
     # ── Polygon / polyline mode (smoothness ≈ 0 — straight lines) ──
     if region.constraints.smoothness <= 0.001 and region.outline and not region.primitive:
         pts = " ".join(
@@ -186,6 +241,8 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
         closed=region.constraints.closed,
         smoothness=region.constraints.smoothness,
         tensions=list(region.constraints.tensions) if region.constraints.tensions else None,
+        handle_in=list(region.constraints.handle_in) if region.constraints.handle_in else None,
+        handle_out=list(region.constraints.handle_out) if region.constraints.handle_out else None,
     )
     if not segments:
         return None
@@ -223,6 +280,16 @@ def _build_path_data(segments, scale_x: float, scale_y: float, closed: bool) -> 
     if closed and segments:
         parts.append("Z")
     return " ".join(parts)
+
+
+def _escape_xml(text: str) -> str:
+    """Escape special XML characters in text content."""
+    return (text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&apos;"))
 
 
 def _fmt(value: float) -> str:
