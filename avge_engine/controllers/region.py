@@ -159,6 +159,8 @@ def create_tools(mcp):
                 rect: x, y, width, height, rx (corner radius, half min dim=pill)
                 ellipse: cx, cy, rx, ry (ry optional)
                 line: x1, y1, x2, y2 (stroke only, fill ignored)
+                star: cx, cy, r, r_inner?, points? (default 5), rotate?
+                polygon: cx, cy, r, sides? (default 6), rotate?
             region_id: Optional unique ID (auto-generated if omitted).
             document_id: Document UUID (omit to use active document).
             layer: Layer name (default "default").
@@ -854,9 +856,11 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="create_primitive",
-        description="Create an SVG primitive shape (rect, ellipse, line) "
-        "or a polyline. "
+        description="Create an SVG primitive shape (rect, ellipse, line, "
+        "polygon, star, arc) or a polyline. "
         "Use for geometric objects where polygon outlines would be imprecise. "
+        "💡 Stars: star shape = 4-point star in one call, not 16 tiny circles. "
+        "💡 Pentagon: polygon with sides=5. "
         "💡 Fingers: rect with rx=half the width gives perfect pill shapes. "
         "💡 Palm creases: line for stroke-only wrinkles. "
         "💡 Curved lines: use points array for multi-point smooth curves. "
@@ -864,6 +868,9 @@ def create_tools(mcp):
         "  rect:     x, y, width, height, rx? (corner radius), taper? (trapezoid)\n"
         "  ellipse:  cx, cy, rx, ry? (ry=rx if omitted)\n"
         "  line:     x1, y1, x2, y2 (use {\"type\":\"line\",...} wrapper)\n"
+        "  polygon:  cx, cy, r, sides? (default 6), rotate?\n"
+        "  star:     cx, cy, r, r_inner?, points? (default 5), rotate?\n"
+        "  arc:      cx, cy, r, start_angle?, end_angle?\n"
         "  polyline: points ([[x,y],...], 3+ points for smooth curves)",
     )
     def create_primitive(
@@ -887,11 +894,14 @@ def create_tools(mcp):
         """Create an SVG primitive shape.
 
         Args:
-            shape: Dict with ``type`` ("rect", "ellipse", "line") and params.
+            shape: Dict with ``type`` ("rect", "ellipse", "line", "star", "polygon", "arc") and params.
                 rect:   {"type":"rect", "x":0.1, "y":0.1, "width":0.3, "height":0.15, "rx":0.02}
                 rect with taper: {"type":"rect", "x":0.1, "y":0.1, "width":0.3, "height":0.5, "rx":0.02, "taper":0.3}
                 ellipse: {"type":"ellipse", "cx":0.5, "cy":0.5, "rx":0.1}
                 line:   {"type":"line", "x1":0.1, "y1":0.5, "x2":0.9, "y2":0.5}
+                star:   {"type":"star", "cx":0.5, "cy":0.5, "r":0.12, "points":4, "r_inner":0.05}
+                polygon: {"type":"polygon", "cx":0.5, "cy":0.5, "r":0.1, "sides":8}
+                arc:    {"type":"arc", "cx":0.5, "cy":0.5, "r":0.1, "start_angle":0, "end_angle":180}
                 polyline: {"type":"line", "points":[[0.1,0.5],[0.3,0.4],[0.5,0.5],[0.7,0.4]]}
             document_id: Document UUID (omit to use active document).
             region_id: Optional unique ID.
