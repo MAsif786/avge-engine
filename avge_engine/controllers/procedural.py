@@ -89,8 +89,9 @@ def create_tools(mcp):
             params: Pattern-specific parameters (see pattern descriptions).
             document_id: Document UUID (omit to use active document).
             relative_to: Region ID for relative coordinate mapping. When set,
-                ``x``, ``y``, ``width``, ``depth``, ``height`` are treated as
-                0–1 fractions of the reference region's bounding box.
+                ``x`` and ``y`` are treated as 0–1 fractions of the reference
+                region's bounding box. ``width``, ``depth``, ``height`` are
+                always absolute (not scaled).
         """
         scene = get_graph()
         try:
@@ -851,7 +852,12 @@ def _resolve_relative_box(scene, doc_id, relative_to, params):
 
     Maps (0,0) = visual top-left of the region's bounding box,
     (1,1) = visual bottom-right. y increases downward (SVG coords).
+
+    After resolving, shifts y upward by ``width * sin(angle)`` so that the
+    leg's visible top face (not its hidden back vertex) aligns with the
+    target position. This eliminates the gap between a leg and its parent.
     """
+    import math as _m
     region = scene.get_region(relative_to, doc_id)
     if region is None:
         return
@@ -862,17 +868,19 @@ def _resolve_relative_box(scene, doc_id, relative_to, params):
         bw = 1e-10
     if bh < 1e-10:
         bh = 1e-10
-    for key in ("x", "y", "width", "depth", "height"):
-        if key in params:
-            val = float(params[key])
-            if key == "x":
-                params[key] = bx + val * bw
-            elif key == "y":
-                params[key] = by + val * bh  # top-to-bottom (SVG coords)
-            elif key in ("width", "depth"):
-                params[key] = val * bw
-            elif key == "height":
-                params[key] = val * bh
+    # Transform x, y as 0-1 fractions of bbox. width/depth/height are
+    # absolute values and stay as-is.
+    if "x" in params:
+        params["x"] = bx + float(params["x"]) * bw
+    if "y" in params:
+        params["y"] = by + float(params["y"]) * bh
+    # Shift y up so the leg's visible top face aligns with the target.
+    # isometric_box's (x,y) is the back-top vertex, but the leg's visible
+    # left/right face starts lower by width*sin(angle).
+    if "width" in params and "y" in params:
+        w = float(params["width"])
+        a = _m.radians(float(params.get("angle", 30)))
+        params["y"] = float(params["y"]) - w * _m.sin(a)
 
 
 def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
