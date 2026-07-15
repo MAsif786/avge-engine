@@ -1,12 +1,19 @@
 """Controller registry — each module registers its tools with the MCP server.
 
 Usage:
-    from avge_engine.controllers import register_all
+    from avge_engine.controllers import register_all, TOOL_DISPATCH
     register_all(mcp)
+    # TOOL_DISPATCH maps tool name → callable for dynamic batch dispatch
 """
 from __future__ import annotations
 
-from . import document, region, scene_view, style, history, scene_ops, query, stats
+from typing import Any, Callable
+
+from . import document, region, scene_view, style, history, scene_ops, query, procedural
+
+TOOL_DISPATCH: dict[str, Callable[..., Any]] = {}
+"""Global dispatch dict: tool name → callable. Populated by register_all().
+Used by the batch tool to dynamically route ops to any registered tool."""
 
 
 def register_all(mcp):
@@ -18,22 +25,23 @@ def register_all(mcp):
     history.create_tools(mcp)
     scene_ops.create_tools(mcp)
     query.create_tools(mcp)
-    stats.create_tools(mcp)
+    procedural.create_tools(mcp)
 
-    # Wire up tool usage tracking for all registered tools
-    from avge_engine.services.engine import track_tool_call, track_tool_error
-
+    # Build the dispatch dict from registered MCP tools
     for tool in mcp._tool_manager.list_tools():
         original_fn = tool.fn
+        TOOL_DISPATCH[tool.name] = original_fn
 
         def _make_tracked(name, fn):
             def tracked(*args, **kwargs):
-                track_tool_call(name)
+                # Extract document_id if present, otherwise use active doc
+                from avge_engine.services.engine import get_graph, resolve_doc
                 try:
-                    return fn(*args, **kwargs)
+                    doc_id = kwargs.get("document_id") or resolve_doc(None)
+                    get_graph().track_op(doc_id, name)
                 except Exception:
-                    track_tool_error(name)
-                    raise
+                    pass  # tracking is best-effort
+                return fn(*args, **kwargs)
             return tracked
 
         tool.fn = _make_tracked(tool.name, original_fn)
