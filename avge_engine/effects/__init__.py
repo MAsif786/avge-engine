@@ -2,6 +2,7 @@
 
 from avge_engine.effects.style import (
     Style,
+    GradientDef,
     resolve_fill,
     resolve_stroke,
     is_gradient,
@@ -11,6 +12,7 @@ from avge_engine.effects.style import (
 
 __all__ = [
     "Style",
+    "GradientDef",
     "resolve_fill",
     "resolve_stroke",
     "is_gradient",

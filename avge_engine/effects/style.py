@@ -109,21 +109,30 @@ class Style:
     opacity: float = 1.0
     blend_mode: str | None = None
     stroke_linecap: str | None = None
+    stroke_dasharray: str | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "stroke_width", max(0.0, min(0.1, self.stroke_width)))
         object.__setattr__(self, "opacity", max(0.0, min(1.0, self.opacity)))
+        # Normalize empty stroke_dasharray to None
+        if self.stroke_dasharray is not None and self.stroke_dasharray.strip() == "":
+            object.__setattr__(self, "stroke_dasharray", None)
         # Validate stroke_linecap
         if self.stroke_linecap is not None and self.stroke_linecap not in ("butt", "round", "square"):
             raise ValueError(f"Invalid stroke_linecap: {self.stroke_linecap}. Valid: butt, round, square")
         # Validate fill
         if self.fill is not None:
-            if self.fill == "none":
+            if self.fill == "none" or self.fill == "transparent":
                 object.__setattr__(self, "fill", None)
             elif is_gradient(self.fill):
                 errs = validate_gradient(self.fill)
                 if errs:
                     raise ValueError(f"Invalid gradient: {'; '.join(errs)}")
+            elif isinstance(self.fill, dict):
+                raise ValueError(
+                    f"Invalid gradient fill: dict must contain 'type' and 'stops' keys, "
+                    f"got keys: {list(self.fill.keys())}"
+                )
             elif not _is_hex(self.fill):
                 raise ValueError(f"Invalid fill: {self.fill}")
         # Validate stroke — "none" maps to None (no stroke)

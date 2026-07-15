@@ -86,7 +86,12 @@ def create_tools(mcp):
         "Returns a URL to the API's preview endpoint — open it to view "
         "the rendered image. Use this to visually inspect your work.",
     )
-    def render_preview(scale: float = 1.0, document_id: str | None = None) -> str:
+    def render_preview(
+        scale: float = 1.0,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        bbox: dict | None = None,
+    ) -> str:
         """Get a visual PNG preview URL for the current canvas.
 
         The preview is served by the API server on port 8000.
@@ -95,12 +100,48 @@ def create_tools(mcp):
         Args:
             scale: Render scale factor (0.25–2.0, default 1.0).
             document_id: Document UUID (omit to use active document).
+            region_id: Optional — crop preview to this region's bounding box.
+            bbox: Optional — explicit crop area {x, y, w, h} in normalized coords.
+                💡 Combine with scale=4 for a detail zoom on a face or hand.
         """
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document — call create_document first"
+
+        # If cropping requested, render SVG inline with modified viewBox
+        if region_id or bbox:
+            from avge_engine.renderer.svg import svg_serialize
+            from avge_engine.renderer.raster import render_preview_base64
+            svg = svg_serialize(scene, doc_id)
+            import re
+            if region_id:
+                r = scene.get_region(region_id, doc_id)
+                if not r:
+                    return f"Error: Region '{region_id}' not found"
+                from avge_engine.geometry import compute_bounds
+                b = compute_bounds(r.outline)
+                margin = 0.05
+                crop = {"x": b["x"] - margin, "y": b["y"] - margin,
+                        "w": b["w"] + margin * 2, "h": b["h"] + margin * 2}
+            elif bbox:
+                crop = bbox
+
+            # Modify viewBox to crop area
+            doc = scene.get_document(doc_id)
+            cw, ch = doc.width, doc.height
+            vx = crop["x"] * cw
+            vy = crop["y"] * ch
+            vw = crop["w"] * cw
+            vh = crop["h"] * ch
+            svg = re.sub(
+                r'viewBox="[^"]*"',
+                f'viewBox="{vx:.0f} {vy:.0f} {vw:.0f} {vh:.0f}"',
+                svg
+            )
+            b64 = render_preview_base64(svg, scale=scale)
+            return f"data:image/png;base64,{b64[:60]}... ({len(b64)} chars)"
 
         return f"http://localhost:8000/preview/{doc_id}.png"
 
@@ -133,3 +174,216 @@ def create_tools(mcp):
         path.write_text(svg)
 
         return f"SVG saved: {path.resolve()} ({len(svg)} chars)"
+
+    @mcp.tool(
+        name="checkpoint_diff",
+        description="Compare the current scene against a named checkpoint. "
+        "Shows which regions were added, removed, or changed since the checkpoint. "
+        "💡 Use checkpoint before a risky edit, then checkpoint_diff to review "
+        "what actually changed.",
+    )
+    def checkpoint_diff(
+        name: str = "default",
+        document_id: str | None = None,
+    ) -> str:
+        """Compare the current scene against a named checkpoint.
+
+        Args:
+            name: Checkpoint name (default "default").
+            document_id: Document UUID (omit to use active document).
+        """
+        import json
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
+
+        # Get list of checkpoint names for the document
+        cps = scene.list_checkpoints(doc_id)
+        if not cps:
+            return f"No checkpoints found for document '{doc_id}'"
+
+        # Get current region IDs
+        current_ids = set()
+        current_regions = {}
+        for r in scene.get_all_regions(doc_id):
+            current_ids.add(r.id)
+            current_regions[r.id] = {
+                "fill": r.style.fill, "stroke": r.style.stroke,
+                "stroke_width": r.style.stroke_width,
+                "z_index": r.z_index, "layer": r.layer, "version": r.version,
+                "outline_len": len(r.outline),
+                "primitive_type": r.primitive.get("type") if r.primitive else None,
+            }
+
+        # Get checkpoint region data by peeking at stored snapshot
+        snap_key = f"{doc_id}::{name}"
+        snap = scene._checkpoints.get(snap_key)
+        if snap is None:
+            return f"Checkpoint '{name}' not found (available: {cps})"
+
+        _doc_snap, regions_snap = snap
+        checkpoint_ids = set(regions_snap.keys())
+        checkpoint_regions = {}
+        for rid, r in regions_snap.items():
+            checkpoint_regions[rid] = {
+                "fill": r.style.fill, "stroke": r.style.stroke,
+                "stroke_width": r.style.stroke_width,
+                "z_index": r.z_index, "layer": r.layer, "version": r.version,
+                "outline_len": len(r.outline),
+                "primitive_type": r.primitive.get("type") if r.primitive else None,
+            }
+
+        # Compute diff
+        added_ids = current_ids - checkpoint_ids
+        removed_ids = checkpoint_ids - current_ids
+        common_ids = current_ids & checkpoint_ids
+
+        modified = []
+        for rid in sorted(common_ids):
+            cur = current_regions[rid]
+            chk = checkpoint_regions[rid]
+            changes = []
+            if cur["fill"] != chk["fill"]:
+                changes.append(f"fill: {chk['fill']} → {cur['fill']}")
+            if cur["stroke"] != chk["stroke"]:
+                changes.append(f"stroke: {chk['stroke']} → {cur['stroke']}")
+            if cur["stroke_width"] != chk["stroke_width"]:
+                changes.append(f"stroke_width: {chk['stroke_width']} → {cur['stroke_width']}")
+            if cur["z_index"] != chk["z_index"]:
+                changes.append(f"z_index: {chk['z_index']} → {cur['z_index']}")
+            if cur["layer"] != chk["layer"]:
+                changes.append(f"layer: {chk['layer']} → {cur['layer']}")
+            if cur["outline_len"] != chk["outline_len"]:
+                changes.append(f"points: {chk['outline_len']} → {cur['outline_len']}")
+            if cur["primitive_type"] != chk["primitive_type"]:
+                changes.append(f"type: {chk['primitive_type']} → {cur['primitive_type']}")
+            if changes:
+                modified.append({"id": rid, "changes": changes})
+
+        lines = [
+            f"Checkpoint: '{name}'",
+            f"Added: {sorted(added_ids)}" if added_ids else "Added: (none)",
+            f"Removed: {sorted(removed_ids)}" if removed_ids else "Removed: (none)",
+            f"Modified: {len(modified)} region(s)",
+        ]
+        if not added_ids and not removed_ids and not modified:
+            lines.append("  (no changes since checkpoint)")
+        for m in modified:
+            lines.append(f"  {m['id']}: {'; '.join(m['changes'])}")
+
+        return "\n".join(lines)
+
+    @mcp.tool(
+        name="render_diff",
+        description="Render a visual diff PNG comparing current state against "
+        "a named checkpoint. Shows added (green), removed (red), and modified "
+        "(yellow) regions. 💡 Use after checkpoint/restore to verify changes "
+        "visually. Returns a data URI that can be opened in a browser.",
+    )
+    def render_diff(
+        name: str = "default",
+        document_id: str | None = None,
+        scale: float = 1.0,
+    ) -> str:
+        """Render a visual diff PNG showing changes since a checkpoint.
+
+        Args:
+            name: Checkpoint name to compare against (default "default").
+            document_id: Document UUID (omit to use active document).
+            scale: Render scale (0.25–2.0).
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
+
+        cps = scene.list_checkpoints(doc_id)
+        if not cps:
+            return f"No checkpoints found for '{doc_id}'"
+
+        snap_key = f"{doc_id}::{name}"
+        snap = scene._checkpoints.get(snap_key)
+        if snap is None:
+            return f"Checkpoint '{name}' not found"
+
+        _doc_snap, checkpoint_regions = snap
+
+        # Get current regions
+        current_regions = {r.id: r for r in scene.get_all_regions(doc_id)}
+        doc = scene.get_document(doc_id)
+
+        # Build diff SVG overlay
+        w, h = doc.width, doc.height
+        svg_lines = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
+            f'  <rect width="{w}" height="{h}" fill="#1a1a2e"/>',
+            '  <text x="10" y="20" font-size="14" font-family="monospace" fill="#888">',
+            f'    Diff vs checkpoint "{name}" — green=added, red=removed, yellow=modified</text>',
+        ]
+
+        cp_ids = set(checkpoint_regions.keys())
+        cur_ids = set(current_regions.keys())
+
+        added = cur_ids - cp_ids
+        removed = cp_ids - cur_ids
+        common = cur_ids & cp_ids
+
+        # Checkpoint state (gray ghosts)
+        for rid in sorted(cp_ids):
+            r = checkpoint_regions[rid]
+            if not r.outline:
+                continue
+            pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
+            if r.constraints.closed:
+                svg_lines.append(f'  <polygon points="{pts}" fill="#666" fill-opacity="0.12" stroke="#666" stroke-opacity="0.25" stroke-width="1"/>')
+            else:
+                svg_lines.append(f'  <polyline points="{pts}" fill="none" stroke="#666" stroke-opacity="0.25" stroke-width="1"/>')
+
+        # Current state (color overlay on top)
+        for rid in sorted(cur_ids):
+            r = current_regions[rid]
+            if not r.outline:
+                continue
+            if rid in added:
+                color, label = "#33ff33", "added"
+            elif rid in removed:
+                continue  # already shown in red above
+            else:
+                # Check if modified
+                chk = checkpoint_regions.get(rid)
+                if chk:
+                    cur_fill = str(r.style.fill)
+                    chk_fill = str(chk.style.fill)
+                    if cur_fill == chk_fill and len(r.outline) == len(chk.outline):
+                        continue  # unchanged — skip for clarity
+                color, label = "#ffdd33", "modified"
+
+            pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
+            svg_lines.append(f'  <polygon points="{pts}" fill="{color}" fill-opacity="0.35" stroke="{color}" stroke-width="2"/>')
+
+        # Special handling for removed — red X marks
+        for rid in sorted(removed):
+            r = checkpoint_regions[rid]
+            if not r.outline:
+                continue
+            pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
+            svg_lines.append(f'  <polygon points="{pts}" fill="#ff3333" fill-opacity="0.25" stroke="#ff3333" stroke-width="2"/>')
+            cx = sum(p[0] for p in r.outline) / len(r.outline) * w
+            cy = sum(p[1] for p in r.outline) / len(r.outline) * h
+            s = 6
+            svg_lines.append(f'  <line x1="{cx-s}" y1="{cy-s}" x2="{cx+s}" y2="{cy+s}" stroke="#ff3333" stroke-width="2"/>')
+            svg_lines.append(f'  <line x1="{cx-s}" y1="{cy+s}" x2="{cx+s}" y2="{cy-s}" stroke="#ff3333" stroke-width="2"/>')
+
+        svg_lines.append("</svg>")
+        diff_svg = "\n".join(svg_lines)
+
+        try:
+            from avge_engine.renderer.raster import render_preview_base64
+            b64 = render_preview_base64(diff_svg, scale=scale)
+            return f"Diff rendered: data:image/png;base64,{b64[:50]}... ({len(b64)} chars)"
+        except Exception as e:
+            return f"Diff SVG generated but PNG render failed: {e}"
