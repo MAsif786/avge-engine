@@ -22,6 +22,7 @@ PATTERNS = Literal[
     "armature",
     "foreshorten",
     "surface_detail",
+    "isometric_box",
 ]
 
 
@@ -64,7 +65,10 @@ def create_tools(mcp):
         "  speech_bubble — Generate a speech bubble outline (rounded rect + tail).\n"
         "    Params: cx, cy, width, height, tail_direction (top/bottom/left/right),\n"
         "    tail_length, tail_width, rx (corner radius), fill, stroke\n"
-        "    💡 Creates a region — add text inside with create_text.",
+        "    💡 Creates a region — add text inside with create_text.\n"
+        "  isometric_box — Generate 3 visible faces of an isometric 3D box.\n"
+        "    Params: x, y, width, depth, height, angle, top_fill, left_fill, right_fill\n"
+        "    💡 One gold bar = 1 tool call instead of 12+ for 3 manual faces.",
     )
     def generate_shape(
         pattern: PATTERNS,
@@ -115,6 +119,8 @@ def create_tools(mcp):
                 return _do_foreshorten(scene, doc_id, params)
             elif pattern == "surface_detail":
                 return _do_surface_detail(scene, doc_id, params)
+            elif pattern == "isometric_box":
+                return _do_isometric_box(scene, doc_id, params)
             else:
                 return f"Error: Unknown pattern '{pattern}'"
         except (ValueError, RuntimeError, KeyError) as e:
@@ -824,3 +830,48 @@ def _do_surface_detail(scene, doc_id: str, params: dict) -> str:
         except (ValueError, RuntimeError) as e:
             return f"Error at detail {i}: {e}"
     return f"surface_detail: {len(created)} motif(s) on '{region_id}'"
+
+
+def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
+    """Generate 3 faces of an isometric box (gold bar, crate, etc.)."""
+    from avge_engine.geometry.procedural import isometric_box
+
+    faces = isometric_box(
+        x=params.get("x", 0.35), y=params.get("y", 0.35),
+        width=params.get("width", 0.2),
+        depth=params.get("depth", 0.12),
+        height=params.get("height", 0.08),
+        angle=params.get("angle", 30.0),
+    )
+    if not faces:
+        return "Error: isometric_box produced no faces"
+
+    # Default fills: top light, left medium, right dark (3D lighting)
+    top_fill = params.get("top_fill", params.get("fill", "#FFD700"))
+    left_fill = params.get("left_fill", "#DAA520")
+    right_fill = params.get("right_fill", "#B8860B")
+    stroke = params.get("stroke", "#333333")
+    sw = params.get("stroke_width", 0.003)
+    z_base = params.get("z_index", 0)
+
+    face_fills = {"top": top_fill, "left": left_fill, "right": right_fill}
+    created = []
+    for i, face in enumerate(faces):
+        fname = face["face"]
+        outline = face["outline"]
+        try:
+            r = scene.create_region(
+                outline=outline,
+                region_id=f"box_{fname}_{i}",
+                document_id=doc_id,
+                layer=params.get("layer", "default"),
+                z_index=z_base + i,
+                constraints=CurveConstraints(smoothness=0.0, closed=True),
+                style=Style(fill=face_fills.get(fname, "#CCC"),
+                            stroke=stroke, stroke_width=sw),
+            )
+            created.append(r.id)
+        except (ValueError, RuntimeError) as e:
+            return f"Error at face {fname}: {e}"
+
+    return f"isometric_box: {len(created)} face(s) ({', '.join(f['face'] for f in faces)})"

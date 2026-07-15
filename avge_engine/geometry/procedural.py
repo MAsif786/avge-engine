@@ -1294,3 +1294,62 @@ def _sample_line(
             round(p1[1] + (p2[1] - p1[1]) * t, 6),
         ))
     return pts
+
+
+# ── 17. isometric_box — 3D box with 3 visible faces ─────────────────
+
+def isometric_box(
+    x: float, y: float,
+    width: float = 0.2,
+    depth: float = 0.12,
+    height: float = 0.08,
+    angle: float = 30.0,
+) -> list[dict]:
+    """Generate 3 visible faces of an isometric box (gold bar, crate, etc.).
+
+    Returns a list of face dicts, each with ``outline`` and ``face`` name
+    (``"top"``, ``"left"``, ``"right"``). The controller should fill the
+    top face lightest and side faces darker for the 3D effect.
+
+    Args:
+        x: X of the topmost corner (back-top point).
+        y: Y of the topmost corner.
+        width: Box width along the left-forward axis.
+        depth: Box depth along the right-forward axis.
+        height: Box height (vertical).
+        angle: Isometric angle in degrees (default 30).
+
+    Returns:
+        ``[{face: "top"|"left"|"right", outline: [(x,y), ...]}, ...]``
+    """
+    import math
+    rad = math.radians(angle)
+    cos_a = math.cos(rad)
+    sin_a = math.sin(rad)
+
+    # Axis vectors (SVG coords: y increases downward)
+    # left-forward:  (-cos, sin)
+    # right-forward: (cos, sin)
+    # up:            (0, -1)
+    lx = -cos_a * width
+    ly = sin_a * width
+    rx = cos_a * depth
+    ry = sin_a * depth
+
+    # Compute vertices
+    # Top face (4 vertices of the top rhombus)
+    p0 = (x, y)                                # back (top-most)
+    p1 = (round(x + lx, 6), round(y + ly, 6))  # left
+    p2 = (round(x + lx + rx, 6), round(y + ly + ry, 6))  # front-bottom
+    p3 = (round(x + rx, 6), round(y + ry, 6))  # right
+
+    # Bottom of side faces
+    p4 = (round(p1[0], 6), round(p1[1] + height, 6))  # left-bottom
+    p5 = (round(p2[0], 6), round(p2[1] + height, 6))  # front-bottom
+    p6 = (round(p3[0], 6), round(p3[1] + height, 6))  # right-bottom
+
+    return [
+        {"face": "top",   "outline": [p0, p1, p2, p3]},
+        {"face": "left",  "outline": [p1, p4, p5, p2]},
+        {"face": "right", "outline": [p3, p2, p5, p6]},
+    ]
