@@ -133,13 +133,13 @@ class Style:
                     f"Invalid gradient fill: dict must contain 'type' and 'stops' keys, "
                     f"got keys: {list(self.fill.keys())}"
                 )
-            elif not _is_hex(self.fill):
+            elif not _is_color(self.fill):
                 raise ValueError(f"Invalid fill: {self.fill}")
         # Validate stroke — "none" maps to None (no stroke)
         if self.stroke is not None:
             if self.stroke == "none":
                 object.__setattr__(self, "stroke", None)
-            elif not _is_hex(self.stroke):
+            elif not _is_color(self.stroke):
                 raise ValueError(f"Invalid stroke color: {self.stroke}")
         # Validate blend mode
         if self.blend_mode is not None:
@@ -165,6 +165,38 @@ def _is_hex(value: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _is_color(value: str) -> bool:
+    """Check if value is a valid CSS color (hex, rgba, hsla, or named)."""
+    if _is_hex(value):
+        return True
+    if value.startswith("rgba(") and value.endswith(")"):
+        parts = [p.strip() for p in value[5:-1].split(",")]
+        if len(parts) != 4:
+            return False
+        try:
+            r, g, b, a = int(parts[0]), int(parts[1]), int(parts[2]), float(parts[3])
+            return 0 <= r <= 255 and 0 <= g <= 255 and 0 <= b <= 255 and 0.0 <= a <= 1.0
+        except (ValueError, IndexError):
+            return False
+    if value.startswith("hsla(") and value.endswith(")"):
+        parts = [p.strip() for p in value[5:-1].split(",")]
+        if len(parts) != 4:
+            return False
+        try:
+            h, s, l, a = int(parts[0]), int(parts[1].rstrip("%")), int(parts[2].rstrip("%")), float(parts[3])
+            return 0 <= h <= 360 and 0 <= s <= 100 and 0 <= l <= 100 and 0.0 <= a <= 1.0
+        except (ValueError, IndexError):
+            return False
+    # Named CSS colors
+    _NAMED = {"none", "transparent", "black", "white", "red", "blue", "green",
+              "yellow", "orange", "purple", "pink", "gray", "grey", "brown",
+              "cyan", "magenta", "navy", "teal", "olive", "maroon", "silver",
+              "lime", "aqua", "fuchsia", "gold", "coral", "indigo", "violet",
+              "turquoise", "plum", "tan", "salmon", "crimson", "orchid",
+              "khaki", "lavender", "mistyrose", "peachpuff"}
+    return value.strip().lower() in _NAMED
 
 
 # ── Gradient SVG generation ────────────────────────────────────────

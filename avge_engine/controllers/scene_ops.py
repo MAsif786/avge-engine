@@ -28,6 +28,7 @@ def create_tools(mcp):
         stroke: str | None = None,
         stroke_width: float | None = None,
         opacity: float | None = None,
+        simplify_tolerance: float | None = None,
     ) -> str:
         """Perform a boolean operation on two or more regions.
 
