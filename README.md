@@ -2,7 +2,7 @@
 
 **Version:** 0.5.0 | **Tool set:** m0b-v1
 
-Vector illustration tools for AI agents — create scenes, characters, and graphics with shapes, armatures, materials, and rendering. Runs as an MCP server.
+Vector illustration tools for AI agents — create editable vector art with shapes, armatures, materials, and rendering. Output is clean SVG you can open in Illustrator, Figma, or any vector editor. Runs as an MCP server.
 
 > [**View examples**](docs/examples.md) — fridge scene, bedroom, landscape, iPhone mockup, cat manga, and more with previews.
 
