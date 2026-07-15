@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="800" height="800"
+     viewBox="0 0 800 800">
+  <rect width="100%" height="100%" fill="#F5F0E8"/>
+    <polygon points="34.8216,404.6352 15.708,415.6704 15.708,463.6704 34.8216,452.6352" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="65.3544,505.4352 46.2408,516.4704 46.2408,564.4704 65.3544,553.4352" fill="#555" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="181.748,236.6352 162.6344,247.6704 162.6344,295.6704 181.748,284.6352" fill="#777" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="343.8128,337.4352 324.6992,348.4704 324.6992,396.4704 343.8128,385.4352" fill="#888" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,404.6352 0,452.6352 15.708,463.6704 15.708,415.6704" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="27.1272,505.4352 27.1272,553.4352 46.2408,564.4704 46.2408,516.4704" fill="#555" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="143.5208,236.6352 143.5208,284.6352 162.6344,295.6704 162.6344,247.6704" fill="#777" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="305.5856,337.4352 305.5856,385.4352 324.6992,396.4704 324.6992,348.4704" fill="#888" stroke="#333333" stroke-width="2.4"/>
+    <ellipse cx="90.7176" cy="408" rx="173.2048" ry="51.9616" fill="#000000" stroke="none" stroke-width="4" opacity="0.12" style="mix-blend-mode:multiply"/>
+    <polygon points="367.8464,320 21.436,520 21.436,568 367.8464,368" fill="#D4A868" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,400 0,448 21.436,568 21.436,520" fill="#D4A868" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="160,200 0,400 21.436,520 367.8464,320" fill="#D4A868" stroke="#333333" stroke-width="2.4"/>
+</svg>
