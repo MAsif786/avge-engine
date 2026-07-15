@@ -712,6 +712,8 @@ def create_tools(mcp):
         font_weight: str = "normal",
         font_style: str = "normal",
         rotate: float = 0.0,
+        letter_spacing: float = 0.0,
+        opacity: float = 1.0,
         groups: list[str] | None = None,
         background_box: dict | None = None,
     ) -> str:
@@ -737,6 +739,9 @@ def create_tools(mcp):
             font_weight: Font weight — "normal", "bold", etc.
             font_style: CSS font-style — "normal", "italic", "oblique".
             rotate: Rotation in degrees around the text center.
+            letter_spacing: Letter spacing / tracking in normalized units
+                (0.0 = default, 0.05 = wide corporate tracking).
+            opacity: Text opacity 0.0–1.0.
             groups: Optional list of group names to add this region to.
             background_box: Dict to auto-create a rect behind the text.
                 Keys: fill (default "#FFF"), padding (default 0.01), rx (default 0.005),

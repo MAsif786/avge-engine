@@ -46,8 +46,10 @@ def validate_gradient(g: GradientDef) -> list[str]:
     for i, stop in enumerate(stops):
         if "offset" not in stop:
             errs.append(f"stop {i} missing 'offset'")
-        elif not (0.0 <= stop["offset"] <= 1.0):
-            errs.append(f"stop {i} offset {stop['offset']} out of range [0,1]")
+        else:
+            off = float(stop["offset"]) if not isinstance(stop["offset"], (int, float)) else stop["offset"]
+            if not (0.0 <= off <= 1.0):
+                errs.append(f"stop {i} offset {stop['offset']} out of range [0,1]")
         color = stop.get("color", "")
         if not _is_hex(color):
             errs.append(f"stop {i} invalid color '{color}'")
