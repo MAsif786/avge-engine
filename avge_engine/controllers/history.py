@@ -110,28 +110,75 @@ def create_tools(mcp):
     @mcp.tool(
         name="batch",
         description="Execute multiple operations in a single call. Each op is a dict "
-        "with a 'tool' key. Supported: create_region, create_shape, "
-        "edit_region, duplicate_region, delete_region, style_objects.",
+        "with a 'tool' key. ALL tools are supported in batch.\n"
+        "  create_region: outline, fill, stroke, smoothness, closed, z_index\n"
+        "  create_primitive: shape (rect/ellipse/line), fill, stroke, stroke_width\n"
+        "  create_curve: points, stroke, stroke_width, smoothness\n"
+        "  create_text: x, y, text, fill, font_size, font_family, text_anchor\n"
+        "  insert_image: x, y, width, height, href\n"
+        "  import_svg_path: path_data, fill, smoothness\n"
+        "  edit_region: region_id, outline, fill, stroke, z_index, shape\n"
+        "  duplicate: region_id, pattern, count, dx, dy, columns, rows\n"
+        "  restyle: selector, mode, fill, stroke, stroke_width\n"
+        "  delete_region: region_id\n"
+        "  transform_objects: ids, mode, dx, dy, scale, rotate, alignment\n"
+        "  copy_element: region_id OR group, target_document_id, source_document_id, offset_x/y\n"
+        "  generate_shape: pattern, params\n"
+        "💡 Inline shapes: create primitives directly — "
+        '{"tool":"create_primitive","shape":{"type":"rect","x":0.1,"y":0.66,'
+        '"width":0.09,"height":0.1},"fill":"#CCC"}\n'
+        "💡 Batch text: multiple labels in one call — "
+        '{"tool":"create_text","x":0.5,"y":0.5,"text":"Hello","font_size":0.06}',
     )
     def batch(ops: list[dict], document_id: str | None = None) -> str:
         """Execute multiple operations in one call.
+
+        Uses the global TOOL_DISPATCH to dynamically route each op to the
+        correct tool function — no hardcoded if/elif chain needed.
+        ANY registered tool is automatically supported.
 
         Args:
             ops: List of operation dicts. Each must have a "tool" key.
             document_id: Document UUID (omit for active doc).
         """
+        from avge_engine.controllers import TOOL_DISPATCH
+
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
 
-        results = scene.batch(ops, doc_id)
-        ok = sum(1 for r in results if r["status"] == "ok")
-        err = sum(1 for r in results if r["status"] == "error")
-        lines = [f"Batch: {ok} ok, {err} errors"]
-        for i, r in enumerate(results):
-            status = chr(10003) if r["status"] == "ok" else chr(10007)
-            msg = r.get("message", r.get("region_id", ""))
-            lines.append(f"  {status} [{i}] {msg}")
-        return "\n".join(lines)
+        lines: list[str] = []
+        ok = 0
+        err = 0
+        for i, op in enumerate(ops):
+            tool_name = op.pop("tool", None)
+            if not tool_name:
+                err += 1
+                lines.append(f"  ✗ [{i}] Missing 'tool' key in op")
+                continue
+
+            fn = TOOL_DISPATCH.get(tool_name)
+            if fn is None:
+                err += 1
+                lines.append(
+                    f"  ✗ [{i}] Unknown tool '{tool_name}'"
+                )
+                continue
+
+            try:
+                # Inject document_id so tools can find their document
+                result = fn(**op, document_id=doc_id)
+                # Tool functions return strings (MCP convention)
+                ok += 1
+                msg = str(result).split('\n')[0][:120]
+                lines.append(f"  ✓ [{i}] {tool_name}: {msg}")
+            except (ValueError, RuntimeError, TypeError, KeyError) as e:
+                err += 1
+                op_id = op.get("region_id", op.get("group_name", ""))
+                ctx = f" ({op_id})" if op_id else ""
+                lines.append(f"  ✗ [{i}] {tool_name}: {e}{ctx}")
+
+        summary = f"Batch: {ok} ok, {err} errors"
+        return "\n".join([summary] + lines)

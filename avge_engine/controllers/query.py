@@ -30,6 +30,8 @@ def create_tools(mcp):
         max_w: float | None = None,
         min_h: float | None = None,
         max_h: float | None = None,
+        z_min: int | None = None,
+        z_max: int | None = None,
         has_stroke: bool | None = None,
         layer: str | None = None,
         tags: dict | None = None,
@@ -47,6 +49,8 @@ def create_tools(mcp):
             max_w: Maximum width.
             min_h: Minimum height.
             max_h: Maximum height.
+            z_min: Minimum z_index.
+            z_max: Maximum z_index.
             has_stroke: True = must have stroke, False = must NOT have stroke.
             layer: Filter by layer name.
             tags: JSON object of key/value tags to match (all must match, e.g. {"part":"handle"}).
@@ -65,6 +69,7 @@ def create_tools(mcp):
             min_y=min_y, max_y=max_y,
             min_w=min_w, max_w=max_w,
             min_h=min_h, max_h=max_h,
+            z_min=z_min, z_max=z_max,
             has_stroke=has_stroke,
             layer=layer,
             tags=parsed_tags,
@@ -126,7 +131,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="list_layers",
         description="List all unique layers and their region counts. "
-        "Use reorder_layer to shift all regions in a layer up or down "
+        "Use shift_layer_z to shift all regions in a layer up or down "
         "in the z-order.",
     )
     def list_layers(document_id: str | None = None) -> str:
@@ -152,12 +157,12 @@ def create_tools(mcp):
         return "\n".join(lines)
 
     @mcp.tool(
-        name="reorder_layer",
+        name="shift_layer_z",
         description="Shift all regions in a layer by a z-offset. "
         "Positive offset moves them higher (top), negative moves lower (back). "
         "Use after list_layers to find which layer to adjust.",
     )
-    def reorder_layer(
+    def shift_layer_z(
         layer: str,
         z_offset: int,
         document_id: str | None = None,
@@ -187,31 +192,3 @@ def create_tools(mcp):
             f"(z_offset={z_offset:+d})"
         )
 
-    @mcp.tool(
-        name="get_document_stats",
-        description="View tool usage stats and errors for a document. "
-        "Shows call counts per tool, total operations, and recent errors.",
-    )
-    def get_document_stats(document_id: str | None = None) -> str:
-        """Show tool call counts and errors for a document."""
-        scene = get_graph()
-        try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document"
-        stats = scene.get_doc_stats(doc_id)
-        lines = [
-            f"Stats for {stats['document_id']}:",
-            f"  Total tool calls: {stats['total_calls']}",
-            f"  Errors: {stats['error_count']}",
-        ]
-        if stats["tool_calls"]:
-            lines.append("  Calls by tool:")
-            for tool, count in sorted(stats["tool_calls"].items(),
-                                       key=lambda x: -x[1]):
-                lines.append(f"    {tool}: {count}")
-        if stats["errors"]:
-            lines.append("  Recent errors:")
-            for e in stats["errors"]:
-                lines.append(f"    [{e['tool']}] {e['error'][:120]}")
-        return "\n".join(lines)

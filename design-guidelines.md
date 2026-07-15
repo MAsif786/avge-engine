@@ -139,3 +139,187 @@ Build the character in this order so each layer guides the next:
 - Fix asymmetry with  or  + recreate — never rebuild the full document.
 - For complex characters, build the **face and body in separate checkpoint layers**: checkpoint("face_done") before adding the body, so you can adjust body proportions without losing face work.
  (§4 of the MVP TDD) — `describe_scene` cannot catch any of the above, since none of it is expressible as bounds/tags. This is a second, independent reason `render_preview` earns its cost, beyond the completeness finding already documented.
+
+## 9. Segments, Not Curves — Posing Through Rotation
+
+In 2D vector illustration, **bent limbs and fanned fingers are built from straight segments at angles, not from curved outlines.** The illusion of curvature comes from how segments connect — the eye reads the angle change as a bend.
+
+### 9a. The principle
+
+Do NOT draw a bent arm as a single curved arm outline. Do NOT draw fanning fingers as five custom-shaped finger outlines.
+
+Instead:
+- **A bent arm** = two straight rects: upper arm (rotated from shoulder) + forearm (rotated from elbow), overlapping at the joint
+- **Fanning fingers** = one pill rect, duplicated and rotated at different angles
+- **A bent knee** = upper leg + lower leg rects, each rotated independently
+
+### 9b. Arm construction
+
+```
+Start with a vertical rect for the upper arm (e.g. 0.06 wide × 0.22 tall):
+  → transform_objects(rotate=-30)  → angles out from shoulder
+  → transform_objects(rotate=20)   → angles forward from shoulder
+
+Then a second rect for the forearm:
+  → positioned at the elbow (end of upper arm)
+  → transform_objects(rotate=10)   → angles down from elbow
+
+Optionally bridge_shapes the overlapping elbow joint for a smooth transition.
+```
+
+The z-order matters: forearm on top of upper arm hides the overlap edge.
+
+### 9c. Finger construction
+
+```
+Create one pill rect: rect(width=0.045, height=0.22, rx=0.022)
+Clone and rotate each:
+  → finger 1: rotate=-15° (pinky)
+  → finger 2: rotate=-8°  (ring)
+  → finger 3: rotate=0°   (middle)
+  → finger 4: rotate=8°   (index)
+  → finger 5: rotate=15°  (thumb)
+```
+
+All sit at a higher z-index than the palm. The palm has no top-edge stroke — only the hand outline (z=0) provides the outer silhouette.
+
+### 9d. Stroke discipline for segmented bodies
+
+- **Each segment has no stroke** — the fill alone defines it
+- **A single silhouette outline** behind everything (z=0, `fill="none"`) traces the outer boundary
+- **Only the final outer stroke** — no internal segment strokes to create crossing patterns
+- Exception: crease lines, joint lines, and detail marks keep their own thin strokes
+
+### 9e. Why this works
+
+A rotated rect reads as a foreshortened limb because the viewer's brain fills in the missing curvature. The Catmull-Rom smoothness on the silhouette outline rounds the sharp corners at joints naturally. Two segments at 30° read as a bent elbow more convincingly than a hand-traced curved outline ever does.
+
+### 9f. Position tracking after rotation
+
+After `transform_objects(rotate=...)`, the shape's center shifts. To find the new position for attaching the next segment (e.g. forearm to elbow):
+
+1. Call `describe_scene` to get the region's bounding box
+2. The rotation pivot is the original center — the post-rotation position is offset
+3. For the next segment, use `offset_x`/`offset_y` on `duplicate_region` to position it at the joint
+4. Or read the SVG output to verify actual segment endpoints
+
+A future enhancement will provide `get_feature_points(region_id, edge)` that returns actual post-transform coordinates, eliminating the guesswork.
+
+## 10. Geometric Patterns and Batch Workflows
+
+The engine supports two powerful patterns for reducing tool calls: **batch operations** (multiple ops in one call) and **geometric pattern generators** (deriving geometry from geometry).
+
+### 10a. Inline shapes in batch
+
+Instead of creating each shape individually, define them inline inside a batch call:
+
+```python
+batch([
+  {"tool": "create_primitive", "shape": {"type": "rect", "x": 0.1, "y": 0.66, "width": 0.09, "height": 0.1},
+   "fill": "#CCC", "stroke": "#333", "stroke_width": 0.003},
+  {"tool": "create_primitive", "shape": {"type": "rect", "x": 0.21, "y": 0.66, "width": 0.09, "height": 0.1},
+   "fill": "#CCC", "stroke": "#333", "stroke_width": 0.003},
+])
+```
+
+Supported tools in batch: `create_region`, `create_primitive`, `create_curve`, `edit_region`, `duplicate_region`, `delete_region`, `style_objects`, `transform_objects`, `generate_shape`.
+
+### 10b. distribute_linear — point sequence generator
+
+Given a start point and end point, generates evenly-spaced coordinates between them.
+
+```
+generate_shape(pattern="distribute_linear", params={
+  "start": [0.1, 0.66],
+  "end": [0.86, 0.66],
+  "count": 8
+})
+→ returns coordinate list like [(0.1,0.66), (0.208,0.66), (0.317,0.66), ...]
+```
+
+**Use case — row of buildings:** Feed the returned coordinates into a loop that creates wall rects at each position. One `distribute_linear` call + N batch ops = entire building row.
+
+The `duplicate_grid` tool is an alternative when you already have a source region and just want evenly-spaced copies. `distribute_linear` is better when you need the raw coordinates for custom positioning.
+
+### 10c. apex_from_edge — outline arithmetic
+
+Given a closed outline (typically a building wall rect), projects a triangle from one edge — creating a roof in a single operation.
+
+```python
+# Step 1: create a wall rect
+create_primitive(shape={"type": "rect", "x": 0.1, "y": 0.66, "width": 0.09, "height": 0.1},
+                 fill="#CCC", stroke="#333")
+
+# Step 2: derive roof from wall outline
+generate_shape(pattern="apex_from_edge", params={
+  "region_id": "rect_abc123",
+  "edge": "top",               # project from top edge
+  "apex_offset": 0.05,         # roof height (optional; defaults to 0.4×edge width)
+  "fill": "#E8D4B0",           # roof fill color
+  "stroke": "#333",
+})
+→ creates triangle outline automatically
+```
+
+**How it works:** The function finds the two points defining the chosen edge (top = minimum y), calculates the edge midpoint, and projects a third point perpendicularly. The result is a 3-point triangle outline registered as a new region.
+
+**Why this matters:** Every architectural scene with multiple buildings needs wall + roof pairs. Without `apex_from_edge`, each roof requires manual coordinate computation for every apex point. With it, one call generates the roof from the wall's existing geometry.
+
+### 10d. Wall + roof construction workflow
+
+The efficient pattern for multi-building scenes:
+
+```python
+# 1. Distribute positions along a line
+seq = generate_shape(pattern="distribute_linear",
+  params={"start": [0.05, 0.7], "end": [0.95, 0.7], "count": 6})
+# Returns 6 evenly-spaced base positions
+
+# 2. Batch-create walls at each position
+batch([
+  {"tool": "create_primitive", "shape": {"type": "rect", "x": seq[0][0], "y": seq[0][1], "width": 0.08, "height": 0.12},
+   "fill": "#D4A574", ...},
+  # ... repeat for seq[1] through seq[5]
+])
+
+# 3. Generate roofs from each wall
+for wall_id in wall_ids:
+  generate_shape(pattern="apex_from_edge",
+    params={"region_id": wall_id, "edge": "top", "fill": "#C94C4C"})
+```
+
+Total calls: 1 (distribute) + 1 (batch) + 1 (apex loop) — instead of 6 walls + 6 roofs individually.
+
+## 11. Batch Tool Reference — All Supported Tools
+
+Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"tool"` key; all other params match the standalone tool's arguments.
+
+| Tool | Required params | Common optional params |
+|---|---|---|
+| `create_region` | `outline` (list of [x,y]) | `fill`, `stroke`, `smoothness`, `closed`, `z_index`, `layer`, `clip_to`, `fill_gradient`, `blend_mode` |
+| `create_primitive` | `shape` (dict with `type` + coords) | `fill`, `stroke`, `stroke_width`, `z_index`, `layer`, `blend_mode`, `opacity` |
+| `create_curve` | `points` (list of [x,y]) | `stroke`, `stroke_width`, `smoothness`, `z_index`, `layer`, `stroke_linecap`, `blend_mode` |
+| `create_text` | `x`, `y`, `text` | `fill`, `font_size`, `font_family`, `text_anchor`, `font_weight`, `z_index`, `rotate` |
+| `import_svg_path` | `path_data` (SVG path string) | `fill`, `stroke`, `smoothness`, `closed`, `z_index`, `layer`, `samples_per_curve` |
+| `edit_region` | `region_id` | `outline`, `fill`, `stroke`, `smoothness`, `z_index`, `shape`, `layer`, `clip_to`, `blend_mode` |
+| `duplicate_region` | `region_id` | `offset_x`, `offset_y`, `scale`, `rotate`, `fill`, `z_index`, `mirror_x`, `mirror_y`, `shadow_mode` |
+| `delete_region` | `region_id` | — |
+| `style_objects` | `ids` or `group_name` | `fill`, `stroke`, `stroke_width`, `opacity`, `blend_mode`, `clip_to`, `fill_gradient` |
+| `transform_objects` | `ids` | `dx`, `dy`, `scale`, `rotate`, `group_mode`, `mirror_x`, `mirror_y`, `z_index` |
+| `generate_shape` | `pattern`, `params` | Pattern-specific — see `generate_shape` docs |
+
+**Inline shapes in batch:** Use `create_primitive` or `create_region` with shape data directly:
+```python
+batch([{"tool": "create_primitive", "shape": {"type": "rect", "x": 0.1, "y": 0.66, "width": 0.09, "height": 0.1},
+        "fill": "#CCC", "stroke": "#333"}])
+```
+
+**Batch text labels:** Create multiple text labels in one call:
+```python
+batch([
+  {"tool": "create_text", "x": 0.25, "y": 0.05, "text": "SMALL BRAIN", "font_size": 0.04, "fill": "#000"},
+  {"tool": "create_text", "x": 0.75, "y": 0.05, "text": "BIG BRAIN", "font_size": 0.04, "fill": "#000"},
+])
+```
+
+**Adding a new tool to batch:** When creating a new scene graph method, add a matching `elif tool == "new_tool":` branch in `SceneGraph.batch()` in `scene/graph.py`. Extract params via `op.pop()` for required args (consumes them) and `op.get()` for optional args (leaves them in the dict for other branches).

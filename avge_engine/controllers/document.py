@@ -1,6 +1,8 @@
 """Document controller — create_document, get_document, list_documents, load_document MCP tools."""
 from __future__ import annotations
 
+from typing import Any
+
 from avge_engine.services.engine import (
     get_graph, resolve_doc, set_active_doc, validate_input,
     list_stored_documents, load_stored_document, get_storage_dir,
@@ -100,8 +102,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="list_documents",
         description="List all saved documents on disk. Returns ID, name, version, "
-        "and region count for each. Use load_document to restore one. "
-        f"Data is stored as .json files in {get_storage_dir()}/",
+        "and region count for each. Use load_document to restore one.",
     )
     def list_documents() -> str:
         """List all persisted documents."""
@@ -203,3 +204,58 @@ def create_tools(mcp):
         if errors:
             parts.append(f"Errors: {'; '.join(errors)}")
         return "\n".join(parts)
+
+    @mcp.tool(
+        name="set_background",
+        description="Change the canvas background color of an existing document. "
+        "💡 Use instead of recreating the document when you need a different background.",
+    )
+    def set_background(
+        background: str | None = "#FFFFFF",
+        fill_gradient: Any | None = None,
+        document_id: str | None = None,
+    ) -> str:
+        """Change the canvas background color, image, or gradient.
+
+        Args:
+            background: Hex color (e.g. "#1A1A2E"), image URL, or "none".
+                URLs starting with ``http``/``https``/``data:`` set an image.
+                Default "#FFFFFF".
+            fill_gradient: Gradient definition (dict or JSON string) for a
+                smooth gradient background. Takes precedence over ``background``.
+                Linear: {"type":"linear","x1":0,"y1":0,"x2":0,"y2":1,
+                "stops":[{"offset":0,"color":"#FFF"},{"offset":1,"color":"#000"}]}
+                Radial: {"type":"radial","cx":0.5,"cy":0.5,"r":0.5,
+                "stops":[{"offset":0,"color":"#FFF"},{"offset":1,"color":"#000"}]}
+            document_id: Document UUID (omit for active doc).
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if not scene.has_document(doc_id):
+            return f"Error: Document '{doc_id}' not found"
+
+        import json as _json
+        resolved = background
+        if fill_gradient is not None:
+            if isinstance(fill_gradient, str):
+                try:
+                    resolved = _json.loads(fill_gradient)
+                except _json.JSONDecodeError:
+                    return f"Error: invalid fill_gradient JSON"
+            elif isinstance(fill_gradient, dict):
+                resolved = fill_gradient
+        elif background is not None:
+            is_url = background.startswith(("http://", "https://", "data:"))
+            if not is_url and background != "none" and not (background.startswith("#") and len(background) in (4, 7, 9)):
+                return f"Error: Invalid background '{background}'"
+
+        doc = scene.get_document(doc_id)
+        old_bg = str(doc.background)[:60]
+        from avge_engine.scene import DocumentNode
+        object.__setattr__(doc, "background", resolved)
+        doc.version += 1
+        scene._persist(doc_id)
+        return f"Background updated"

@@ -142,10 +142,12 @@ class DuplicateRegionRequest(BaseModel):
     z_index: int | None = None
     mirror_x: bool = False
     mirror_y: bool = False
-    blend_mode: BLEND_MODES | None = None
-    layer: str | None = None
+    mirror_axis_x: float | None = None
     scale: float = 1.0
     rotate: float = 0.0
+    shadow_mode: bool = False
+    count: int = 1
+    positions: list[list[float]] | None = None
 
 
 # ── Style ──────────────────────────────────────────────────────────
@@ -161,12 +163,10 @@ class StyleObjectsRequest(BaseModel):
     blend_mode: BLEND_MODES | None = None
     clip_to: str | None = None
     group_name: str | None = None
-
-
-class ApplyStylePresetRequest(BaseModel):
-    preset: PRESET_NAMES
-    ids: list[str] = Field(min_length=1)
-    document_id: str
+    stroke_dasharray: str | None = None
+    fill_hsl_offset: dict | None = None
+    stroke_hsl_offset: dict | None = None
+    preset: str | None = None
 
 
 # ── Scene ops ──────────────────────────────────────────────────────
@@ -221,34 +221,6 @@ class DuplicateGroupRequest(BaseModel):
     rotate: float = 0.0
     mirror_x: bool = False
     mirror_y: bool = False
-
-
-class SubPartsDef(BaseModel):
-    """Structured definition for create_composite_region sub-parts."""
-    pattern: str = Field(description="Pattern type: radial_fan or radial_ring")
-    count: int = Field(default=5, ge=1, le=50)
-    anchor: str | None = Field(default=None, description="Edge anchor for radial_fan")
-    length_range: list[float] | None = Field(default=None, min_length=2, max_length=2)
-    width: float = Field(default=0.02, ge=0.001, le=0.2)
-    angle_spread: float = Field(default=35, ge=0, le=180)
-    length_variance: bool = False
-    taper: float = Field(default=0.5, ge=0.0, le=1.0)
-    edge_span: float = Field(default=1.0, ge=0.0, le=1.0, description="Fraction of edge to distribute across")
-
-
-class CreateCompositeRegionRequest(BaseModel):
-    outline: list[list[float]] = Field(min_length=2)
-    document_id: str
-    region_id: str | None = None
-    layer: str = "default"
-    closed: bool = True
-    smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
-    fill: str | None = "#CCCCCC"
-    stroke: str | None = "#333333"
-    stroke_width: float = 0.005
-    opacity: float = 1.0
-    z_index: int = 0
-    sub_parts: SubPartsDef | None = None
 
 
 class ExtrudeOutlineRequest(BaseModel):
@@ -326,23 +298,6 @@ class CreateCurveRequest(BaseModel):
     smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
     blend_mode: BLEND_MODES | None = None
     stroke_linecap: str | None = "round"
-
-
-class MirrorRegionRequest(BaseModel):
-    region_id: str
-    document_id: str
-    new_region_id: str | None = None
-    axis_x: float = 0.5
-    offset_x: float = 0.0
-    offset_y: float = 0.0
-
-
-class AddShadowRequest(BaseModel):
-    region_id: str
-    document_id: str
-    offset_x: float = 0.015
-    offset_y: float = 0.015
-    opacity: float = 0.25
 
 
 class DocIdBody(BaseModel):
@@ -585,6 +540,80 @@ async def duplicate_region(req: DuplicateRegionRequest):
         raise HTTPException(status_code=404, detail=str(e))
 
 
+class CopyElementRequest(BaseModel):
+    region_id: str | None = None
+    group: str | None = None
+    target_document_id: str
+    source_document_id: str | None = None
+    new_region_id: str | None = None
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+
+@app.post("/tools/copy_element", response_model=ToolResponse, tags=["copy_element"])
+async def copy_element(req: CopyElementRequest):
+    graph = get_graph()
+    try:
+        from avge_engine.services.engine import resolve_doc
+        source_id = resolve_doc(req.source_document_id)
+    except RuntimeError:
+        raise HTTPException(status_code=400, detail="No active source document")
+    try:
+        from avge_engine.scene import RegionNode
+        original = graph.get_region(req.region_id, source_id) if req.region_id else None
+        if req.group:
+            members = graph.get_group(req.group, source_id)
+            if not members:
+                raise HTTPException(status_code=404, detail=f"Group '{req.group}' not found")
+            new_ids = []
+            for m in members:
+                orig = graph.get_region(m["id"], source_id)
+                no = [(round(p[0]+req.offset_x,6), round(p[1]+req.offset_y,6)) for p in orig.outline]
+                np = dict(orig.primitive) if orig.primitive else None
+                if np:
+                    pt = np.get("type")
+                    if pt in ("rect","text","image"):
+                        np["x"] = round(np.get("x",0)+req.offset_x,6)
+                        np["y"] = round(np.get("y",0)+req.offset_y,6)
+                    elif pt == "ellipse":
+                        np["cx"] = round(np.get("cx",0)+req.offset_x,6)
+                        np["cy"] = round(np.get("cy",0)+req.offset_y,6)
+                new_id = req.new_region_id or f"{m['id']}_copy"
+                if graph.has_region(new_id, req.target_document_id):
+                    continue
+                dup = RegionNode(id=new_id, layer=orig.layer, z_index=orig.z_index,
+                    outline=no, constraints=orig.constraints, style=orig.style,
+                    transform=orig.transform, primitive=np,
+                    clip_to=orig.clip_to, metadata=dict(orig.metadata) if orig.metadata else {})
+                graph._regions_for(req.target_document_id)[new_id] = dup
+                new_ids.append(new_id)
+            graph.get_document(req.target_document_id).version += 1
+            return ToolResponse(data={"copied": new_ids, "count": len(new_ids)})
+        elif original:
+            new_id = req.new_region_id or f"{req.region_id}_copy"
+            no = [(round(p[0]+req.offset_x,6), round(p[1]+req.offset_y,6)) for p in original.outline]
+            np = dict(original.primitive) if original.primitive else None
+            if np:
+                pt = np.get("type")
+                if pt in ("rect","text","image"):
+                    np["x"] = round(np.get("x",0)+req.offset_x,6)
+                    np["y"] = round(np.get("y",0)+req.offset_y,6)
+                elif pt == "ellipse":
+                    np["cx"] = round(np.get("cx",0)+req.offset_x,6)
+                    np["cy"] = round(np.get("cy",0)+req.offset_y,6)
+            dup = RegionNode(id=new_id, layer=original.layer, z_index=original.z_index,
+                outline=no, constraints=original.constraints, style=original.style,
+                transform=original.transform, primitive=np,
+                clip_to=original.clip_to, metadata=dict(original.metadata) if original.metadata else {})
+            graph._regions_for(req.target_document_id)[new_id] = dup
+            graph.get_document(req.target_document_id).version += 1
+            return ToolResponse(data={"region_id": new_id, "source": req.region_id})
+        else:
+            raise HTTPException(status_code=400, detail="Provide region_id or group")
+    except (ValueError, RuntimeError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ── Primitive Endpoints ────────────────────────────────────────────
 
 class CreateRectRequest(BaseModel):
@@ -597,9 +626,9 @@ class CreateRectRequest(BaseModel):
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
-    fill: str | None = "#E8C8A0"
-    stroke: str | None = "#5A4A3A"
-    stroke_width: float = 0.006
+    fill: str | None = "#CCCCCC"
+    stroke: str | None = "#333333"
+    stroke_width: float = 0.005
     opacity: float = 1.0
     blend_mode: str | None = None
 
@@ -613,9 +642,9 @@ class CreateEllipseRequest(BaseModel):
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
-    fill: str | None = "#E8C8A0"
-    stroke: str | None = "#5A4A3A"
-    stroke_width: float = 0.006
+    fill: str | None = "#CCCCCC"
+    stroke: str | None = "#333333"
+    stroke_width: float = 0.005
     opacity: float = 1.0
     blend_mode: str | None = None
 
@@ -629,7 +658,7 @@ class CreateLineRequest(BaseModel):
     region_id: str | None = None
     layer: str = "default"
     z_index: int = 0
-    stroke: str | None = "#5A4A3A"
+    stroke: str | None = "#333333"
     stroke_width: float = 0.005
     opacity: float = 1.0
     blend_mode: str | None = None
@@ -727,45 +756,6 @@ async def create_curve(req: CreateCurveRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/tools/mirror_region", response_model=ToolResponse)
-async def mirror_region(req: MirrorRegionRequest):
-    graph = _get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No active document")
-    try:
-        region = graph.get_region(req.region_id, doc_id)
-        cx = sum(p[0] for p in region.outline) / len(region.outline)
-        dx = 2 * (req.axis_x - cx) + req.offset_x
-        dup = graph.duplicate_region(
-            req.region_id, req.new_region_id, doc_id,
-            offset_x=dx, offset_y=req.offset_y, mirror_x=True,
-        )
-        return ToolResponse(data={"region_id": dup.id, "source": req.region_id, "dx": dx, "dy": req.offset_y})
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/tools/add_shadow", response_model=ToolResponse)
-async def add_shadow(req: AddShadowRequest):
-    graph = _get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No active document")
-    try:
-        original = graph.get_region(req.region_id, doc_id)
-        shadow_id = req.region_id + "_shadow"
-        dup = graph.duplicate_region(
-            req.region_id, shadow_id, doc_id,
-            offset_x=req.offset_x, offset_y=req.offset_y,
-            fill="#000000", opacity=req.opacity,
-            z_index=-9999,
-        )
-        return ToolResponse(data={"region_id": dup.id, "source": req.region_id})
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
 @app.post("/tools/style_objects", response_model=ToolResponse)
 async def style_objects(req: StyleObjectsRequest):
     graph = get_graph()
@@ -823,43 +813,6 @@ async def style_objects(req: StyleObjectsRequest):
     return ToolResponse(data={"affected": affected, "count": len(affected)})
 
 
-@app.post("/tools/apply_style_preset", response_model=ToolResponse)
-async def apply_style_preset(req: ApplyStylePresetRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    doc_id = req.document_id
-
-    presets = getattr(graph, "PRESETS", None)
-    if presets is None or req.preset not in presets:
-        raise HTTPException(status_code=400, detail=f"Unknown preset '{req.preset}'")
-
-    preset_config = presets[req.preset].copy()
-    fill_gradient = preset_config.pop("fill_gradient", None)
-    blend_mode = preset_config.pop("blend_mode", None)
-
-    import json as _json
-    affected = []
-    for rid in req.ids:
-        try:
-            fill = None
-            if fill_gradient:
-                fill = _json.loads(fill_gradient) if isinstance(fill_gradient, str) else fill_gradient
-            graph.edit_region(
-                region_id=rid, document_id=doc_id,
-                fill=fill or preset_config.get("fill"),
-                opacity=preset_config.get("opacity"),
-                blend_mode=blend_mode,
-            )
-            affected.append(rid)
-        except (ValueError, RuntimeError) as e:
-            raise HTTPException(status_code=400, detail=str(e))
-    return ToolResponse(data={"affected": affected, "count": len(affected)})
-
-
-# ── Scene Ops Endpoints ────────────────────────────────────────────
-
 @app.post("/tools/boolean_operation", response_model=ToolResponse)
 async def boolean_operation(req: BooleanOpRequest):
     graph = get_graph()
@@ -911,8 +864,8 @@ async def transform_objects(req: TransformObjectsRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/tools/manage_group", response_model=ToolResponse)
-async def manage_group(req: ManageGroupRequest):
+@app.post("/tools/edit_group", response_model=ToolResponse)
+async def edit_group(req: ManageGroupRequest):
     graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
@@ -974,29 +927,8 @@ async def duplicate_group(req: DuplicateGroupRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/tools/create_composite_region", response_model=ToolResponse)
-async def create_composite_region(req: CreateCompositeRegionRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    try:
-        result = graph.create_composite_region(
-            outline=req.outline, document_id=req.document_id,
-            region_id=req.region_id, layer=req.layer,
-            z_index=req.z_index, closed=req.closed,
-            smoothness=req.smoothness,
-            fill=req.fill, stroke=req.stroke,
-            stroke_width=req.stroke_width, opacity=req.opacity,
-            sub_parts=req.sub_parts,
-        )
-        return ToolResponse(data=result)
-    except (ValueError, RuntimeError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.post("/tools/extrude_region_outline", response_model=ToolResponse)
-async def extrude_region_outline(req: ExtrudeOutlineRequest):
+@app.post("/tools/add_bumps", response_model=ToolResponse)
+async def add_bumps(req: ExtrudeOutlineRequest):
     graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
@@ -1070,7 +1002,7 @@ async def list_layers(req: DocIdBody):
     return ToolResponse(data={"layers": layers})
 
 
-@app.post("/tools/reorder_layer", response_model=ToolResponse)
+@app.post("/tools/shift_layer_z", response_model=ToolResponse)
 async def reorder_layer(req: ReorderLayerRequest):
     graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
@@ -1120,7 +1052,11 @@ async def preview_doc_png(document_id: str | None = None):
     try:
         svg = svg_serialize(graph, document_id)
         png = render_preview_png(svg, scale=1.0)
-        return Response(content=png, media_type="image/png")
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
     except Exception as e:
         return Response(f"Error: {e}", status_code=500)
 
@@ -1191,19 +1127,64 @@ async def batch(req: BatchRequest):
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=400, detail="No document")
-    results = graph.batch(req.ops, req.document_id)
+
+    # Dynamic dispatch: route each op to graph.<tool_name>(**params)
+    results: list[dict] = []
+    for op in req.ops:
+        tool_name = op.pop("tool", None)
+        if not tool_name:
+            results.append({"status": "error", "message": "Missing 'tool' key"})
+            continue
+
+        method = getattr(graph, tool_name, None)
+        if method is None:
+            results.append({"status": "error", "message": f"Unknown tool: {tool_name}"})
+            continue
+
+        try:
+            result = method(**op, document_id=req.document_id)
+            if isinstance(result, str):
+                results.append({"status": "ok", "message": result[:120]})
+            else:
+                rid = getattr(result, "id", None)
+                results.append({"status": "ok", "region_id": rid or str(result)})
+        except (ValueError, RuntimeError, TypeError, KeyError) as e:
+            results.append({"status": "error", "message": str(e)})
+
     return ToolResponse(data={"results": results})
 
 
+@app.get("/tools/docs")
+async def tool_docs():
+    """Generate markdown documentation for all registered MCP tools."""
+    from mcp.server.fastmcp import FastMCP
+    mcp = FastMCP("avge-engine-docs")
+    from avge_engine.controllers import register_all
+    register_all(mcp)
+    tools = mcp._tool_manager.list_tools()
+    from avge_engine import __tool_set_version__ as tsv
+    lines = [f"# AVGE Engine — Tool Reference ({len(tools)} tools)\n"]
+    lines.append(f"_Tool set: {tsv}_\n")
 
-@app.post("/tools/get_document_stats")
-async def get_document_stats_api(req: DocIdBody):
-    """Get tool usage stats for a document."""
-    graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=400, detail="No active document")
-    stats = graph.get_doc_stats(req.document_id)
-    return ToolResponse(data=stats)
+    for t in sorted(tools, key=lambda x: x.name):
+        lines.append(f"## `{t.name}`\n")
+        lines.append(f"{t.description}\n")
+        if hasattr(t, 'parameters') and t.parameters:
+            props = t.parameters.get("properties", {})
+            required = t.parameters.get("required", [])
+            if props:
+                lines.append("### Parameters\n")
+                lines.append("| Name | Type | Required | Description |")
+                lines.append("|------|------|----------|-------------|")
+                for pname, pdef in sorted(props.items()):
+                    ptype = pdef.get("type", "any")
+                    is_req = "✓" if pname in required else ""
+                    pdesc = pdef.get("description", "").replace("\n", " ").strip()
+                    lines.append(f"| `{pname}` | `{ptype}` | {is_req} | {pdesc} |")
+                lines.append("")
+        lines.append("---\n")
+
+    return Response(content="\n".join(lines), media_type="text/markdown")
 
 
 @app.post("/tools/reset")
@@ -1211,6 +1192,38 @@ async def reset():
     """Reset the scene graph (test/debug endpoint)."""
     reset_graph()
     return ToolResponse(data={"message": "Scene graph reset"})
+
+
+# ── Generic Tool Dispatch ───────────────────────────────────────────
+# All MCP tools are also accessible via REST using a unified endpoint.
+# The tool name maps to the scene graph method name.
+
+@app.post("/tools/{tool_name}")
+async def tool_dispatch(tool_name: str, body: dict):
+    """Generic dispatch — route any tool call to the scene graph method.
+
+    The ``tool_name`` path segment matches the MCP tool name. Parameters
+    are passed as a JSON body dict. This avoids maintaining individual
+    endpoints for every tool.
+    """
+    graph = get_graph()
+    doc_id = body.pop("document_id", None) or graph._last_doc_id
+
+    if not doc_id or not graph.has_document(doc_id):
+        raise HTTPException(status_code=400, detail="No active document")
+
+    method = getattr(graph, tool_name, None)
+    if method is None:
+        raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
+
+    try:
+        result = method(**body, document_id=doc_id)
+        if hasattr(result, "model_dump"):
+            return ToolResponse(data=result.model_dump())
+        rid = getattr(result, "id", None)
+        return ToolResponse(data={"region_id": rid} if rid else {"result": str(result)[:200]})
+    except (ValueError, RuntimeError, TypeError, KeyError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 # ── Schema Discovery ───────────────────────────────────────────────

@@ -5,7 +5,6 @@ The storage adapter is attached at startup so every mutation auto-persists to di
 """
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 
 from avge_engine.scene import SceneGraph
@@ -19,45 +18,6 @@ _active_doc: str | None = None
 # Storage directory (relative to project root)
 STORAGE_DIR: str = ".avge_data"
 
-# ── Tool usage stats ────────────────────────────────────────────
-_tool_stats: dict[str, Counter] = {}
-"""Per-tool call/error counts."""
-
-
-def track_tool_call(tool_name: str) -> None:
-    if tool_name not in _tool_stats:
-        _tool_stats[tool_name] = Counter()
-    _tool_stats[tool_name]["calls"] += 1
-
-
-def track_tool_error(tool_name: str) -> None:
-    if tool_name not in _tool_stats:
-        _tool_stats[tool_name] = Counter()
-    _tool_stats[tool_name]["errors"] += 1
-
-
-def get_tool_stats() -> dict[str, dict[str, int]]:
-    return {name: dict(c) for name, c in _tool_stats.items()}
-
-
-def reset_tool_stats() -> None:
-    _tool_stats.clear()
-
-
-def with_stats(tool_name: str):
-    """Decorator that wraps a tool function with call/error tracking."""
-    def decorator(fn):
-        def wrapper(*args, **kwargs):
-            track_tool_call(tool_name)
-            try:
-                return fn(*args, **kwargs)
-            except Exception:
-                track_tool_error(tool_name)
-                raise
-        wrapper.__name__ = fn.__name__
-        wrapper.__qualname__ = fn.__qualname__
-        return wrapper
-    return decorator
 
 
 def get_graph() -> SceneGraph:
