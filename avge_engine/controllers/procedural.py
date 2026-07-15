@@ -69,7 +69,8 @@ def create_tools(mcp):
         "  isometric_box — Generate 3 visible faces of an isometric 3D box.\n"
         "    Params: x, y, width, depth, height, angle, fill, top_fill, left_fill, right_fill,\n"
         "      skip_faces (e.g. [\"top\"] for hidden leg faces), shadow (bool),\n"
-        "      shadow_opacity (default 0.12), z_index, opacity, layer\n"
+        "      shadow_opacity (default 0.12), z_index, opacity, layer,\n"
+        "      top_slant (vertical offset at front edge for slanted surfaces)\n"
         "    Coordinate system: (x,y)=top vertex, width=left-down, depth=right-down, height=down\n"
         "    💡 One gold bar = 1 call. Table leg: skip_faces=[\"top\"], shadow=true",
     )
@@ -845,6 +846,7 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
         depth=params.get("depth", 0.12),
         height=params.get("height", 0.08),
         angle=params.get("angle", 30.0),
+        top_slant=params.get("top_slant", 0.0),
     )
     if not faces:
         return "Error: isometric_box produced no faces"

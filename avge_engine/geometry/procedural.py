@@ -1304,6 +1304,7 @@ def isometric_box(
     depth: float = 0.12,
     height: float = 0.08,
     angle: float = 30.0,
+    top_slant: float = 0.0,
 ) -> list[dict]:
     """Generate 3 visible faces of an isometric box (gold bar, crate, etc.).
 
@@ -1319,6 +1320,10 @@ def isometric_box(
         So the box expands rightward and downward from the top vertex —
         place ``(x, y)`` at the highest point of the box.
 
+    With ``top_slant``, the top face shears so the front edge sits at a
+    different height than the back edge — useful for matching a box leg
+    to a slanted frame bottom. Positive = front edge lower.
+
     Args:
         x: X of the topmost corner (back-top point — the highest point).
         y: Y of the topmost corner.
@@ -1326,6 +1331,10 @@ def isometric_box(
         depth: Box depth along the right-forward axis (extends right-down).
         height: Box height, extends straight down (positive y).
         angle: Isometric angle in degrees (default 30).
+        top_slant: Vertical offset at the front edge relative to the back
+            edge. Positive = front edge lower (matches a downward slope).
+            Applied linearly: front vertex gets full slant, side vertices
+            get half. Default 0 (flat top).
 
     Returns:
         ``[{face: "top"|"left"|"right", outline: [(x,y), ...]}, ...]``
@@ -1345,16 +1354,25 @@ def isometric_box(
     ry = sin_a * depth
 
     # Compute vertices
-    # Top face (4 vertices of the top rhombus)
-    p0 = (x, y)                                # back (top-most)
-    p1 = (round(x + lx, 6), round(y + ly, 6))  # left
-    p2 = (round(x + lx + rx, 6), round(y + ly + ry, 6))  # front-bottom
-    p3 = (round(x + rx, 6), round(y + ry, 6))  # right
+    # Unslanted base positions (before slant adjustment)
+    hs = top_slant / 2
+    bx = x + lx          # base x for left vertex
+    by = y + ly          # base y for left vertex
+    fx = x + lx + rx     # base x for front vertex
+    fy = y + ly + ry     # base y for front vertex
+    rx_p = x + rx        # base x for right vertex
+    ry_p = y + ry        # base y for right vertex
 
-    # Bottom of side faces
-    p4 = (round(p1[0], 6), round(p1[1] + height, 6))  # left-bottom
-    p5 = (round(p2[0], 6), round(p2[1] + height, 6))  # front-bottom
-    p6 = (round(p3[0], 6), round(p3[1] + height, 6))  # right-bottom
+    # Top face — with top_slant: full offset at front, half at sides
+    p0 = (x, y)                                              # back
+    p1 = (round(bx, 6), round(by + hs, 6))                   # left
+    p2 = (round(fx, 6), round(fy + top_slant, 6))            # front
+    p3 = (round(rx_p, 6), round(ry_p + hs, 6))               # right
+
+    # Bottom of side faces (always at the original flat bottom)
+    p4 = (round(bx, 6), round(by + height, 6))               # left-bottom
+    p5 = (round(fx, 6), round(fy + height, 6))               # front-bottom
+    p6 = (round(rx_p, 6), round(ry_p + height, 6))           # right-bottom
 
     return [
         {"face": "top",   "outline": [p0, p1, p2, p3]},
