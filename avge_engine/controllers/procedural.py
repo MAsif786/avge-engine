@@ -856,21 +856,22 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
         prefix = f"{prefix}_{counter}"
 
     # Per-face styles with sensible 3D defaults
+    # Accept both fill_top and top_fill naming conventions
     face_conf = {
         "top": {
-            "fill": params.get("top_fill", params.get("fill", "#FFD700")),
-            "stroke": params.get("top_stroke", params.get("stroke", "#333333")),
-            "sw": params.get("top_stroke_width", params.get("stroke_width", 0.003)),
+            "fill": params.get("top_fill") or params.get("fill_top") or params.get("fill", "#FFD700"),
+            "stroke": params.get("top_stroke") or params.get("stroke_top") or params.get("stroke", "#333333"),
+            "sw": params.get("top_stroke_width") or params.get("stroke_width_top") or params.get("stroke_width", 0.003),
         },
         "left": {
-            "fill": params.get("left_fill", "#DAA520"),
-            "stroke": params.get("left_stroke", params.get("stroke", "#333333")),
-            "sw": params.get("left_stroke_width", params.get("stroke_width", 0.003)),
+            "fill": params.get("left_fill") or params.get("fill_left") or params.get("fill", "#DAA520"),
+            "stroke": params.get("left_stroke") or params.get("stroke_left") or params.get("stroke", "#333333"),
+            "sw": params.get("left_stroke_width") or params.get("stroke_width_left") or params.get("stroke_width", 0.003),
         },
         "right": {
-            "fill": params.get("right_fill", "#B8860B"),
-            "stroke": params.get("right_stroke", params.get("stroke", "#333333")),
-            "sw": params.get("right_stroke_width", params.get("stroke_width", 0.003)),
+            "fill": params.get("right_fill") or params.get("fill_right") or params.get("fill", "#B8860B"),
+            "stroke": params.get("right_stroke") or params.get("stroke_right") or params.get("stroke", "#333333"),
+            "sw": params.get("right_stroke_width") or params.get("stroke_width_right") or params.get("stroke_width", 0.003),
         },
     }
     layer = params.get("layer", "default")
