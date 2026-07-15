@@ -78,6 +78,7 @@ def create_tools(mcp):
         pattern: PATTERNS,
         params: dict[str, Any],
         document_id: str | None = None,
+        relative_to: str | None = None,
     ) -> str:
         """Generate geometry from a generic pattern.
 
@@ -85,12 +86,19 @@ def create_tools(mcp):
             pattern: Pattern name — which geometric operation to run.
             params: Pattern-specific parameters (see pattern descriptions).
             document_id: Document UUID (omit to use active document).
+            relative_to: Region ID for relative coordinate mapping. When set,
+                ``x``, ``y``, ``width``, ``depth``, ``height`` are treated as
+                0–1 fractions of the reference region's bounding box.
         """
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
+
+        # Resolve relative_to: transform coordinate params
+        if relative_to is not None:
+            _resolve_relative_box(scene, doc_id, relative_to, params)
 
         from avge_engine.geometry import procedural as geo
 
@@ -834,6 +842,32 @@ def _do_surface_detail(scene, doc_id: str, params: dict) -> str:
         except (ValueError, RuntimeError) as e:
             return f"Error at detail {i}: {e}"
     return f"surface_detail: {len(created)} motif(s) on '{region_id}'"
+
+
+def _resolve_relative_box(scene, doc_id, relative_to, params):
+    """Transform isometric_box params from 0-1 relative to a parent region."""
+    region = scene.get_region(relative_to, doc_id)
+    if region is None:
+        return  # silently skip if reference not found (param will be used as-is)
+    from avge_engine.geometry import compute_bounds
+    b = compute_bounds(region.outline)
+    bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
+    if bw < 1e-10:
+        bw = 1e-10
+    if bh < 1e-10:
+        bh = 1e-10
+    # Transform spatial params only if they exist
+    for key in ("x", "y", "width", "depth", "height"):
+        if key in params:
+            val = float(params[key])
+            if key == "x":
+                params[key] = bx + val * bw
+            elif key == "y":
+                params[key] = by + val * bh
+            elif key in ("width", "depth"):
+                params[key] = val * bw
+            elif key == "height":
+                params[key] = val * bh
 
 
 def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
