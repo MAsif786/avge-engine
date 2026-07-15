@@ -28,6 +28,7 @@ Thumbs.db
 .pytest_cache/
 *.log
 /tmp/
+.coverage
 
 # Generated artifacts
 output/*.png
