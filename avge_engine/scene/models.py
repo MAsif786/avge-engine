@@ -75,3 +75,4 @@ class DocumentNode(BaseModel):
     version: int = 1
     created_at: str = ""
     updated_at: str = ""
+    gradients: dict[str, dict] = {}  # named gradient definitions

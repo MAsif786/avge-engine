@@ -197,6 +197,24 @@ def create_tools(mcp):
                     )
                 return f"Preset '{preset}' applied to {len(target_ids)} region(s)"
 
+        # Resolve named gradient reference (defined via define_gradient)
+        if isinstance(fill_gradient, str):
+            # Try to resolve as a named gradient stored by define_gradient
+            doc = scene.get_document(doc_id)
+            if doc and fill_gradient in doc.gradients:
+                fill_gradient = doc.gradients[fill_gradient]
+            # else: treat as-is (might be a URL or hex)
+
+        # Normalize inline gradient: convert angle to x1/y1/x2/y2
+        if isinstance(fill_gradient, dict) and fill_gradient.get("type") == "linear":
+            ang = fill_gradient.pop("angle", None)
+            if ang is not None:
+                _rad = __import__("math").radians(ang)
+                fill_gradient["x1"] = round(0.5 - 0.5 * __import__("math").cos(_rad), 2)
+                fill_gradient["y1"] = round(0.5 - 0.5 * __import__("math").sin(_rad), 2)
+                fill_gradient["x2"] = round(0.5 + 0.5 * __import__("math").cos(_rad), 2)
+                fill_gradient["y2"] = round(0.5 + 0.5 * __import__("math").sin(_rad), 2)
+
         affected = scene.style_objects(
             ids=target_ids, document_id=doc_id,
             fill=fill, stroke=stroke,
@@ -315,7 +333,17 @@ def create_tools(mcp):
             grad["y1"] = round(0.5 - 0.5 * __import__("math").sin(rad), 2)
             grad["x2"] = round(0.5 + 0.5 * __import__("math").cos(rad), 2)
             grad["y2"] = round(0.5 + 0.5 * __import__("math").sin(rad), 2)
-        return f"Gradient '{name}': {__import__('json').dumps(grad)}"
+        # Store in document for reference by name
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+            doc = scene.get_document(doc_id)
+            if doc:
+                doc.gradients[name] = grad
+                scene._persist(doc_id)
+        except RuntimeError:
+            pass
+        return f"Gradient '{name}' defined. Reference in restyle via fill_gradient: \"{name}\""
 
     @mcp.tool(
         name="apply_line_hierarchy",

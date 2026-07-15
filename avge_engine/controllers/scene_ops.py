@@ -433,7 +433,7 @@ def create_tools(mcp):
         "pattern. Consolidates duplicate_region, duplicate_grid, duplicate_radial, "
         "and duplicate_group into one configurable tool.\n"
         "Patterns:\n"
-        "  single — one copy with offset/mirror/scale. Params: region_id, dx, dy, mirror_x, scale\n"
+        "  single — one copy with offset/mirror/scale. Params: region_id, dx, dy, mirror_x, mirror_axis_x, scale\n"
         "  linear — N copies in a row. Params: region_id, count, dx, dy\n"
         "  grid — N×M grid. Params: region_id, columns, rows, spacing_x, spacing_y\n"
         "  radial — circular array. Params: region_id, count, center_x, center_y, radius\n"
@@ -458,6 +458,8 @@ def create_tools(mcp):
         rotate_copies: bool = True,
         mirror_x: bool = False,
         mirror_y: bool = False,
+        mirror_axis_x: float | None = None,
+        mirror_axis_y: float | None = None,
         scale: float = 1.0,
         rotate: float = 0.0,
         shadow_mode: bool = False,
@@ -481,6 +483,9 @@ def create_tools(mcp):
             start_angle: Starting angle degrees (radial pattern).
             rotate_copies: Rotate copies to face center (radial pattern).
             mirror_x, mirror_y: Mirror across axis.
+            mirror_axis_x: Fixed X position for mirror axis (e.g. 0.5 = canvas center).
+                Defaults to the region's own center if omitted.
+            mirror_axis_y: Fixed Y position for mirror axis.
             scale: Uniform scale.
             rotate: Rotation degrees.
             shadow_mode: Auto-style as shadow (darkened, no stroke, z behind).
@@ -543,6 +548,7 @@ def create_tools(mcp):
                     offset_x=dx, offset_y=dy,
                     scale=scale, rotate=rotate,
                     mirror_x=mirror_x, mirror_y=mirror_y,
+                    mirror_axis_x=mirror_axis_x, mirror_axis_y=mirror_axis_y,
                     shadow_mode=shadow_mode, z_index=resolved_z,
                 )
                 created.append(dup.id)
