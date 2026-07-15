@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="800" height="800"
+     viewBox="0 0 800 800">
+  <rect width="100%" height="100%" fill="#F5F0E8"/>
+    <polygon points="195.7128,272 168,288 168,408 195.7128,392" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,472 0,488 0,608 0,592" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="21.4368,592 0,608 0,728 21.4368,712" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="367.8472,392 340.1344,408 340.1344,528 367.8472,512" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,568 0,584 0,704 0,688" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,280 0,296 0,416 0,400" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="367.8464,280 340.1336,296 340.1336,416 367.8464,400" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="367.8464,568 340.1336,584 340.1336,704 367.8464,688" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="140.2872,272 140.2872,392 168,408 168,288" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,472 0,592 0,608 0,488" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,592 0,712 0,728 0,608" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="312.4216,392 312.4216,512 340.1344,528 340.1344,408" fill="#666" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,568 0,688 0,704 0,584" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,280 0,400 0,416 0,296" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="312.4208,280 312.4208,400 340.1336,416 340.1336,296" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="312.4208,568 312.4208,688 340.1336,704 340.1336,584" fill="#8B4513" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="367.8464,320 21.436,520 21.436,568 367.8464,368" fill="#D4A868" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="0,400 0,448 21.436,568 21.436,520" fill="#D4A868" stroke="#333333" stroke-width="2.4"/>
+    <polygon points="160,200 0,400 21.436,520 367.8464,320" fill="#D4A868" stroke="#333333" stroke-width="2.4"/>
+</svg>

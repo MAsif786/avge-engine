@@ -845,29 +845,67 @@ def _do_surface_detail(scene, doc_id: str, params: dict) -> str:
 
 
 def _resolve_relative_box(scene, doc_id, relative_to, params):
-    """Transform isometric_box params from 0-1 relative to a parent region."""
+    """Transform isometric_box params from 0-1 within a parent region's face.
+
+    For a 4-point face (isometric box face), uses bilinear interpolation
+    within the quadrilateral — so (0,0) = back vertex, (1,0) = left vertex,
+    (1,1) = front vertex, (0,1) = right vertex.
+    For non-quadrilateral faces, falls back to bounding box mapping.
+    """
     region = scene.get_region(relative_to, doc_id)
     if region is None:
-        return  # silently skip if reference not found (param will be used as-is)
+        return
     from avge_engine.geometry import compute_bounds
-    b = compute_bounds(region.outline)
-    bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
-    if bw < 1e-10:
-        bw = 1e-10
-    if bh < 1e-10:
-        bh = 1e-10
-    # Transform spatial params only if they exist
-    for key in ("x", "y", "width", "depth", "height"):
-        if key in params:
-            val = float(params[key])
-            if key == "x":
-                params[key] = bx + val * bw
-            elif key == "y":
-                params[key] = by + val * bh
-            elif key in ("width", "depth"):
-                params[key] = val * bw
-            elif key == "height":
-                params[key] = val * bh
+    outline = region.outline
+    # Bilinear interpolation within a 4-point quadrilateral
+    if len(outline) == 4:
+        # Reorder: assume clockwise/counterclockwise order,
+        # map as top→left→bottom→right
+        c0, c1, c2, c3 = outline  # back, left, front, right
+        def _bilerp(rx, ry):
+            top_x = c0[0] + (c1[0] - c0[0]) * rx
+            top_y = c0[1] + (c1[1] - c0[1]) * rx
+            bot_x = c3[0] + (c2[0] - c3[0]) * rx
+            bot_y = c3[1] + (c2[1] - c3[1]) * rx
+            return (top_x + (bot_x - top_x) * ry,
+                    top_y + (bot_y - top_y) * ry)
+        if "x" in params:
+            rx = float(params["x"])
+            ry = float(params.get("y", 0.5))
+            px, py = _bilerp(rx, ry)
+            params["x"] = round(px, 6)
+            params["y"] = round(py, 6)
+        # Scale width/depth/height by bbox (these aren't position-dependent)
+        b = compute_bounds(outline)
+        bw, bh = b["w"], b["h"]
+        if bw < 1e-10:
+            bw = 1e-10
+        if bh < 1e-10:
+            bh = 1e-10
+        for key in ("width", "depth"):
+            if key in params:
+                params[key] = float(params[key]) * bw
+        if "height" in params:
+            params["height"] = float(params["height"]) * bh
+    else:
+        # Fallback: bounding box with bottom-up y
+        b = compute_bounds(outline)
+        bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
+        if bw < 1e-10:
+            bw = 1e-10
+        if bh < 1e-10:
+            bh = 1e-10
+        for key in ("x", "y", "width", "depth", "height"):
+            if key in params:
+                val = float(params[key])
+                if key == "x":
+                    params[key] = bx + val * bw
+                elif key == "y":
+                    params[key] = (by + bh) - val * bh
+                elif key in ("width", "depth"):
+                    params[key] = val * bw
+                elif key == "height":
+                    params[key] = val * bh
 
 
 def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
