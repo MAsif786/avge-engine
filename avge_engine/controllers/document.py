@@ -23,6 +23,7 @@ def create_tools(mcp):
         height: int = 1000,
         unit: str = "px",
         background: str = "#FFFFFF",
+        fill_gradient: Any | None = None,
         name: str = "",
     ) -> str:
         """Create a new vector document / canvas.
@@ -32,7 +33,6 @@ def create_tools(mcp):
             height: Canvas height in pixels (100–4000, default 1000).
             unit: Unit of measurement ("px", "in", "mm", "cm").
             background: Background hex color (default "#FFFFFF").
-            name: Optional human-readable name for identification.
         """
         errs = validate_input("create_document", {
             "width": width, "height": height, "unit": unit, "background": background,
@@ -41,12 +41,22 @@ def create_tools(mcp):
             return f"Validation error: {'; '.join(errs)}"
 
         scene = get_graph()
+
+        # Resolve gradient background
+        import json as _json
+        bg_resolved = background
+        if fill_gradient is not None:
+            if isinstance(fill_gradient, str):
+                bg_resolved = _json.loads(fill_gradient)
+            else:
+                bg_resolved = fill_gradient
+
         try:
             doc = scene.create_document(
                 width=max(100, min(width, 4000)),
                 height=max(100, min(height, 4000)),
                 unit=unit,
-                background=background,
+                background=bg_resolved,
                 name=name,
             )
             set_active_doc(doc.id)
