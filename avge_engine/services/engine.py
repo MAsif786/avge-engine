@@ -109,7 +109,7 @@ def load_design_guidelines() -> str:
     global DESIGN_GUIDELINES_PATH
     if DESIGN_GUIDELINES_PATH is None:
         DESIGN_GUIDELINES_PATH = (
-            Path(__file__).resolve().parent.parent.parent / "design-guidelines.md"
+            Path(__file__).resolve().parent.parent.parent / "docs" / "design-guidelines.md"
         )
     if DESIGN_GUIDELINES_PATH.exists():
         return DESIGN_GUIDELINES_PATH.read_text()
