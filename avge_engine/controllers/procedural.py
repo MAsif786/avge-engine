@@ -67,8 +67,11 @@ def create_tools(mcp):
         "    tail_length, tail_width, rx (corner radius), fill, stroke\n"
         "    💡 Creates a region — add text inside with create_text.\n"
         "  isometric_box — Generate 3 visible faces of an isometric 3D box.\n"
-        "    Params: x, y, width, depth, height, angle, top_fill, left_fill, right_fill\n"
-        "    💡 One gold bar = 1 tool call instead of 12+ for 3 manual faces.",
+        "    Params: x, y, width, depth, height, angle, fill, top_fill, left_fill, right_fill,\n"
+        "      skip_faces (e.g. [\"top\"] for hidden leg faces), shadow (bool),\n"
+        "      shadow_opacity (default 0.12), z_index, opacity, layer\n"
+        "    Coordinate system: (x,y)=top vertex, width=left-down, depth=right-down, height=down\n"
+        "    💡 One gold bar = 1 call. Table leg: skip_faces=[\"top\"], shadow=true",
     )
     def generate_shape(
         pattern: PATTERNS,
