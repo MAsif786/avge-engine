@@ -25,6 +25,8 @@ def fit_curves(
     closed: bool = True,
     smoothness: float = 0.5,
     tensions: list[float] | None = None,
+    handle_in: list[tuple[float, float]] | None = None,
+    handle_out: list[tuple[float, float]] | None = None,
 ) -> list[list[tuple[float, float]]]:
     """
     Fit cubic Bézier curves to a coarse point outline.
@@ -36,6 +38,10 @@ def fit_curves(
         True for closed loop, False for open path.
     smoothness : float, 0.0–1.0
         Controls tangent scale. 0.0 = polygonal, 1.0 = very smooth.
+    handle_in, handle_out : list of (dx, dy) or None
+        Per-point Bézier handle vectors. When provided, they override
+        the Catmull-Rom tangent computation. Each entry is a relative
+        offset from the anchor point. Must match outline length.
 
     Returns
     -------
@@ -47,6 +53,10 @@ def fit_curves(
         # Degenerate: return a straight line segment
         return [[outline[0], outline[0], outline[1], outline[1]]]
 
+    # When explicit Bézier handles are provided, use them directly
+    if handle_in is not None and handle_out is not None:
+        return _fit_with_handles(outline, handle_in, handle_out, closed)
+
     points = np.array(outline, dtype=np.float64)
     n = len(points)
     if tensions is not None:
@@ -57,6 +67,51 @@ def fit_curves(
         return _fit_closed_ppt(points, tens_arr, n)
     else:
         return _fit_open_ppt(points, tens_arr, n)
+
+
+def _fit_with_handles(
+    outline: list[tuple[float, float]],
+    handle_in: list[tuple[float, float]],
+    handle_out: list[tuple[float, float]],
+    closed: bool,
+) -> list[list[tuple[float, float]]]:
+    """Build cubic Bézier segments from explicit per-point handles.
+
+    For each segment from outline[i] to outline[i+1]:
+      cp0 = outline[i]
+      cp1 = outline[i] + handle_out[i]
+      cp2 = outline[i+1] - handle_in[i+1]
+      cp3 = outline[i+1]
+    """
+    n = len(outline)
+    segments: list[list[tuple[float, float]]] = []
+
+    if closed:
+        for i in range(n):
+            p0 = outline[i]
+            p1 = outline[(i + 1) % n]
+            ho = handle_out[i]
+            hi = handle_in[(i + 1) % n]
+            segments.append([
+                (_r(p0[0]), _r(p0[1])),
+                (_r(p0[0] + ho[0]), _r(p0[1] + ho[1])),
+                (_r(p1[0] - hi[0]), _r(p1[1] - hi[1])),
+                (_r(p1[0]), _r(p1[1])),
+            ])
+    else:
+        for i in range(n - 1):
+            p0 = outline[i]
+            p1 = outline[i + 1]
+            ho = handle_out[i]
+            hi = handle_in[i + 1]
+            segments.append([
+                (_r(p0[0]), _r(p0[1])),
+                (_r(p0[0] + ho[0]), _r(p0[1] + ho[1])),
+                (_r(p1[0] - hi[0]), _r(p1[1] - hi[1])),
+                (_r(p1[0]), _r(p1[1])),
+            ])
+
+    return segments
 
 
 def _fit_closed(

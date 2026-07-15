@@ -24,16 +24,23 @@ type Point2D = tuple[float, float]
 class CurveConstraints:
     """Geometric constraints for curve fitting.
 
-    Per-point smoothness: when  is provided, each outline point
+    Per-point smoothness: when tensions is provided, each outline point
     gets its own tension value (0.0=sharp corner, 0.5=default, 1.0=very
     smooth). This lets a single outline mix sharp chin points with round
     cheek points, or angular shoulders with flowing waist curves.
+
+    Bézier handles: when handle_in/handle_out are provided, they override
+    the Catmull-Rom tension-based tangent computation entirely. Each entry
+    is a (dx, dy) vector relative to the anchor point, giving precise
+    control over curve shape at each vertex. Must match outline length.
     """
 
     smoothness: float = 0.5
     closed: bool = True
     corner_style: str = "round"
     tensions: tuple[float, ...] | None = None
+    handle_in: tuple[tuple[float, float], ...] | None = None
+    handle_out: tuple[tuple[float, float], ...] | None = None
 
     def __post_init__(self):
         object.__setattr__(self, "smoothness", max(0.0, min(1.0, self.smoothness)))
@@ -42,6 +49,7 @@ class CurveConstraints:
         if self.tensions is not None:
             n = tuple(max(0.0, min(1.0, t)) for t in self.tensions)
             object.__setattr__(self, "tensions", n)
+        # Handle tuples don't need clamping — they're raw vectors
 
 
 @dataclass(frozen=True)
