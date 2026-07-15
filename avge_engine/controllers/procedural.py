@@ -906,5 +906,32 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
         except (ValueError, RuntimeError) as e:
             return f"Error at face {fname}: {e}"
 
+    # ── Optional ground shadow ──
+    if params.get("shadow") or params.get("shadow_opacity"):
+        import math as _m
+        w = params.get("width", 0.2)
+        d = params.get("depth", 0.12)
+        h = params.get("height", 0.08)
+        ang = _m.radians(params.get("angle", 30.0))
+        # Bottom center = top vertex + half width offset + half depth offset + height
+        scx = round(params.get("x", 0.35) + (-_m.cos(ang) * w + _m.cos(ang) * d) / 2, 6)
+        scy = round(params.get("y", 0.35) + (_m.sin(ang) * w + _m.sin(ang) * d) / 2 + h, 6)
+        sr = round(max(w, d) * _m.cos(ang) * 0.5, 6)
+        sr2 = round(max(w, d) * _m.cos(ang) * 0.15, 6)
+        if sr > 0.001 and sr2 > 0.001:
+            sop = params.get("shadow_opacity", 0.12)
+            shadow_rid = f"{prefix}_shadow"
+            try:
+                scene.create_ellipse(
+                    scx, scy, sr, ry=sr2,
+                    document_id=doc_id, region_id=shadow_rid,
+                    layer=layer, z_index=z_base - 1,
+                    fill="#000000", stroke="none",
+                    opacity=sop, blend_mode="multiply",
+                )
+                created.insert(0, shadow_rid)
+            except (ValueError, RuntimeError):
+                pass  # shadow is optional
+
     return (f"isometric_box: {len(created)} face(s) "
             f"({', '.join(f['face'] for f in faces)})")
