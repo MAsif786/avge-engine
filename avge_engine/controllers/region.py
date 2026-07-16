@@ -91,34 +91,14 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="create_region",
-        description="Create a vector region from a coarse point outline. "
+        description="Create a vector region from an outline defined by points. "
         "The engine fits smooth Bézier curves to your points. "
-        "⚠️ Coordinates MUST be in normalized 0.0–1.0 space "
-        "((0,0)=top-left, (1,1)=bottom-right). Passing pixel "
-        "coordinates (0-1000) will be rejected with an error. "
-        "Edit incrementally: add regions here, use style_objects "
-        "to recolor, delete_region to remove — never rebuild "
-        "the whole document from scratch. "
-        "📏 Proportion tip: an object's canvas footprint must "
-        "match its real-world size. A desk is ~90%+ of canvas "
-        "width; headphones on it are ~15–25%; a bottle ~6–8%. "
-        "If it sits on a surface, its width ≤ ¼ of the surface. "
-        "See resource avge://skill/design-guidelines Rule 5. "
-        "⚠️ When adding a new object to a scene with existing objects, "
-        "first check existing object sizes via describe_scene and match "
-        "the perspective convention already established (check existing "
-        "outlines to choose top-down vs. front-elevation). Objects resting "
-        "on a surface must share their contact edge y with the surface's "
-        "top edge — check the surface's bounds first to avoid a gap. "
-        "Smoothness guidance (per-region): "
-        "- Geometric/polygonal (houses, stars, rectangles): smoothness=0.0–0.1 "
-        "- Mixed rigid/organic (cup body, tree trunk, saucer): smoothness=0.2–0.5 "
-        "- Organic/curved (foliage, faces, circles): smoothness=0.6–0.8 "
-        "- Smoothness=0.5 is the default — adjust per-region per the above. "
-        "For filled shapes, prefer two-tone shading "
-        "(a base fill + a darker adjacent region along one edge) "
-        "over a single flat fill to imply depth. See resource "
-        "avge://skill/design-guidelines for full conventions.",
+        "⚠️ Coordinates MUST be normalized 0.0–1.0 "
+        "((0,0)=top-left, (1,1)=bottom-right). "
+        "💡 Refine incrementally: add regions here, use "
+        "``restyle`` to recolor, ``edit_region`` to nudge points — "
+        "never rebuild from scratch. "
+        "Smoothness guidance in resource avge://skill/design-guidelines.",
     )
     def create_region(
         outline: list[list[float]] | None = None,
@@ -427,13 +407,12 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="edit_region",
-        description="Modify an existing region's outline, smoothness, style, z_index, "
-        "blend_mode, clip_to, layer, or shape. Only provided fields are changed; "
-        "omitted fields keep their values. This is the primary refinement "
-        "tool — use it to nudge existing shapes rather than deleting and "
-        "recreating them. "
-        "💡 Batch z-index: pass ids=[...] with z_index=N to reorder multiple "
-        "regions at once (e.g. ids=['arm_L', 'arm_R'], z_index=5).",
+        description="Modify an existing region's outline, style, z_index, or shape. "
+        "Only provided fields are changed; omitted fields keep their values. "
+        "💡 Single-point editing: use ``point_index`` + ``point_coords`` "
+        "to nudge one vertex without resending the whole outline. "
+        "💡 Batch z-index: pass ids=[...] with z_index=N to reorder "
+        "multiple regions at once.",
     )
     def edit_region(
         region_id: str | None = None,
@@ -687,11 +666,10 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="create_text",
-        description="Create a text label on the canvas. "
-        "💡 Use for brand names, labels, numerals, dial markings, signage. "
-        "Text renders as SVG <text> at the given position. "
-        "Font size is relative to canvas height (0.04 = 4% of height). "
-        "Use transform_objects post-hoc to rotate text. "
+        description="Create a text label. "
+        "``y`` is the text **baseline** (bottom of text, not center). "
+        "Font size is relative to canvas height (0.04 = 4%). "
+        "💡 Isometric text: ``skew_y=-30`` for right face, ``30`` for left. "
         "Available fonts for manga/manhwa/comic styling:\n"
         "  Bradley Hand Bold — hand-lettered, closest to English manga\n"
         "  Marker Felt — marker pen style, good for effects\n"

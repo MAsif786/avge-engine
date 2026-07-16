@@ -54,7 +54,8 @@ def create_tools(mcp):
         "  exact — set fill/stroke/opacity directly (like style_objects)\n"
         "  hsl_offset — shift each region's current color by HSL delta\n"
         "  palette_swap — replace one exact fill color with another\n"
-        "Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'",
+        "Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'\n"
+        "💡 restyle(selector={'group_name':'cup'}, fill='#C94C4C') — recolor group in 1 call",
     )
     def restyle(
         selector: dict | None = None,

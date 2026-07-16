@@ -20,6 +20,7 @@ from avge_engine import __version__, __tool_set_version__
 from avge_engine.services.engine import (
     load_design_guidelines,
     SMOOTHNESS_GUIDANCE,
+    TOOL_MAP,
 )
 
 # ── FastMCP server instance ───────────────────────────────────────
@@ -40,27 +41,31 @@ avge://skill/design-guidelines Rule 5 for full guidance.
 
 {SMOOTHNESS_GUIDANCE}
 
+{TOOL_MAP}
+
 📝 **Workflow — edit the same document, never rebuild from scratch:**
 1. `create_document` once with a `name` for your scene.
-2. `create_region` to add shapes.
-3. `style_objects` to recolor existing regions — no need to delete and recreate.
+2. `create_region` / `create_primitive` / `create_text` to add shapes.
+3. `restyle` to recolor existing regions — no need to delete and recreate.
 4. `describe_scene` / `render_preview` to check and iterate.
 5. `checkpoint` before risky edits so `restore` can undo multiple steps.
 6. `delete_region` to remove unwanted geometry — avoids full rebuilds.
 
 🔄 **Multi-part objects (e.g. cups, books, characters):**
 When an object has multiple regions (a cup body + handle + shadow, or a book
-with cover + pages + spine), first `group_regions` to collect them under a
-name, then use `transform_objects` on the region IDs to resize, reposition,
-or re-angle everything together. Without grouping you'd need to transform
-each region individually — `group_regions` + `transform_objects` handles
-resize and repositioning in a single step.
+with cover + pages + spine), first `edit_group(action="create", group_name="...")`
+to collect them under a name, then `transform_objects(group_name="...")` to
+resize, reposition, or re-angle everything together.
 
 👤 **Character design (see avge://skill/design-guidelines Rule 8):**
 Before drawing any human character, first ask: what style (anime/realistic/cartoon/chibi)?
 Each style has different head-to-body ratios, eye placement, and feature detail.
 Build in order: face → hair → eyes → brows → nose → mouth → ears → neck + torso → arms → legs.
 Use describe_scene between steps to verify positions. Checkpoint before risky edits.
+
+⚡ **Batch patterns (execute ALL tools in one call):**
+  batch(ops=[{{"tool":"create_region", ...}}, {{"tool":"restyle", ...}}])
+  💡 Create + style in one call instead of two.
 """,
 )
 

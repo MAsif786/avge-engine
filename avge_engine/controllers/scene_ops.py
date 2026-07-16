@@ -618,9 +618,9 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="add_shading",
-        description="Derive directional highlight + core shadow for a region. "
-        "Creates two copies offset perpendicular to the light direction, "
-        "auto-colored via HSL lightness offset.",
+        description="Add directional shading to a region. "
+        "Creates highlight + shadow copies offset perpendicular to light direction, "
+        "auto-colored via HSL. IDs use timestamp suffix — safe to call in parallel.",
     )
     def add_shading(
         region_id: str,

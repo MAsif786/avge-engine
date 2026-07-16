@@ -116,6 +116,36 @@ def load_design_guidelines() -> str:
     return "# Design Guidelines\n\n(See design-guidelines.md — file not found on this server.)"
 
 
+# ── Centralized tool map — single source of truth ────────────────
+
+TOOL_MAP = """📋 TOOL MAP (43 tools — all available in batch):
+
+🗂 Document:   create_document · list_documents · load_document ·
+               delete_document · set_background
+✏️  Create:     create_region · create_primitive · create_curve ·
+               create_text · insert_image · import_svg_path
+🔧 Edit:       edit_region · edit_regions · delete_region ·
+               get_region · copy_element
+🔄 Transform:  transform_objects · duplicate · boolean_operation
+🎨 Style:      restyle · add_shading · add_bumps ·
+               generate_palette · define_gradient ·
+               apply_line_hierarchy · compare_style_consistency
+👥 Groups:     edit_group · list_groups · list_layers · shift_layer_z
+🔷 Procedural: generate_shape (16 patterns — see tool description)
+👁 View:       describe_scene · render_preview · render_diff ·
+               checkpoint_diff · export_svg
+📜 History:    checkpoint · restore · get_history
+⚡ Batch:      batch (wraps ALL tools above)
+
+⚠️ DEPRECATED — use new names:
+  style_objects     → restyle(selector={...}, mode="exact")
+  group_regions     → edit_group(action="create", ...)
+  ungroup_regions   → edit_group(action="delete", ...)
+  duplicate_region  → duplicate(pattern="single", ...)
+  duplicate_grid    → duplicate(pattern="grid", ...)
+  duplicate_radial  → duplicate(pattern="radial", ...)
+"""
+
 # ── Tool descriptions with §4.5d smoothness guidance ─────────────
 
 SMOOTHNESS_GUIDANCE = """

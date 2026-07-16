@@ -135,8 +135,8 @@ def create_tools(mcp):
     @mcp.tool(
         name="render_preview",
         description="Get a visual PNG preview URL for the current canvas. "
-        "Returns a URL to the API's preview endpoint — open it to view "
-        "the rendered image. Use this to visually inspect your work.",
+        "💡 Pass region_id to render just one region for inspection.\n"
+        "Also: /preview/{doc_id}.png (PNG) and /preview/{doc_id}.svg (SVG).",
     )
     def render_preview(
         scale: float = 1.0,

@@ -109,8 +109,8 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="batch",
-        description="Execute multiple operations in a single call. Each op is a dict "
-        "with a 'tool' key. ALL tools are supported in batch.\n"
+        description="Execute multiple operations in a single call. "
+        "**ALL** registered tools work in batch — not just the ones listed.\n"
         "  create_region: outline, fill, stroke, smoothness, closed, z_index\n"
         "  create_primitive: shape (rect/ellipse/line), fill, stroke, stroke_width\n"
         "  create_curve: points, stroke, stroke_width, smoothness\n"
