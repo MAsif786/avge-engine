@@ -714,6 +714,8 @@ def create_tools(mcp):
         rotate: float = 0.0,
         letter_spacing: float = 0.0,
         opacity: float = 1.0,
+        skew_x: float = 0.0,
+        skew_y: float = 0.0,
         groups: list[str] | None = None,
         background_box: dict | None = None,
     ) -> str:
@@ -742,6 +744,9 @@ def create_tools(mcp):
             letter_spacing: Letter spacing / tracking in normalized units
                 (0.0 = default, 0.05 = wide corporate tracking).
             opacity: Text opacity 0.0–1.0.
+            skew_x: Skew along X axis in degrees (matches isometric slope).
+                For right face text use skew_y=-30, for left face skew_y=30.
+            skew_y: Skew along Y axis in degrees.
             groups: Optional list of group names to add this region to.
             background_box: Dict to auto-create a rect behind the text.
                 Keys: fill (default "#FFF"), padding (default 0.01), rx (default 0.005),
@@ -762,6 +767,7 @@ def create_tools(mcp):
                 fill=fill, font_size=font_size, font_family=font_family,
                 text_anchor=text_anchor, font_weight=font_weight, font_style=font_style,
                 rotate=rotate, letter_spacing=letter_spacing, opacity=opacity,
+                skew_x=skew_x, skew_y=skew_y,
             )
             if groups:
                 for g in groups:

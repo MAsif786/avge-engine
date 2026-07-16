@@ -134,6 +134,13 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
             t_parts.append(f"rotate({_fmt(rot)},{_fmt(cx * canvas_w)},{_fmt(cy * canvas_h)})")
         if tx != 0 or ty != 0:
             t_parts.append(f"translate({_fmt(tx * canvas_w)},{_fmt(ty * canvas_h)})")
+        # Skew from primitive (for isometric perspective text)
+        skx = region.primitive.get("skew_x", 0) if region.primitive else 0
+        sky = region.primitive.get("skew_y", 0) if region.primitive else 0
+        if skx:
+            t_parts.append(f"skewX({_fmt(skx)})")
+        if sky:
+            t_parts.append(f"skewY({_fmt(sky)})")
         if t_parts:
             parts.append(f' transform="{" ".join(t_parts)}"')
 
