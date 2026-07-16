@@ -19,33 +19,35 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 ## Features
 
 - **Normalized coordinates** — 0.0–1.0 canvas, no pixel math
-- **Procedural geometry** — radial spread, offset outlines, guide lines, building chains, speech bubbles, bursts, armature skeletons, foreshortening
+- **Isometric box** — 3-face box with z-ordering, shadows, per-face styling, `top_slant` for slanted surfaces, and `attach` pattern for anchor-to-anchor placement
+- **Procedural geometry** — radial spread, offset outlines, guide lines, segmented chains, speech bubbles, bursts, armature skeletons, foreshortening, surface detail
 - **Armature skeletons** — node-edge graphs with tapered segments, junction separation, filleted V-gaps, curved Catmull-Rom chains, and unary union merging
 - **Boolean operations** — union, intersect, subtract, xor with Ramer-Douglas-Peucker simplification
 - **HSL shading** — auto highlight + shadow from light direction
-- **Primitives** — rects (including tapered/trapezoid), ellipses, lines, polylines, arcs, polygons, stars
-- **Text + images** — SVG text with font family/style/anchor, embedded images via `<image>`
-- **Gradient backgrounds** — linear and radial gradient definitions
-- **Style system** — fill, stroke, stroke-width, opacity, blend modes, dash patterns
+- **Primitives** — rects (including tapered/trapezoid), ellipses, lines, polylines, arcs, polygons, stars, and isometric boxes
+- **Text + images** — SVG text with font family/style/anchor/letter-spacing/opacity/skew for isometric perspective, embedded images via `<image>`
+- **Gradient backgrounds** — linear and radial gradient definitions, inline in `create_document` or via `set_background`
+- **Style system** — fill, stroke, stroke-width, opacity, blend modes, dash patterns, rgba/hsla color support
 - **Batch operations** — execute multiple tools in one call, edit multiple regions with per-region transforms
 - **Palette generation** — HSL harmony presets (complementary, triadic, analogous, etc.)
+- **Named gradients** — define once with `define_gradient`, reference by name in `restyle`
 - **Cross-document copy** — copy elements between documents with offset
 - **SVG arc support** — A/a commands in `import_svg_path` (elliptical arcs with sweep/large-arc flags)
 - **Relative positioning** — place elements relative to a parent region's bounding box
 - **PNG rasterization** — via rsvg-convert (librsvg) with Unicode/emoji font support
 - **Per-document tracking** — checkpoint/restore history, tool usage stats
 
-## 42+ MCP Tools
+## 43+ MCP Tools
 
 | Category | Tools |
 |----------|-------|
 | **Document** | `create_document`, `list_documents`, `set_background`, `get_document_stats` |
 | **Create** | `create_region`, `create_primitive`, `create_curve`, `create_text`, `insert_image`, `import_svg_path` |
-| **Edit** | `edit_region` (point-level nudge), `edit_regions` (batch transforms), `delete_region`, `copy_element` |
+| **Edit** | `edit_region` (point-level nudge), `edit_regions` (batch transforms), `delete_region`, `copy_element`, `get_region` (inspect outline) |
 | **Transform** | `transform_objects`, `duplicate`, `boolean_operation`, `mirror_region` |
 | **Style** | `restyle`, `add_shading`, `generate_palette`, `define_gradient`, `apply_line_hierarchy`, `compare_style_consistency` |
 | **Groups** | `group_regions`, `ungroup_regions` |
-| **Procedural** | `generate_shape` (14+ patterns: armature, segmented_chain, radial_spread, speech_bubble, create_burst, foreshorten, etc.) |
+| **Procedural** | `generate_shape` (15 patterns: armature, segmented_chain, radial_spread, speech_bubble, create_burst, isometric_box, attach, ...) |
 | **View** | `render_preview`, `describe_scene`, `checkpoint_diff`, `render_diff` |
 | **History** | `checkpoint`, `restore`, `get_history`, `batch` |
 
@@ -53,12 +55,51 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 
 All coordinates are normalized 0.0–1.0 where `(0, 0)` = top-left and `(1, 1)` = bottom-right.
 
-### Relative Positioning
-
-Create tools accept `relative_to` — pass a region ID and coordinates become 0–1 fractions of that region's bounding box:
+### Isometric Box — 5 calls for a table with 4 legs
 
 ```json
-{"tool": "create_primitive", "shape": {"type":"ellipse","cx":0.5,"cy":0.5,"rx":0.1}, "relative_to": "belt_panel"}
+// Frame — one call
+{"pattern": "isometric_box", "params": {"new_prefix": "frame",
+  "x": 0.35, "y": 0.35, "width": 0.35, "depth": 0.22, "height": 0.05,
+  "fill": "#A0522D", "z_index": 5, "shadow": true}}
+
+// Legs — attach by named anchor, zero coordinate math
+{"pattern": "attach", "params": {"parent": "frame_top",
+  "parent_anchor": "bottom_left", "child_anchor": "top_left_corner",
+  "width": 0.06, "depth": 0.06, "height": 0.15, "fill": "#666",
+  "flush": true, "z_index": 0}}
+
+{"pattern": "attach", "params": {"parent": "frame_top",
+  "parent_anchor": "bottom_right", "child_anchor": "top_right_corner",
+  "width": 0.06, "depth": 0.06, "height": 0.15, "fill": "#555",
+  "flush": true, "z_index": 0}}
+
+{"pattern": "attach", "params": {"parent": "frame_top",
+  "parent_anchor": "bottom_back_left", "child_anchor": "top_left_corner",
+  "width": 0.06, "depth": 0.06, "height": 0.15, "fill": "#777",
+  "flush": true, "z_index": 0}}
+
+{"pattern": "attach", "params": {"parent": "frame_top",
+  "parent_anchor": "bottom_back_right", "child_anchor": "top_right_corner",
+  "width": 0.06, "depth": 0.06, "height": 0.15, "fill": "#888",
+  "flush": true, "z_index": 0}}
+```
+
+### Text with Isometric Perspective
+
+```json
+// Text skewed to match a right face (slope = -30°)
+{"tool": "create_text", "x": 0.25, "y": 0.55, "text": "THE BOOK",
+ "font_size": 0.025, "skew_y": -30, "fill": "#FFF", "font_weight": "bold"}
+```
+
+### Gradient by Name
+
+```json
+{"tool": "define_gradient", "name": "gold_top", "stops": [
+  {"offset": 0, "color": "#FFD700"}, {"offset": 1, "color": "#DAA520"}], "angle": 160}
+
+{"tool": "restyle", "fill_gradient": "gold_top", "selector": {"region_id": "panel_1"}}
 ```
 
 ## Architecture
@@ -78,6 +119,6 @@ avge_engine/
 - **Python 3.12** with FastMCP (MCP SDK)
 - **Normalized coordinates**, resolved at render time
 - **Catmull-Rom → cubic Bézier** curve fitting (deterministic, closed-form)
-- **SVG output** with text, images, gradient defs
+- **SVG output** with text, images, gradient defs, skew transforms
 - **PNG preview** via rsvg-convert with fontconfig/Unicode support
 - **JSON file persistence** per document

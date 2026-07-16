@@ -88,6 +88,35 @@ A detailed anime-style character head with layered hair, eyes, and shading.
 
 ---
 
+## Isometric Text — Book Cover
+
+Text skewed to match an isometric face using `skew_y`. The right face has a -30° slope, and text `skew_y: -30` makes it follow the parallelogram exactly.
+
+![Isometric Text](results/isotext.png)
+
+- **Techniques**: `skew_y` on `create_text` matches the face angle, `letter_spacing` for title tracking, `font_weight` for contrast
+- **Face angles**: right face = `skew_y: -30`, left face = `skew_y: 30`
+- Use `get_region` to inspect face coordinates before placing text
+
+<div align="right">[SVG](results/isotext.svg)</div>
+
+---
+
+## Isometric Box — Table with 5 Legs
+
+A procedural isometric table built entirely from `isometric_box` + `attach` patterns. No manual coordinate math — legs snap to frame corners by named anchor.
+
+![Isometric Table](results/attach5.png)
+
+- **1 frame + 5 legs = 6 calls**, zero coordinate calculations
+- **Techniques**: `isometric_box` for the frame, `attach` with `parent_anchor`/`child_anchor` for leg placement, `flush=true` for auto-coplanar slant
+- **Anchors**: `bottom_left`, `bottom_right`, `bottom_front`, `bottom_back_left`, `bottom_back_right`
+- **Style**: Per-leg fill colors, auto shadow, painter's-algorithm z-ordering
+
+<div align="right">[SVG](results/attach5.svg)</div>
+
+---
+
 ## What These Demonstrate
 
 | Capability | Example |
