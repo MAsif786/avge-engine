@@ -656,14 +656,18 @@ def create_tools(mcp):
             return "Error: add_shading requires a hex fill color"
         highlight = apply_hsl_offset(cur_fill, l_offset=intensity * 25, s_offset=-10)
         shadow = apply_hsl_offset(cur_fill, l_offset=-intensity * 30, s_offset=15)
+        import uuid as _uuid, time as _time
+        _seq = int(_time.time() * 1000) % 100000
         h_dup = scene.duplicate_region(
             region_id, document_id=doc_id,
+            new_region_id=f"{region_id}_highlight_{_seq}",
             offset_x=-dx, offset_y=-dy,
             fill=highlight, stroke=None,
             z_index=r.z_index + 1,
         )
         s_dup = scene.duplicate_region(
             region_id, document_id=doc_id,
+            new_region_id=f"{region_id}_shadow_{_seq}",
             offset_x=dx, offset_y=dy,
             fill=shadow, stroke=None,
             z_index=r.z_index - 1,

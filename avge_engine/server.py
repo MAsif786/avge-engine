@@ -100,3 +100,12 @@ def run_sse(host: str = "0.0.0.0", port: int = 8001) -> None:
     mcp.settings.host = host
     mcp.settings.port = port
     mcp.run(transport="sse")
+
+
+def run_streamable_http(host: str = "0.0.0.0", port: int = 8002) -> None:
+    """Run MCP server via Streamable HTTP transport (Antigravity-compatible)."""
+    mcp.settings.host = host
+    mcp.settings.port = port
+    # Antigravity expects the MCP endpoint at the path specified in serverUrl
+    mcp.settings.streamable_http_path = "/mcp"
+    mcp.run(transport="streamable-http")

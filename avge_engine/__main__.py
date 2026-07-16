@@ -4,6 +4,7 @@ Entry points for AVGE Engine M0b.
 Usage:
     python -m avge_engine mcp          # MCP server (stdio)
     python -m avge_engine mcp-sse      # MCP server (SSE on :8001)
+    python -m avge_engine mcp-http     # MCP server (Streamable HTTP on :8002 — Antigravity-compatible)
     python -m avge_engine api           # FastAPI HTTP server (:8000)
 """
 
@@ -26,6 +27,10 @@ def main() -> None:
     elif mode == "mcp-sse":
         from avge_engine.server import run_sse
         run_sse()
+
+    elif mode == "mcp-http":
+        from avge_engine.server import run_streamable_http
+        run_streamable_http()
 
     elif mode == "api":
         import uvicorn
