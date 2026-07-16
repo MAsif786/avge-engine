@@ -418,7 +418,12 @@ def create_tools(mcp):
         deleted = scene.delete_regions(doc_id, ids)
         if not deleted:
             return "No matching regions found to delete"
-        return f"Deleted {len(deleted)} region(s): {', '.join(deleted)}"
+        # Split into multiple lines to avoid output truncation
+        summary = f"Deleted {len(deleted)} region(s):"
+        lines = [summary]
+        for i in range(0, len(deleted), 8):
+            lines.append("  " + ", ".join(deleted[i:i+8]))
+        return "\n".join(lines)
 
     @mcp.tool(
         name="edit_region",
