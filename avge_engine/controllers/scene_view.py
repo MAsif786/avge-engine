@@ -81,6 +81,58 @@ def create_tools(mcp):
         return "\n".join(lines)
 
     @mcp.tool(
+        name="get_region",
+        description="Get a region's full outline coordinates, style, and primitive "
+        "data. Use this when you need exact point positions for editing — "
+        "e.g. adding a border to an isometric box face requires knowing its "
+        "actual parallelogram vertices, not just bounding boxes.",
+    )
+    def get_region(
+        region_id: str,
+        document_id: str | None = None,
+        decimals: int = 4,
+    ) -> str:
+        """Get a region's outline coordinates and properties.
+
+        Args:
+            region_id: ID of the region to inspect.
+            document_id: Document UUID (omit for active doc).
+            decimals: Rounding for coordinate output (default 4).
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        r = scene.get_region(region_id, doc_id)
+        if r is None:
+            return f"Error: Region '{region_id}' not found"
+
+        lines = [f"Region: {region_id}"]
+        lines.append(f"  Layer: {r.layer}  |  Z: {r.z_index}")
+
+        # Style
+        s = r.style
+        lines.append(f"  Fill: {s.fill}  |  Stroke: {s.stroke}  |  "
+                      f"Stroke width: {s.stroke_width}  |  Opacity: {s.opacity}")
+
+        # Primitive
+        if r.primitive:
+            lines.append(f"  Primitive: {r.primitive}")
+
+        # Outline
+        pts = r.outline
+        lines.append(f"  Outline: {len(pts)} point(s)")
+        for i, (px, py) in enumerate(pts):
+            lines.append(f"    [{i}] ({px:.{decimals}f}, {py:.{decimals}f})")
+
+        # Metadata
+        if r.metadata:
+            lines.append(f"  Metadata: {r.metadata}")
+
+        return "\n".join(lines)
+
+    @mcp.tool(
         name="render_preview",
         description="Get a visual PNG preview URL for the current canvas. "
         "Returns a URL to the API's preview endpoint — open it to view "
