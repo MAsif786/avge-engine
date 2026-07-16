@@ -15,7 +15,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="create_document",
         description="Create a new canvas. Must be called first — call once per scene, "
-        "then use create_region/style_objects to edit the same document "
+        "then use create_region/restyle to edit the same document "
         "incrementally. Never rebuild from scratch.",
     )
     def create_document(

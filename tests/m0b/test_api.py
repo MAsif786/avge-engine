@@ -81,21 +81,6 @@ class TestRegion:
         r = await client.post("/tools/create_region", json={"document_id": doc_id})
         assert r.status_code == 422  # validation error
 
-    async def test_style_objects(self, client, doc_id):
-        await client.post("/tools/create_region", json={
-            "outline": [[0, 0], [1, 0], [1, 1]],
-            "region_id": "r1",
-            "document_id": doc_id,
-        })
-        r = await client.post("/tools/style_objects", json={
-            "ids": ["r1"],
-            "document_id": doc_id,
-            "fill": "#00FF00",
-            "stroke_width": 0.02,
-        })
-        assert r.status_code == 200
-        assert r.json()["data"]["count"] == 1
-
 
 class TestDescribe:
     async def test_describe_scene(self, client, doc_id):

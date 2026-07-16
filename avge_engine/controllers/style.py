@@ -1,4 +1,4 @@
-"""Style controller — style_objects."""
+"""Style controller — restyle, add_shading, generate_palette, define_gradient."""
 from __future__ import annotations
 
 import json
@@ -47,11 +47,11 @@ def create_tools(mcp):
     @mcp.tool(
         name="restyle",
         description="Change the appearance of a selection of regions. "
-        "Consolidates style_objects, recolor_conditional, and recolor_palette "
+        "Consolidates recolor_conditional and recolor_palette "
         "into one tool. Select regions via ``selector``, then apply changes "
         "via ``mode``.\n"
         "Modes:\n"
-        "  exact — set fill/stroke/opacity directly (like style_objects)\n"
+        "  exact — set fill/stroke/opacity directly (directly)\n"
         "  hsl_offset — shift each region's current color by HSL delta\n"
         "  palette_swap — replace one exact fill color with another\n"
         "Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'\n"

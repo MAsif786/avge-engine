@@ -430,7 +430,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="duplicate",
         description="Make copies of a region or group according to a placement "
-        "pattern. Consolidates duplicate_region, duplicate_grid, duplicate_radial, "
+        "pattern. Consolidates "
         "and duplicate_group into one configurable tool.\n"
         "Patterns:\n"
         "  single — one copy with offset/mirror/scale. Params: region_id, dx, dy, mirror_x, mirror_axis_x, scale\n"

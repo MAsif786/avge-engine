@@ -90,7 +90,7 @@ def create_tools(mcp):
         # Add note about how to use results
         lines.append(
             ""
-            "Tip: pass the IDs to style_objects(fill='#NEWCOLOR', stroke=...) "
+            "Tip: pass the IDs to restyle(selector={'ids': ids}, fill='#NEWCOLOR') "
             "for palette-wide recolor, or transform_objects(dx=..., dy=...) "
             "to reposition."
         )

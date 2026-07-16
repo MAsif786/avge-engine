@@ -128,49 +128,6 @@ class DeleteRegionRequest(BaseModel):
     confirm: bool = False
 
 
-class DuplicateRegionRequest(BaseModel):
-    region_id: str
-    new_region_id: str | None = None
-    document_id: str
-    offset_x: float = 0.0
-    offset_y: float = 0.0
-    fill: str | None = None
-    stroke: str | None = None
-    stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
-    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
-    smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
-    z_index: int | None = None
-    mirror_x: bool = False
-    mirror_y: bool = False
-    mirror_axis_x: float | None = None
-    scale: float = 1.0
-    rotate: float = 0.0
-    shadow_mode: bool = False
-    count: int = 1
-    positions: list[list[float]] | None = None
-
-
-# ── Style ──────────────────────────────────────────────────────────
-
-class StyleObjectsRequest(BaseModel):
-    ids: list[str] | None = None
-    document_id: str
-    fill: str | None = None
-    stroke: str | None = None
-    stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
-    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
-    fill_gradient: Any = None
-    blend_mode: BLEND_MODES | None = None
-    clip_to: str | None = None
-    group_name: str | None = None
-    stroke_dasharray: str | None = None
-    fill_hsl_offset: dict | None = None
-    stroke_hsl_offset: dict | None = None
-    preset: str | None = None
-
-
-# ── Scene ops ──────────────────────────────────────────────────────
-
 class BooleanOpRequest(BaseModel):
     operation: BOOLEAN_OPS = "union"
     region_ids: list[str] = Field(min_length=2)
@@ -517,38 +474,6 @@ async def delete_region(req: DeleteRegionRequest):
     return ToolResponse(data={"affected": deleted, "count": len(deleted)})
 
 
-@app.post("/tools/duplicate_region", response_model=ToolResponse)
-async def duplicate_region(req: DuplicateRegionRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No document")
-    try:
-        dup = graph.duplicate_region(
-            region_id=req.region_id, new_region_id=req.new_region_id,
-            document_id=req.document_id,
-            offset_x=req.offset_x, offset_y=req.offset_y,
-            fill=req.fill, stroke=req.stroke,
-            stroke_width=req.stroke_width, opacity=req.opacity,
-            smoothness=req.smoothness, z_index=req.z_index,
-            mirror_x=req.mirror_x, mirror_y=req.mirror_y,
-            blend_mode=req.blend_mode, layer=req.layer,
-            scale=req.scale, rotate=req.rotate,
-        )
-        return ToolResponse(data={"region_id": dup.id, "source": req.region_id})
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-
-class CopyElementRequest(BaseModel):
-    region_id: str | None = None
-    group: str | None = None
-    target_document_id: str
-    source_document_id: str | None = None
-    new_region_id: str | None = None
-    offset_x: float = 0.0
-    offset_y: float = 0.0
-
 
 @app.post("/tools/copy_element", response_model=ToolResponse, tags=["copy_element"])
 async def copy_element(req: CopyElementRequest):
@@ -755,24 +680,6 @@ async def create_curve(req: CreateCurveRequest):
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-
-@app.post("/tools/style_objects", response_model=ToolResponse)
-async def style_objects(req: StyleObjectsRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    doc_id = req.document_id
-
-    # Resolve group_name
-    ids = req.ids
-    if req.group_name is not None:
-        members = graph.get_group(req.group_name, doc_id)
-        if not members:
-            raise HTTPException(status_code=404, detail=f"Group '{req.group_name}' not found")
-        ids = [m["id"] for m in members]
-    elif not ids:
-        raise HTTPException(status_code=400, detail="No region IDs provided")
 
     # Resolve fill from gradient
     import json as _json
