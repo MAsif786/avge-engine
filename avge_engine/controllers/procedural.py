@@ -23,6 +23,7 @@ PATTERNS = Literal[
     "foreshorten",
     "surface_detail",
     "isometric_box",
+    "attach",
 ]
 
 
@@ -74,7 +75,14 @@ def create_tools(mcp):
         "    💡 relative_to positions legs at visual 0-1 of face bbox.\n"
         "      leg at (0.12,0.85) = front-left, (0.85,0.76) = front-right,\n"
         "      (0.12,0.15) = back-left, (0.85,0.24) = back-right.\n"
-        "    💡 One gold bar = 1 call. Table leg: skip_faces=[\"top\"], shadow=true",
+        "    💡 One gold bar = 1 call. Table leg: skip_faces=[\"top\"], shadow=true\n"
+        "  attach — Snap one isometric box to another using named anchors.\n"
+        "    Params: parent (region_id), parent_anchor, child_anchor, flush (bool),\n"
+        "      child isometric_box params (width, depth, height, fill, etc.)\n"
+        "    Anchors: top_back_vertex, top_left/right/front_corner,\n"
+        "      bottom_back, bottom_left/right/front\n"
+        "    💡 attach(parent='frame_top', parent_anchor='bottom_left',\n"
+        "             child_anchor='top_left_corner', flush=true, width=0.06)",
     )
     def generate_shape(
         pattern: PATTERNS,
@@ -136,6 +144,8 @@ def create_tools(mcp):
                 return _do_surface_detail(scene, doc_id, params)
             elif pattern == "isometric_box":
                 return _do_isometric_box(scene, doc_id, params)
+            elif pattern == "attach":
+                return _do_attach(scene, doc_id, params)
             else:
                 return f"Error: Unknown pattern '{pattern}'"
         except (ValueError, RuntimeError, KeyError) as e:
@@ -932,6 +942,13 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
         cfg = face_conf[fname]
         rid = f"{prefix}_{fname}"
         try:
+            # Store box params in metadata for attach anchor computation
+            _isobox_meta = {
+                "x": params.get("x", 0.35), "y": params.get("y", 0.35),
+                "width": params.get("width", 0.2), "depth": params.get("depth", 0.12),
+                "height": params.get("height", 0.08), "angle": params.get("angle", 30.0),
+                "top_slant": params.get("top_slant", 0.0),
+            }
             r = scene.create_region(
                 outline=outline, region_id=rid,
                 document_id=doc_id, layer=layer,
@@ -940,6 +957,7 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
                 style=Style(fill=cfg["fill"], stroke=cfg["stroke"],
                             stroke_width=cfg["sw"], opacity=opacity,
                             blend_mode=blend_mode),
+                metadata={"_isobox": _isobox_meta},
             )
             created.append(r.id)
         except (ValueError, RuntimeError) as e:
@@ -974,3 +992,155 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
 
     return (f"isometric_box: {len(created)} face(s) "
             f"({', '.join(f['face'] for f in faces)})")
+
+
+# ── Named anchors for isometric box attachment ─────────────────────
+
+_BOX_ANCHORS = [
+    "top_back_vertex",    # the raw (x,y) input — hidden back-top corner
+    "top_left_corner",    # left vertex of top face
+    "top_front_corner",   # front vertex of top face
+    "top_right_corner",   # right vertex of top face
+    "bottom_back",        # directly below top_back_vertex (y + height)
+    "bottom_left",        # below top_left_corner (y + height)
+    "bottom_front",       # below top_front_corner (y + height)
+    "bottom_right",       # below top_right_corner (y + height)
+]
+
+
+def _isobox_anchors(x, y, width, depth, height, angle=30.0, top_slant=0.0):
+    """Compute all named anchor positions for an isometric box.
+
+    Returns dict mapping anchor name -> (px, py).
+    """
+    import math as _m
+    rad = _m.radians(angle)
+    c = _m.cos(rad)
+    s = _m.sin(rad)
+    hs = top_slant / 2
+
+    # Top face vertices (before height offset)
+    tx0, ty0 = x, y                              # back
+    tx1, ty1 = x - c * width, y + s * width      # left (with slant)
+    ty1 += hs
+    tx2, ty2 = tx1 + c * depth, ty1 + s * depth  # front
+    ty2 += hs
+    tx3, ty3 = x + c * depth, y + s * depth      # right (with slant)
+    ty3 += hs
+
+    # Correct slant for front vertex (full slant, not half)
+    ty2 = ty1 + s * depth + top_slant
+
+    h = height
+    # Back-left/back-right: midpoints along back-bottom edges (at 1/3 from back)
+    # since the back vertex is a single point, these spread legs visually
+    bl_x = tx0 + (tx1 - tx0) * 0.33
+    bl_y = ty0 + (ty1 + h - ty0) * 0.33
+    br_x = tx0 + (tx3 - tx0) * 0.33
+    br_y = ty0 + (ty3 + h - ty0) * 0.33
+    return {
+        "top_back_vertex":    (round(tx0, 6), round(ty0, 6)),
+        "top_left_corner":    (round(tx1, 6), round(ty1, 6)),
+        "top_front_corner":   (round(tx2, 6), round(ty2, 6)),
+        "top_right_corner":   (round(tx3, 6), round(ty3, 6)),
+        "bottom_back":        (round(tx0, 6), round(ty0 + h, 6)),
+        "bottom_left":        (round(tx1, 6), round(ty1 + h, 6)),
+        "bottom_front":       (round(tx2, 6), round(ty2 + h, 6)),
+        "bottom_right":       (round(tx3, 6), round(ty3 + h, 6)),
+        "bottom_back_left":   (round(bl_x, 6), round(bl_y, 6)),
+        "bottom_back_right":  (round(br_x, 6), round(br_y, 6)),
+    }
+
+
+def _do_attach(scene, doc_id: str, params: dict) -> str:
+    """Attach one isometric box to another using named anchors.
+
+    Params:
+        parent: region_id of the parent box (any face).
+        child_*: isometric_box params for the child (x/y are auto-computed).
+        parent_anchor: named anchor on the parent (e.g. "bottom_left").
+        child_anchor: named anchor on the child (e.g. "top_left_corner").
+        flush: if True, auto-compute top_slant for coplanar fit.
+        debug_anchors: if True, render anchor dots as tiny circles.
+    """
+    import math as _m
+
+    parent_id = params.get("parent")
+    if not parent_id:
+        return "Error: 'parent' region_id required"
+    parent = scene.get_region(parent_id, doc_id)
+    if parent is None:
+        return f"Error: parent region '{parent_id}' not found"
+
+    # Read parent's isobox params from metadata
+    meta = parent.metadata or {}
+    pbox = meta.get("_isobox", {})
+    if not pbox:
+        return f"Error: parent '{parent_id}' has no isobox metadata"
+    parent_anchor = params.get("parent_anchor", "bottom_left")
+    if parent_anchor not in _BOX_ANCHORS:
+        return f"Error: unknown parent_anchor '{parent_anchor}'"
+    child_anchor = params.get("child_anchor", "top_left_corner")
+    if child_anchor not in _BOX_ANCHORS:
+        return f"Error: unknown child_anchor '{child_anchor}'"
+
+    # Compute parent anchor position
+    pa = _isobox_anchors(
+        pbox["x"], pbox["y"], pbox["width"], pbox["depth"],
+        pbox["height"], pbox.get("angle", 30), pbox.get("top_slant", 0),
+    )[parent_anchor]
+
+    # Resolve child params (with defaults)
+    cw = float(params.get("width", 0.06))
+    cd = float(params.get("depth", 0.06))
+    ch = float(params.get("height", 0.15))
+    ca = float(params.get("angle", 30.0))
+
+    # Compute the child anchor offset relative to child's (x,y)
+    rad = _m.radians(ca)
+    c_cos = _m.cos(rad)
+    c_sin = _m.sin(rad)
+
+    # anchor_name -> (dx, dy) offset from child's (x,y)
+    anchor_offsets = {
+        "top_back_vertex":   (0, 0),
+        "top_left_corner":   (-c_cos * cw, c_sin * cw),
+        "top_front_corner":  (-c_cos * cw + c_cos * cd, c_sin * cw + c_sin * cd),
+        "top_right_corner":  (c_cos * cd, c_sin * cd),
+        "bottom_back":       (0, ch),
+        "bottom_left":       (-c_cos * cw, c_sin * cw + ch),
+        "bottom_front":      (-c_cos * cw + c_cos * cd, c_sin * cw + c_sin * cd + ch),
+        "bottom_right":      (c_cos * cd, c_sin * cd + ch),
+    }
+    doff = anchor_offsets.get(child_anchor, (0, 0))
+    cx = round(pa[0] - doff[0], 6)
+    cy = round(pa[1] - doff[1], 6)
+
+    # Compute flush top_slant if requested
+    top_slant = params.get("top_slant", 0.0)
+    if params.get("flush"):
+        # Match parent's slant projected across the child's depth
+        psl = pbox.get("top_slant", 0.0)
+        if psl != 0:
+            # Scale parent slant by child/parent depth ratio
+            pd = pbox.get("depth", 1.0)
+            top_slant = psl * cd / pd if pd > 0 else 0.0
+
+    # Create the child box
+    child_params = {
+        "new_prefix": params.get("new_prefix", "attached"),
+        "x": cx, "y": cy,
+        "width": cw, "depth": cd, "height": ch,
+        "angle": ca, "top_slant": top_slant,
+        "fill": params.get("fill", "#666"),
+        "stroke": params.get("stroke", "#333"),
+        "stroke_width": params.get("stroke_width", 0.003),
+        "skip_faces": params.get("skip_faces", ["top"]),
+        "z_index": params.get("z_index", 0),
+        "shadow": params.get("shadow", False),
+        "opacity": params.get("opacity", 1.0),
+    }
+
+    result = _do_isometric_box(scene, doc_id, child_params)
+    return (f"attach: {child_anchor} -> {parent_anchor} on '{parent_id}' | "
+            f"{result}")
