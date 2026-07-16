@@ -1061,6 +1061,23 @@ async def preview_doc_png(document_id: str | None = None):
         return Response(f"Error: {e}", status_code=500)
 
 
+@app.get("/preview/{document_id}.svg")
+async def preview_doc_svg(document_id: str | None = None):
+    """Render an SVG preview of a specific document by ID."""
+    graph = get_graph()
+    if not graph.load_document(document_id):
+        return Response(f"Document '{document_id}' not found", status_code=404)
+    try:
+        svg = svg_serialize(graph, document_id)
+        return Response(
+            content=svg,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
+    except Exception as e:
+        return Response(f"Error: {e}", status_code=500)
+
+
 # ── History Endpoints ──────────────────────────────────────────────
 
 @app.post("/tools/checkpoint", response_model=ToolResponse)
