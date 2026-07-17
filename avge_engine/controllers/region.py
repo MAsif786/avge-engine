@@ -123,6 +123,7 @@ def create_tools(mcp):
         shape: dict | None = None,
         stroke_linecap: str | None = None,
         stroke_dasharray: str | None = None,
+        blur: float = 0.0,
         rotate: float = 0.0,
         handle_in: list[list[float]] | None = None,
         handle_out: list[list[float]] | None = None,
@@ -167,6 +168,8 @@ def create_tools(mcp):
             tags: JSON object of key/value metadata tags.
             stroke_linecap: Line end style for line shapes — "butt", "round", or "square".
             stroke_dasharray: Dash pattern for strokes (e.g. "4,2" for 4px dash, 2px gap).
+            blur: Gaussian blur radius in pixels — soft glows, shadows, fog.
+                💡 One blur region replaces 4-5 stacked low-opacity ellipses.
             rotate: Rotation in degrees around the shape center. 💡 For rotated primitives
                 via the shape parameter, or use transform_objects post-hoc for existing regions.
             handle_in: Per-point incoming Bézier handle vectors [[dx,dy],...]. Overrides Catmull-Rom.
@@ -285,21 +288,21 @@ def create_tools(mcp):
                         start_angle=shape.get("start_angle", 0.0), end_angle=shape.get("end_angle", 180.0))
                     r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.5, closed=False),
-                        style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
+                        style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     return f"Arc created: id={r.id}, ({shape['cx']:.4f},{shape['cy']:.4f}) r={shape['r']:.4f}"
                 elif  stype == "polygon":
                     pts = compute_polygon(shape["cx"], shape["cy"], shape["r"],
                         sides=shape.get("sides", 6), rotate=shape.get("rotate", 0.0))
                     r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
-                        style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
+                        style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides"
                 elif  stype == "star":
                     pts = compute_star(shape["cx"], shape["cy"], shape["r"],
                         r_inner=shape.get("r_inner"), points=shape.get("points", 5), rotate=shape.get("rotate", 0.0))
                     r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
-                        style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
+                        style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     return f"Star created: id={r.id}, {shape.get('points',5)} points"
                 else:
                     return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, arc, polygon, star"
@@ -334,6 +337,7 @@ def create_tools(mcp):
             opacity=max(0.0, min(1.0, opacity)),
             blend_mode=blend_mode,
             stroke_dasharray=stroke_dasharray,
+            blur=blur,
         )
 
         metadata = {}

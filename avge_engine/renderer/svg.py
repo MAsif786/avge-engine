@@ -39,7 +39,10 @@ def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
 
     # Collect gradient definitions (regions + document background)
     gradient_defs: list[str] = []
+    blur_values: set[float] = set()
     for region in regions:
+        if region.style.blur > 0:
+            blur_values.add(round(region.style.blur, 2))
         if is_gradient(region.style.fill):
             gdef = gradient_to_svg_def(region.style.fill)
             if gdef not in gradient_defs:
@@ -71,10 +74,14 @@ def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
     else:
         lines.append(f'  <rect width="100%" height="100%" fill="{bg}"/>')
 
-    # Gradient defs (if any)
-    if gradient_defs:
+    # Defs: gradients + blur filters
+    has_defs = bool(gradient_defs) or bool(blur_values)
+    if has_defs:
         lines.append("  <defs>")
-        lines.extend(gradient_defs)
+        for gd in gradient_defs:
+            lines.append(gd)
+        for bv in sorted(blur_values):
+            lines.append(f'    <filter id="blur_{bv:.2f}"><feGaussianBlur stdDeviation="{bv:.2f}"/></filter>')
         lines.append("  </defs>")
 
     # Clip path defs (dedup by clip target ID)
@@ -124,6 +131,8 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
             parts.append(f' stroke-linecap="{region.style.stroke_linecap}"')
         if region.style.stroke_dasharray:
             parts.append(f' stroke-dasharray="{region.style.stroke_dasharray}"')
+        if region.style.blur > 0:
+            parts.append(f' filter="url(#blur_{region.style.blur:.2f})"')
         if region.clip_to:
             parts.append(f' clip-path="url(#clip_{region.clip_to})"')
 

@@ -115,6 +115,7 @@ class Style:
     blend_mode: str | None = None
     stroke_linecap: str | None = None
     stroke_dasharray: str | None = None
+    blur: float = 0.0
 
     def __post_init__(self):
         object.__setattr__(self, "stroke_width", max(0.0, min(0.1, self.stroke_width)))
