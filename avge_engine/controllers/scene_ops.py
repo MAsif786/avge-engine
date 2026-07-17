@@ -465,6 +465,7 @@ def create_tools(mcp):
         shadow_mode: bool = False,
         new_prefix: str | None = None,
         variations: dict | None = None,
+        jitter: dict | None = None,
         z_index: int | None = None,
     ) -> str:
         """Make copies of a region or group.
@@ -491,6 +492,10 @@ def create_tools(mcp):
             shadow_mode: Auto-style as shadow (darkened, no stroke, z behind).
             new_prefix: ID prefix for copies.
             variations: Per-copy property overrides (single/linear only).
+            jitter: Controlled randomness for organic feel.
+                Keys: hue (max deg shift), size (max fraction), rotation (max deg),
+                seed (int, for reproducibility).
+                💡 jitter={'hue':5,'size':0.02,'rotation':3,'seed':42}
             z_index: Explicit z-index for copies.
         """
         import math
@@ -613,6 +618,32 @@ def create_tools(mcp):
 
         else:
             return f"Error: Unknown pattern '{pattern}'. Valid: single, linear, grid, radial, group"
+
+        # ── Apply controlled jitter to copies ──
+        if jitter and created:
+            import random as _r, math as _m
+            _r.seed(jitter.get("seed", 0))
+            h_max = float(jitter.get("hue", 0))
+            s_max = float(jitter.get("size", 0))
+            r_max = float(jitter.get("rotation", 0))
+            for cid in created:
+                try:
+                    r = scene.get_region(cid, doc_id)
+                    if r is None:
+                        continue
+                    kw = {}
+                    if s_max or r_max:
+                        scene.transform_objects([cid], document_id=doc_id,
+                            scale=1.0 + _r.uniform(-s_max, s_max) if s_max else 1.0,
+                            rotate=_r.uniform(-r_max, r_max) if r_max else 0.0,
+                        )
+                    if h_max and r.style.fill and isinstance(r.style.fill, str) and r.style.fill.startswith("#"):
+                        from avge_engine.effects.color import apply_hsl_offset
+                        scene.edit_region(region_id=cid, document_id=doc_id,
+                            fill=apply_hsl_offset(r.style.fill, h_offset=_r.uniform(-h_max, h_max)),
+                        )
+                except (ValueError, RuntimeError):
+                    pass
 
         return f"Duplicated '{region_id}' ({pattern}): {len(created)} copy(ies), ids: {', '.join(created[:5])}{'...' if len(created) > 5 else ''}"
 
