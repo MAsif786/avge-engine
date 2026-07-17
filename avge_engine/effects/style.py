@@ -9,7 +9,9 @@ gradient parameters. Two types are supported:
   Linear: {"type": "linear", "x1":0, "y1":0, "x2":1, "y2":0,
             "stops": [{"offset":0, "color":"#000"}, {"offset":1, "color":"#FFF"}]}
   Radial: {"type": "radial", "cx":0.5, "cy":0.5, "r":0.5,
-            "stops": [...]}
+            "fx":0.4, "fy":0.4, "stops": [...]}
+          fx/fy are optional focal point offset from center — use for
+          sun glows, light pools, and off-center reflections.
 """
 
 from __future__ import annotations
@@ -63,6 +65,7 @@ def validate_gradient(g: GradientDef) -> list[str]:
         for key in ("cx", "cy", "r"):
             if key not in g:
                 errs.append(f"radial gradient missing '{key}'")
+        # fx/fy are optional (focal point offset from center)
 
     return errs
 
@@ -218,9 +221,12 @@ def gradient_to_svg_def(g: GradientDef) -> str:
             f'{stops_xml}  </linearGradient>\n'
         )
     else:  # radial
+        fx = g.get("fx")
+        fy = g.get("fy")
+        focal = f' fx="{fx}" fy="{fy}"' if fx is not None and fy is not None else ""
         return (
             f'  <radialGradient id="{gid}" '
             f'cx="{g.get("cx", 0.5)}" cy="{g.get("cy", 0.5)}" '
-            f'r="{g.get("r", 0.5)}">\n'
+            f'r="{g.get("r", 0.5)}"{focal}>\n'
             f'{stops_xml}  </radialGradient>\n'
         )
