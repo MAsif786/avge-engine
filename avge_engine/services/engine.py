@@ -116,6 +116,21 @@ def load_design_guidelines() -> str:
     return "# Design Guidelines\n\n(See design-guidelines.md — file not found on this server.)"
 
 
+TOOL_REFERENCE_PATH: Path | None = None
+
+
+def load_tool_reference() -> str:
+    """Load the tool reference markdown file (generated from MCP tool registrations)."""
+    global TOOL_REFERENCE_PATH
+    if TOOL_REFERENCE_PATH is None:
+        TOOL_REFERENCE_PATH = (
+            Path(__file__).resolve().parent.parent.parent / "docs" / "TOOL_REFERENCE.md"
+        )
+    if TOOL_REFERENCE_PATH.exists():
+        return TOOL_REFERENCE_PATH.read_text()
+    return "# Tool Reference\n\n(See docs/TOOL_REFERENCE.md — file not found on this server.)"
+
+
 # ── Centralized tool map — single source of truth ────────────────
 
 TOOL_MAP = """📋 TOOL MAP (43 tools — all available in batch):

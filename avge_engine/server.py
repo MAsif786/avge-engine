@@ -19,6 +19,7 @@ from mcp.server.fastmcp import FastMCP
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.services.engine import (
     load_design_guidelines,
+    load_tool_reference,
     SMOOTHNESS_GUIDANCE,
     TOOL_MAP,
 )
@@ -83,6 +84,18 @@ Use describe_scene between steps to verify positions. Checkpoint before risky ed
 async def design_guidelines_resource() -> str:
     """Return the full design guidelines markdown document."""
     return load_design_guidelines()
+
+
+@mcp.resource(
+    uri="avge://tool-reference",
+    name="AVGE Tool Reference",
+    description="Full per-tool reference: all 43 tools, params, modes, examples, "
+    "and the complete generate_shape pattern table with 16 patterns.",
+    mime_type="text/markdown",
+)
+async def tool_reference_resource() -> str:
+    """Return the full tool reference markdown document."""
+    return load_tool_reference()
 
 
 # ── Register controllers ──────────────────────────────────────────
