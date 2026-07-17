@@ -94,7 +94,8 @@ def create_tools(mcp):
         description="Move, scale, rotate, mirror, or align existing regions. "
         "Use to reposition/resize objects after creation, or set mode='align' "
         "to align/distribute regions. "
-        "💡 For multi-part objects, use group_name to transform all members.",
+        "💡 For multi-part objects, use group_name to transform all members. "
+        "Or layer='sky' to transform everything in a layer without listing IDs.",
     )
     def transform_objects(
         ids: list[str] | None = None,
@@ -113,6 +114,7 @@ def create_tools(mcp):
         pivot_mode: PIVOT_MODES | None = None,
         z_index: int | None = None,
         group_name: str | None = None,
+        layer: str | None = None,
         mirror_x: bool = False,
         mirror_y: bool = False,
     ) -> str:
@@ -140,6 +142,8 @@ def create_tools(mcp):
                 tilts a flower from its stem base.
             mirror_x: Mirror horizontally (flip around center).
             mirror_y: Mirror vertically (flip around center).
+            layer: Layer name — transforms all regions in that layer.
+                💡 transform_objects(layer='sky', dy=0.02) shifts whole skyline.
         """
         scene = get_graph()
 
@@ -225,6 +229,11 @@ def create_tools(mcp):
             if not members:
                 return f"Error: Group '{group_name}' not found"
             ids = [m["id"] for m in members]
+        elif layer is not None:
+            all_regions = scene._regions_for(doc_id)
+            ids = [rid for rid, r in all_regions.items() if r.layer == layer]
+            if not ids:
+                return f"Error: No regions found in layer '{layer}'"
         elif not ids:
             return "Error: No region IDs provided"
 
