@@ -98,7 +98,7 @@ def create_tools(mcp):
         "💡 Refine incrementally: add regions here, use "
         "``restyle`` to recolor, ``edit_region`` to nudge points — "
         "never rebuild from scratch. "
-        "Smoothness guidance in resource avge://skill/design-guidelines.",
+        "💡 blur=N adds Gaussian blur for soft glows, shadows, and fog.",
     )
     def create_region(
         outline: list[list[float]] | None = None,
