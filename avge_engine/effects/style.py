@@ -109,7 +109,7 @@ class Style:
     """
 
     fill: str | GradientDef | None = "#CCCCCC"
-    stroke: str | None = "#333333"
+    stroke: str | GradientDef | None = "#333333"
     stroke_width: float = 0.005
     opacity: float = 1.0
     blend_mode: str | None = None
@@ -144,6 +144,10 @@ class Style:
         if self.stroke is not None:
             if self.stroke == "none":
                 object.__setattr__(self, "stroke", None)
+            elif is_gradient(self.stroke):
+                errs = validate_gradient(self.stroke)
+                if errs:
+                    raise ValueError(f"Invalid stroke gradient: {'; '.join(errs)}")
             elif not _is_color(self.stroke):
                 raise ValueError(f"Invalid stroke color: {self.stroke}")
         # Validate blend mode
@@ -154,10 +158,12 @@ class Style:
                 raise ValueError(f"Invalid blend_mode: {self.blend_mode}. Valid: {valid}")
 
 
-def resolve_stroke(stroke: str | None) -> str:
+def resolve_stroke(stroke: str | GradientDef | None) -> str:
     """Resolve a stroke value to an SVG-compatible string."""
     if stroke is None:
         return "none"
+    if is_gradient(stroke):
+        return f"url(#{_gradient_id(stroke)})"
     return stroke
 
 

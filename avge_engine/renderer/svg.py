@@ -44,6 +44,10 @@ def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
             gdef = gradient_to_svg_def(region.style.fill)
             if gdef not in gradient_defs:
                 gradient_defs.append(gdef)
+        if is_gradient(region.style.stroke):
+            gdef = gradient_to_svg_def(region.style.stroke)
+            if gdef not in gradient_defs:
+                gradient_defs.append(gdef)
     if is_gradient(doc.background):
         gdef = gradient_to_svg_def(doc.background)
         if gdef not in gradient_defs:
