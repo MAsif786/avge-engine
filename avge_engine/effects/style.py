@@ -216,10 +216,15 @@ def _is_color(value: str) -> bool:
 def gradient_to_svg_def(g: GradientDef) -> str:
     """Generate an SVG <linearGradient> or <radialGradient> element string."""
     gid = _gradient_id(g)
-    stops_xml = "".join(
-        f'    <stop offset="{s["offset"]}" stop-color="{s["color"]}"/>\n'
-        for s in g.get("stops", [])
-    )
+    stops_xml = ""
+    for s in g.get("stops", []):
+        sc = s["color"]
+        so = s.get("opacity")
+        stop = f'    <stop offset="{s["offset"]}" stop-color="{sc}"'
+        if so is not None:
+            stop += f' stop-opacity="{so}"'
+        stop += "/>\n"
+        stops_xml += stop
     if g["type"] == "linear":
         return (
             f'  <linearGradient id="{gid}" '
