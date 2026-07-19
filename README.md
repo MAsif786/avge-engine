@@ -1,6 +1,6 @@
 # AVGE Engine — AI-Native Vector Graphics Engine
 
-**Version:** 0.5.0 | **Tool set:** m0b-v1
+**Version:** 0.5.7 | **Tool set:** m0b-v8
 
 Vector illustration tools for AI agents — create editable vector art with shapes, armatures, materials, and rendering. Output is clean SVG you can open in Illustrator, Figma, or any vector editor. Runs as an MCP server.
 
@@ -23,11 +23,16 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 - **Procedural geometry** — radial spread, offset outlines, guide lines, segmented chains, speech bubbles, bursts, armature skeletons, foreshortening, surface detail
 - **Armature skeletons** — node-edge graphs with tapered segments, junction separation, filleted V-gaps, curved Catmull-Rom chains, and unary union merging
 - **Boolean operations** — union, intersect, subtract, xor with Ramer-Douglas-Peucker simplification
+- **Perspective projection** — `project_quad` maps panels, tables, windows, signs, and floor tiles into real quadrilateral perspective
 - **HSL shading** — auto highlight + shadow from light direction
-- **Primitives** — rects (including tapered/trapezoid), ellipses, lines, polylines, arcs, polygons, stars, and isometric boxes
+- **Depth shadows** — `add_depth_shadow` and `cast_shadow` create soft blurred shadows from existing outlines
+- **Preview critique** — `critique_preview` flags flatness, over-rounding, missing contact shadows, perspective issues, and dominant blob shapes
+- **Primitives** — rects (including tapered/trapezoid), ellipses, ellipse/arc bands, lines, open polylines, compound paths, arcs, polygons, stars, and isometric boxes
 - **Text + images** — SVG text with font family/style/anchor/letter-spacing/opacity/skew for isometric perspective, embedded images via `<image>`
 - **Gradient backgrounds** — linear and radial gradient definitions, inline in `create_document` or via `set_background`
 - **Style system** — fill, stroke, stroke-width, opacity, blend modes, dash patterns, rgba/hsla color support
+- **Material presets** — `restyle(material=...)` for glass, brushed metal, concrete, wood, tile, and foliage with editable highlights, shadows, seams, and grain overlays
+- **Pixel stroke widths** — `stroke_width_px` maps precise pixel widths to normalized scene units for predictable rails, seams, branches, and cables
 - **Batch operations** — execute multiple tools in one call, edit multiple regions with per-region transforms
 - **Palette generation** — HSL harmony presets (complementary, triadic, analogous, etc.)
 - **Named gradients** — define once with `define_gradient`, reference by name in `restyle`
@@ -37,18 +42,19 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 - **PNG rasterization** — via rsvg-convert (librsvg) with Unicode/emoji font support
 - **Per-document tracking** — checkpoint/restore history, tool usage stats
 
-## 43+ MCP Tools
+## 51+ MCP Tools
 
 | Category | Tools |
 |----------|-------|
 | **Document** | `create_document`, `list_documents`, `set_background`, `get_document_stats` |
-| **Create** | `create_region`, `create_primitive`, `create_curve`, `create_text`, `insert_image`, `import_svg_path` |
+| **Create** | `create_region`, `create_ellipse_band`, `create_primitive`, `create_curve`, `create_text`, `insert_image`, `import_svg_path` |
 | **Edit** | `edit_region` (point-level nudge), `edit_regions` (batch transforms), `delete_region`, `copy_element`, `get_region` (inspect outline) |
-| **Transform** | `transform_objects`, `duplicate`, `boolean_operation`, `mirror_region` |
-| **Style** | `restyle`, `add_shading`, `generate_palette`, `define_gradient`, `apply_line_hierarchy`, `compare_style_consistency` |
+| **Transform** | `transform_objects`, `project_quad`, `create_perspective_grid`, `create_facade_grid`, `duplicate`, `boolean_operation`, `mirror_region` |
+| **Depth** | `add_depth_shadow`, `cast_shadow`, `add_shading` |
+| **Style** | `restyle` (including material presets), `apply_depth_haze`, `generate_palette`, `define_gradient`, `apply_line_hierarchy`, `compare_style_consistency` |
 | **Groups** | `group_regions`, `ungroup_regions` |
 | **Procedural** | `generate_shape` (15 patterns: armature, segmented_chain, radial_spread, speech_bubble, create_burst, isometric_box, attach, ...) |
-| **View** | `render_preview`, `describe_scene`, `checkpoint_diff`, `render_diff` |
+| **View** | `render_preview`, `describe_scene`, `critique_preview`, `checkpoint_diff`, `render_diff` |
 | **History** | `checkpoint`, `restore`, `get_history`, `batch` |
 
 ### Coordinates
@@ -100,6 +106,13 @@ All coordinates are normalized 0.0–1.0 where `(0, 0)` = top-left and `(1, 1)` 
   {"offset": 0, "color": "#FFD700"}, {"offset": 1, "color": "#DAA520"}], "angle": 160}
 
 {"tool": "restyle", "fill_gradient": "gold_top", "selector": {"region_id": "panel_1"}}
+```
+
+### Material Presets
+
+```json
+{"tool": "restyle", "selector": {"ids": ["window"]}, "material": "glass"}
+{"tool": "restyle", "selector": {"ids": ["floor"]}, "material": "tile", "material_intensity": 0.8}
 ```
 
 ## Architecture

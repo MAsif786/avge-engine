@@ -77,6 +77,13 @@
       "minimum": 0.0,
       "maximum": 0.1
     },
+    "stroke_width_px": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
     "opacity": {
       "type": "number",
       "description": "Object opacity 0.0–1.0.",

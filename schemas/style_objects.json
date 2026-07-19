@@ -32,11 +32,34 @@
       "minimum": 0.0,
       "maximum": 0.1
     },
+    "stroke_width_px": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "minimum": 0.0,
+      "maximum": 512
+    },
     "opacity": {
       "type": "number",
       "description": "Object opacity 0.0–1.0.",
       "minimum": 0.0,
       "maximum": 1.0
+    },
+    "material": {
+      "type": "string",
+      "description": "Built-in material preset. Applies base style and optional generated detail overlays.",
+      "enum": ["glass", "brushed_metal", "concrete", "wood", "tile", "foliage"]
+    },
+    "material_detail": {
+      "type": "boolean",
+      "description": "When material is provided, generate editable highlight/shadow/texture detail regions.",
+      "default": true
+    },
+    "material_intensity": {
+      "type": "number",
+      "description": "Generated material detail strength.",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.65
     }
   },
   "required": ["ids"],
@@ -45,6 +68,8 @@
     { "required": ["fill"] },
     { "required": ["stroke"] },
     { "required": ["stroke_width"] },
-    { "required": ["opacity"] }
+    { "required": ["stroke_width_px"] },
+    { "required": ["opacity"] },
+    { "required": ["material"] }
   ]
 }

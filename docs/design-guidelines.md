@@ -222,7 +222,7 @@ batch([
 ])
 ```
 
-Supported tools in batch: `create_region`, `create_primitive`, `create_curve`, `edit_region`, `duplicate_region`, `delete_region`, `style_objects`, `transform_objects`, `generate_shape`.
+Supported tools in batch include every registered tool, especially `create_region`, `create_ellipse_band`, `create_primitive`, `create_curve`, `edit_region`, `duplicate_region`, `delete_region`, `style_objects`, `transform_objects`, `project_quad`, and `generate_shape`.
 
 ### 10b. distribute_linear — point sequence generator
 
@@ -296,17 +296,22 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 
 | Tool | Required params | Common optional params |
 |---|---|---|
-| `create_region` | `outline` (list of [x,y]) | `fill`, `stroke`, `smoothness`, `closed`, `z_index`, `layer`, `clip_to`, `fill_gradient`, `blend_mode` |
-| `create_primitive` | `shape` (dict with `type` + coords) | `fill`, `stroke`, `stroke_width`, `z_index`, `layer`, `blend_mode`, `opacity` |
-| `create_curve` | `points` (list of [x,y]) | `stroke`, `stroke_width`, `smoothness`, `z_index`, `layer`, `stroke_linecap`, `blend_mode` |
+| `create_region` | `outline` (list of [x,y]) | `fill`, `stroke`, `stroke_width_px`, `smoothness`, `closed`, `z_index`, `layer`, `clip_to`, `fill_gradient`, `blend_mode` |
+| `create_ellipse_band` | `cx`, `cy`, `rx` | `ry`, `thickness`, `inner_rx`, `inner_ry`, `start_angle`, `end_angle`, `rotation`, `perspective`, `skew_x`, `fill`, `stroke`, `stroke_width_px`, `z_index` |
+| `create_primitive` | `shape` (rect/ellipse/line/polyline/compound_path/etc.) | `fill`, `stroke`, `stroke_width_px`, `stroke_dasharray`, `smoothness`, `closed`, `z_index`, `layer`, `blend_mode`, `opacity` |
+| `create_curve` | `points` (list of [x,y]) | `stroke`, `stroke_width_px`, `smoothness`, `z_index`, `layer`, `stroke_linecap`, `blend_mode` |
 | `create_text` | `x`, `y`, `text` | `fill`, `font_size`, `font_family`, `text_anchor`, `font_weight`, `z_index`, `rotate` |
 | `import_svg_path` | `path_data` (SVG path string) | `fill`, `stroke`, `smoothness`, `closed`, `z_index`, `layer`, `samples_per_curve` |
 | `edit_region` | `region_id` | `outline`, `fill`, `stroke`, `smoothness`, `z_index`, `shape`, `layer`, `clip_to`, `blend_mode` |
 | `duplicate_region` | `region_id` | `offset_x`, `offset_y`, `scale`, `rotate`, `fill`, `z_index`, `mirror_x`, `mirror_y`, `shadow_mode` |
+| `add_depth_shadow` | `region_id` | `direction`, `distance`, `softness`, `opacity`, `scale`, `sx`, `sy`, `z_offset` |
+| `cast_shadow` | `from_region_id`, `onto_region_id` | `direction`, `distance`, `softness`, `opacity`, `scale`, `sx`, `sy`, `z_offset` |
 | `delete_region` | `region_id` | — |
-| `style_objects` | `ids` or `group_name` | `fill`, `stroke`, `stroke_width`, `opacity`, `blend_mode`, `clip_to`, `fill_gradient` |
+| `style_objects` / `restyle` | `ids` or `selector` | `fill`, `stroke`, `stroke_width_px`, `opacity`, `blend_mode`, `clip_to`, `fill_gradient`, `material` (`glass`, `brushed_metal`, `concrete`, `wood`, `tile`, `foliage`) |
 | `transform_objects` | `ids` | `dx`, `dy`, `scale`, `rotate`, `group_mode`, `mirror_x`, `mirror_y`, `z_index` |
+| `project_quad` | `target_quad` | `source_region_id`, `replace_source`, `columns`, `rows`, `fill`, `stroke`, `stroke_width_px`, `z_index`, `inherit_style` |
 | `generate_shape` | `pattern`, `params` | Pattern-specific — see `generate_shape` docs |
+| `critique_preview` | — | `min_confidence`, `as_json` |
 
 **Inline shapes in batch:** Use `create_primitive` or `create_region` with shape data directly:
 ```python

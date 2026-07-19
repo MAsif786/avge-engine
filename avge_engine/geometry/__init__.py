@@ -8,6 +8,13 @@ from avge_engine.geometry.types import (
     compute_bounds,
     normalize_outline,
 )
+from avge_engine.geometry.perspective import (
+    apply_homography,
+    homography_from_unit_square,
+    normalize_points_to_unit,
+    project_unit_points,
+    rectangle_grid_points,
+)
 
 __all__ = [
     "fit_curves",
@@ -17,4 +24,9 @@ __all__ = [
     "Transform",
     "compute_bounds",
     "normalize_outline",
+    "apply_homography",
+    "homography_from_unit_square",
+    "normalize_points_to_unit",
+    "project_unit_points",
+    "rectangle_grid_points",
 ]

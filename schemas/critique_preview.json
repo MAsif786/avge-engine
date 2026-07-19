@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/critique_preview/v1.json",
+  "title": "critique_preview",
+  "description": "Preview-quality visual critique for flatness, over-rounding, missing contact shadows, perspective issues, and dominant blob shapes.",
+  "type": "object",
+  "properties": {
+    "document_id": {
+      "type": ["string", "null"],
+      "description": "Document UUID. Omit/null to use the active document."
+    },
+    "min_confidence": {
+      "type": "number",
+      "description": "Hide findings below this confidence threshold.",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.0
+    },
+    "as_json": {
+      "type": "boolean",
+      "description": "Return machine-readable JSON instead of formatted text.",
+      "default": false
+    }
+  },
+  "additionalProperties": false
+}

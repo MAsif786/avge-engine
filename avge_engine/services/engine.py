@@ -99,6 +99,19 @@ def get_storage_dir() -> str:
     return str(Path(STORAGE_DIR).resolve())
 
 
+def stroke_width_px_to_norm(document_id: str, stroke_width_px: float | None) -> float | None:
+    """Convert a pixel stroke width to AVGE normalized stroke width.
+
+    Stroke widths are stored as a fraction of the shorter canvas dimension.
+    Returning ``None`` lets callers preserve omitted style values.
+    """
+    if stroke_width_px is None:
+        return None
+    doc = get_graph().get_document(document_id)
+    shorter = max(1, min(doc.width, doc.height))
+    return max(0.001, min(0.1, float(stroke_width_px) / shorter))
+
+
 # ── Design guidelines resource ────────────────────────────────────
 
 DESIGN_GUIDELINES_PATH: Path | None = None  # resolved on first access
@@ -133,22 +146,26 @@ def load_tool_reference() -> str:
 
 # ── Centralized tool map — single source of truth ────────────────
 
-TOOL_MAP = """📋 TOOL MAP (43 tools — all available in batch):
+TOOL_MAP = """📋 TOOL MAP (51 tools — all available in batch):
 
 🗂 Document:   create_document · list_documents · load_document ·
                delete_document · set_background
 ✏️  Create:     create_region · create_primitive · create_curve ·
-               create_text · insert_image · import_svg_path
+               create_ellipse_band · create_text · insert_image · import_svg_path
 🔧 Edit:       edit_region · edit_regions · delete_region ·
                get_region · copy_element
-🔄 Transform:  transform_objects · duplicate · boolean_operation
-🎨 Style:      restyle · add_shading · add_bumps ·
+🔄 Transform:  transform_objects · project_quad · create_perspective_grid ·
+               create_facade_grid · duplicate · boolean_operation
+🕶 Depth:      add_depth_shadow · cast_shadow · add_shading
+🎨 Style:      restyle · apply_depth_haze · add_bumps ·
                generate_palette · define_gradient ·
                apply_line_hierarchy · compare_style_consistency
+               (restyle supports material presets: glass, brushed_metal,
+               concrete, wood, tile, foliage)
 👥 Groups:     edit_group · list_groups · list_layers · shift_layer_z
 🔷 Procedural: generate_shape (16 patterns — see tool description)
-👁 View:       describe_scene · render_preview · render_diff ·
-               checkpoint_diff · export_svg
+👁 View:       describe_scene · critique_preview · render_preview ·
+               render_diff · checkpoint_diff · export_svg
 📜 History:    checkpoint · restore · get_history
 ⚡ Batch:      batch (wraps ALL tools above)
 

@@ -1,6 +1,6 @@
 [project]
 name = "avge"
-version = "0.5.0"
+version = "0.5.7"
 description = "AI-Native Vector Graphics Engine — M0b Production Build"
 requires-python = ">=3.12"
 dependencies = [

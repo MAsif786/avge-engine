@@ -129,6 +129,54 @@ def create_tools(mcp):
         return "\n".join(lines)
 
     @mcp.tool(
+        name="critique_preview",
+        description="Preview-quality visual critique. Flags likely visual issues "
+        "such as too_flat, over_rounded, missing_contact_shadows, "
+        "bad_perspective, and dominant_blob_shape. Returns actionable "
+        "suggestions with affected region IDs.",
+    )
+    def critique_preview(
+        document_id: str | None = None,
+        min_confidence: float = 0.0,
+        as_json: bool = False,
+    ) -> str:
+        """Critique preview-quality issues using scene geometry/style signals.
+
+        Args:
+            document_id: Document UUID (omit to use active document).
+            min_confidence: Hide findings below this confidence threshold.
+            as_json: Return JSON for automated consumers.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
+
+        findings = [
+            f for f in scene.critique_preview_quality(document_id=doc_id)
+            if f.get("confidence", 0.0) >= min_confidence
+        ]
+
+        if as_json:
+            return _json.dumps({"findings": findings, "count": len(findings)}, indent=2)
+
+        if not findings:
+            return "No preview-quality issues found."
+
+        lines = [f"Preview critique ({len(findings)} finding(s)):"]
+        for i, f in enumerate(findings, 1):
+            ids = f.get("region_ids") or []
+            id_note = f" regions={', '.join(ids)}" if ids else ""
+            lines.append(
+                f"  {i}. [{f['severity']}] {f['code']} "
+                f"(confidence={f['confidence']:.2f}){id_note}"
+            )
+            lines.append(f"     {f['message']}")
+            lines.append(f"     Suggestion: {f['suggestion']}")
+        return "\n".join(lines)
+
+    @mcp.tool(
         name="list_layers",
         description="List all unique layers and their region counts. "
         "Use shift_layer_z to shift all regions in a layer up or down "
@@ -191,4 +239,3 @@ def create_tools(mcp):
             f"Reordered {count} region(s) in layer '{layer}' "
             f"(z_offset={z_offset:+d})"
         )
-

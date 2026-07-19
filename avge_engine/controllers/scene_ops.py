@@ -1,11 +1,84 @@
 """Scene operations controller — boolean_operation, transform_objects, edit_group, etc."""
 from __future__ import annotations
 
+import random
 from typing import Literal
 
 PIVOT_MODES = Literal["center", "base", "fixed"]
 
-from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_px_to_norm
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def _lerp_point(a: list[float] | tuple[float, float], b: list[float] | tuple[float, float], t: float) -> list[float]:
+    return [float(a[0]) + (float(b[0]) - float(a[0])) * t, float(a[1]) + (float(b[1]) - float(a[1])) * t]
+
+
+def _quad_point(quad: list[list[float]], u: float, v: float) -> list[float]:
+    top = _lerp_point(quad[0], quad[1], u)
+    bottom = _lerp_point(quad[3], quad[2], u)
+    return _lerp_point(top, bottom, v)
+
+
+def _cell_quad(
+    quad: list[list[float]],
+    u0: float,
+    v0: float,
+    u1: float,
+    v1: float,
+    margin_u: float,
+    margin_v: float,
+) -> list[list[float]]:
+    du = max(0.0, u1 - u0)
+    dv = max(0.0, v1 - v0)
+    uu0 = u0 + du * margin_u
+    uu1 = u1 - du * margin_u
+    vv0 = v0 + dv * margin_v
+    vv1 = v1 - dv * margin_v
+    return [
+        _quad_point(quad, uu0, vv0),
+        _quad_point(quad, uu1, vv0),
+        _quad_point(quad, uu1, vv1),
+        _quad_point(quad, uu0, vv1),
+    ]
+
+
+def _clip_line_to_bounds(
+    p1: list[float],
+    p2: list[float],
+    bounds: tuple[float, float, float, float],
+) -> list[list[float]] | None:
+    """Clip an infinite line through p1/p2 to an axis-aligned bounds rectangle."""
+    x0, y0, x1, y1 = bounds
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+        return None
+
+    hits: list[tuple[float, list[float]]] = []
+    if abs(dx) > 1e-9:
+        for x in (x0, x1):
+            t = (x - p1[0]) / dx
+            y = p1[1] + dy * t
+            if y0 - 1e-9 <= y <= y1 + 1e-9:
+                hits.append((t, [x, y]))
+    if abs(dy) > 1e-9:
+        for y in (y0, y1):
+            t = (y - p1[1]) / dy
+            x = p1[0] + dx * t
+            if x0 - 1e-9 <= x <= x1 + 1e-9:
+                hits.append((t, [x, y]))
+
+    unique: list[tuple[float, list[float]]] = []
+    for t, pt in sorted(hits, key=lambda item: item[0]):
+        if not any(abs(pt[0] - u[1][0]) < 1e-6 and abs(pt[1] - u[1][1]) < 1e-6 for u in unique):
+            unique.append((t, pt))
+    if len(unique) < 2:
+        return None
+    return [unique[0][1], unique[-1][1]]
 
 
 def create_tools(mcp):
@@ -287,6 +360,313 @@ def create_tools(mcp):
         return (
             f"Transformed {len(affected)} region(s): {', '.join(affected)} "
             f"({', '.join(parts)}){bounds_info}"
+            )
+
+    @mcp.tool(
+        name="project_quad",
+        description="Create or perspective-warp a rectangular/panel region into a target quadrilateral. "
+        "Use for realistic tables, windows, floor tiles, wall panels, screens, and signs. "
+        "target_quad order is top-left, top-right, bottom-right, bottom-left. "
+        "Pass source_region_id to warp an existing region; omit it to create a projected panel.",
+    )
+    def project_quad(
+        target_quad: list[list[float]],
+        document_id: str | None = None,
+        region_id: str | None = None,
+        source_region_id: str | None = None,
+        replace_source: bool = False,
+        columns: int = 1,
+        rows: int = 1,
+        layer: str = "default",
+        z_index: int = 0,
+        fill: str | None = "#CCCCCC",
+        stroke: str | None = "#333333",
+        stroke_width: float | None = 0.005,
+        stroke_width_px: float | None = None,
+        opacity: float | None = 1.0,
+        blend_mode: str | None = None,
+        smoothness: float = 0.0,
+        group_name: str | None = None,
+        inherit_style: bool = False,
+    ) -> str:
+        """Create or warp a region through a unit-square homography.
+
+        Args:
+            target_quad: Four normalized points in order: top-left, top-right,
+                bottom-right, bottom-left.
+            source_region_id: Existing region to warp. If omitted, creates a
+                projected rectangle/panel using target_quad.
+            replace_source: If True with source_region_id, updates the source
+                region in place. Otherwise creates a new projected copy.
+            columns, rows: Optional edge subdivisions for newly-created panels,
+                useful when later adding seams or tile grids.
+            inherit_style: When warping a source region, copy its style unless
+                explicit style values are supplied.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
+
+        if len(target_quad) != 4:
+            return "Error: target_quad must contain exactly four [x,y] points"
+
+        if source_region_id and inherit_style:
+            fill = None
+            stroke = None
+            stroke_width = None
+            opacity = None
+            blend_mode = None
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
+
+        try:
+            region = scene.project_quad(
+                target_quad=[(float(p[0]), float(p[1])) for p in target_quad],
+                document_id=doc_id,
+                region_id=region_id,
+                source_region_id=source_region_id,
+                replace_source=replace_source,
+                columns=columns,
+                rows=rows,
+                layer=layer,
+                z_index=z_index,
+                fill=fill,
+                stroke=stroke,
+                stroke_width=stroke_width,
+                opacity=opacity,
+                blend_mode=blend_mode,
+                smoothness=smoothness,
+                metadata={"projection": "quad"},
+            )
+            if group_name:
+                scene.add_to_group(group_name, [region.id], doc_id)
+        except (ValueError, RuntimeError, TypeError) as e:
+            return f"Error: {e}"
+
+        action = "Warped" if source_region_id else "Projected"
+        return f"{action} quad region: id={region.id}, points={len(region.outline)}"
+
+    @mcp.tool(
+        name="create_perspective_grid",
+        description="Create two-point perspective construction guides from shared vanishing points. "
+        "Use before project_quad/create_facade_grid so building edges, signs, rails, and street objects "
+        "converge to the same off-canvas vanishing points. Emits editable compound-path guide regions.",
+    )
+    def create_perspective_grid(
+        vanishing_points: list[list[float]],
+        horizon_y: float = 0.5,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        verticals: int = 9,
+        horizontals: int = 9,
+        bounds: list[float] | None = None,
+        include_horizon: bool = True,
+        layer: str = "guides",
+        z_index: int = -100,
+        stroke: str = "#55C7FF",
+        stroke_width: float = 0.001,
+        stroke_width_px: float | None = None,
+        opacity: float = 0.35,
+    ) -> str:
+        """Create two-point perspective guide lines.
+
+        Args:
+            vanishing_points: Two [x,y] points. They may be off-canvas.
+            horizon_y: Normalized Y coordinate of the horizon line.
+            verticals: Number of vertical guide lines across bounds.
+            horizontals: Number of guide samples on each side.
+            bounds: Optional [x0,y0,x1,y1] construction area, default canvas.
+            include_horizon: Also create a horizon guide line.
+            stroke_width_px: Pixel stroke width. Overrides stroke_width.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
+
+        if len(vanishing_points) != 2:
+            return "Error: vanishing_points must contain exactly two [x,y] points"
+        vp_l = [float(vanishing_points[0][0]), float(vanishing_points[0][1])]
+        vp_r = [float(vanishing_points[1][0]), float(vanishing_points[1][1])]
+        x0, y0, x1, y1 = [float(v) for v in (bounds or [0.0, 0.0, 1.0, 1.0])]
+        if x1 <= x0 or y1 <= y0:
+            return "Error: bounds must be [x0,y0,x1,y1] with positive size"
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
+
+        subpaths: list[list[list[float]]] = []
+        vertical_count = max(2, int(verticals))
+        horizontal_count = max(2, int(horizontals))
+        for i in range(vertical_count):
+            x = x0 + (x1 - x0) * (i / (vertical_count - 1))
+            subpaths.append([[x, y0], [x, y1]])
+        for i in range(horizontal_count):
+            y = y0 + (y1 - y0) * (i / (horizontal_count - 1))
+            left_line = _clip_line_to_bounds(vp_l, [x1, y], (x0, y0, x1, y1))
+            right_line = _clip_line_to_bounds(vp_r, [x0, y], (x0, y0, x1, y1))
+            if left_line:
+                subpaths.append(left_line)
+            if right_line:
+                subpaths.append(right_line)
+
+        rid = region_id or "perspective_grid"
+        try:
+            grid = scene.create_compound_path(
+                subpaths=subpaths,
+                document_id=doc_id,
+                region_id=rid,
+                layer=layer,
+                z_index=z_index,
+                fill=None,
+                stroke=stroke,
+                stroke_width=stroke_width,
+                opacity=max(0.0, min(1.0, opacity)),
+                smoothness=0.0,
+                closed=False,
+            )
+            ids = [grid.id]
+            if include_horizon:
+                horizon = scene.create_line(
+                    points=[[x0, horizon_y], [x1, horizon_y]],
+                    document_id=doc_id,
+                    region_id=f"{rid}_horizon",
+                    layer=layer,
+                    z_index=z_index,
+                    stroke=stroke,
+                    stroke_width=stroke_width,
+                    opacity=max(0.0, min(1.0, opacity * 1.25)),
+                    smoothness=0.0,
+                )
+                ids.append(horizon.id)
+            return (
+                f"Perspective grid created: {', '.join(ids)} "
+                f"(vp_left={vp_l}, vp_right={vp_r}, horizon_y={horizon_y})"
+            )
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+
+    @mcp.tool(
+        name="create_facade_grid",
+        description="Create a perspective-aware building facade with repeated window quads. "
+        "Supports lit_ratio, deterministic seed, and subtle per-window inset variation so night-city "
+        "facades read as buildings instead of flat sign slabs.",
+    )
+    def create_facade_grid(
+        target_quad: list[list[float]],
+        rows: int,
+        columns: int,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        layer: str = "architecture",
+        z_index: int = 0,
+        facade_fill: str = "#2C3542",
+        facade_stroke: str = "#0A1018",
+        window_fill: str = "#182536",
+        lit_fill: str = "#FFE8A3",
+        window_stroke: str | None = "#A9C8D6",
+        stroke_width: float = 0.001,
+        stroke_width_px: float | None = None,
+        opacity: float = 1.0,
+        lit_ratio: float = 0.22,
+        margin_u: float = 0.18,
+        margin_v: float = 0.18,
+        variation: float = 0.08,
+        seed: int = 1,
+        create_base: bool = True,
+    ) -> str:
+        """Create a facade panel plus individually editable window regions.
+
+        Args:
+            target_quad: Four facade corners, top-left/top-right/bottom-right/bottom-left.
+            rows, columns: Window grid dimensions.
+            lit_ratio: Fraction of windows using lit_fill.
+            variation: Deterministic inset variation per window.
+            stroke_width_px: Pixel stroke width. Overrides stroke_width.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
+
+        if len(target_quad) != 4:
+            return "Error: target_quad must contain exactly four [x,y] points"
+        if rows < 1 or columns < 1:
+            return "Error: rows and columns must be >= 1"
+
+        quad = [[float(p[0]), float(p[1])] for p in target_quad]
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
+
+        prefix = region_id or "facade"
+        rng = random.Random(seed)
+        created: list[str] = []
+        try:
+            if create_base:
+                base = scene.project_quad(
+                    quad,
+                    document_id=doc_id,
+                    region_id=prefix,
+                    layer=layer,
+                    z_index=z_index,
+                    fill=facade_fill,
+                    stroke=facade_stroke,
+                    stroke_width=stroke_width,
+                    opacity=opacity,
+                    metadata={"tool": "create_facade_grid", "part": "facade"},
+                )
+                created.append(base.id)
+
+            for row in range(rows):
+                for col in range(columns):
+                    cell_noise = (rng.random() - 0.5) * max(0.0, variation)
+                    mu = _clamp01(margin_u + cell_noise)
+                    mv = _clamp01(margin_v - cell_noise * 0.5)
+                    win_quad = _cell_quad(
+                        quad,
+                        col / columns,
+                        row / rows,
+                        (col + 1) / columns,
+                        (row + 1) / rows,
+                        mu,
+                        mv,
+                    )
+                    lit = rng.random() < _clamp01(lit_ratio)
+                    rid = f"{prefix}_w{row:02d}_{col:02d}"
+                    win = scene.project_quad(
+                        win_quad,
+                        document_id=doc_id,
+                        region_id=rid,
+                        layer=layer,
+                        z_index=z_index + 1,
+                        fill=lit_fill if lit else window_fill,
+                        stroke=window_stroke,
+                        stroke_width=stroke_width,
+                        opacity=opacity,
+                        metadata={
+                            "tool": "create_facade_grid",
+                            "part": "window",
+                            "facade": prefix,
+                            "row": row,
+                            "column": col,
+                            "lit": lit,
+                        },
+                    )
+                    created.append(win.id)
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+
+        return (
+            f"Facade grid created: {prefix} with {rows * columns} window(s), "
+            f"lit_ratio={lit_ratio:.2f}, regions={len(created)}"
         )
 
     @mcp.tool(
@@ -439,11 +819,11 @@ def create_tools(mcp):
     @mcp.tool(
         name="duplicate",
         description="Make copies of a region or group according to a placement "
-        "pattern. Consolidates "
+        "pattern. Consolidates duplicate_region, duplicate_grid, duplicate_radial, "
         "and duplicate_group into one configurable tool.\n"
         "Patterns:\n"
         "  single — one copy with offset/mirror/scale. Params: region_id, dx, dy, mirror_x, mirror_axis_x, scale\n"
-        "  linear — N copies in a row. Params: region_id, count, dx, dy\n"
+        "  linear — N copies in a row. Params: region_id, count, dx, dy, spacing_falloff, scale_falloff\n"
         "  grid — N×M grid. Params: region_id, columns, rows, spacing_x, spacing_y\n"
         "  radial — circular array. Params: region_id, count, center_x, center_y, radius\n"
         "  group — duplicate group with transforms. Params: group_name, dx, dy, scale, rotate",
@@ -476,6 +856,8 @@ def create_tools(mcp):
         variations: dict | None = None,
         jitter: dict | None = None,
         z_index: int | None = None,
+        spacing_falloff: float = 1.0,
+        scale_falloff: float = 1.0,
     ) -> str:
         """Make copies of a region or group.
 
@@ -506,6 +888,9 @@ def create_tools(mcp):
                 seed (int, for reproducibility).
                 💡 jitter={'hue':5,'size':0.02,'rotation':3,'seed':42}
             z_index: Explicit z-index for copies.
+            spacing_falloff: Linear-only multiplier applied to each step's dx/dy
+                so repeated objects recede toward a vanishing point.
+            scale_falloff: Linear-only multiplier applied to each copy's scale.
         """
         import math
         scene = get_graph()
@@ -570,20 +955,27 @@ def create_tools(mcp):
                 return f"Error: {e}"
 
         elif pattern == "linear":
+            cur_x = 0.0
+            cur_y = 0.0
+            step_scale = 1.0
             for i in range(count):
+                cur_x += dx * step_scale
+                cur_y += dy * step_scale
+                copy_scale = scale * (scale_falloff ** i)
                 new_id = f"{new_prefix or region_id}_copy_{i}"
                 try:
                     dup = scene.duplicate_region(
                         region_id=region_id, document_id=doc_id,
                         new_region_id=new_id,
-                        offset_x=dx * (i + 1), offset_y=dy * (i + 1),
-                        scale=scale, rotate=rotate,
+                        offset_x=cur_x, offset_y=cur_y,
+                        scale=copy_scale, rotate=rotate,
                         mirror_x=mirror_x, mirror_y=mirror_y,
                         shadow_mode=shadow_mode, z_index=resolved_z,
                     )
                     created.append(dup.id)
                 except (ValueError, RuntimeError) as e:
                     return f"Error at copy {i}: {e}"
+                step_scale *= spacing_falloff
 
         elif pattern == "grid":
             for row in range(rows):
@@ -713,6 +1105,117 @@ def create_tools(mcp):
             z_index=r.z_index - 1,
         )
         return f"Shading added: highlight='{h_dup.id}' shadow='{s_dup.id}', light={light_direction:.0f}deg"
+
+    @mcp.tool(
+        name="add_depth_shadow",
+        description="Create a soft offset shadow from a region outline. "
+        "Use to ground objects quickly without manually drawing shadow blobs. "
+        "direction is degrees (0=right, 90=down); distance is normalized canvas units; "
+        "softness is blur radius in pixels.",
+    )
+    def add_depth_shadow(
+        region_id: str,
+        document_id: str | None = None,
+        direction: float = 45.0,
+        distance: float = 0.03,
+        softness: float = 4.0,
+        opacity: float = 0.22,
+        color: str = "#000000",
+        scale: float = 1.0,
+        sx: float | None = None,
+        sy: float | None = None,
+        z_offset: int = -1,
+        new_region_id: str | None = None,
+    ) -> str:
+        """Create a blurred, low-opacity shadow derived from a region.
+
+        Args:
+            region_id: Source region.
+            document_id: Document UUID.
+            direction: Offset angle in degrees. 0=right, 90=down.
+            distance: Offset distance in normalized canvas units.
+            softness: Gaussian blur radius in pixels.
+            opacity: Shadow opacity.
+            color: Shadow fill color.
+            scale, sx, sy: Scale the shadow around the source center. Use
+                ``sy=0.35`` for ground shadows.
+            z_offset: Relative z-index from the source, usually negative.
+            new_region_id: Optional explicit shadow ID.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+            shadow = scene.add_depth_shadow(
+                region_id,
+                document_id=doc_id,
+                new_region_id=new_region_id,
+                direction=direction,
+                distance=max(0.0, min(1.0, distance)),
+                softness=max(0.0, min(64.0, softness)),
+                opacity=max(0.0, min(1.0, opacity)),
+                color=color,
+                scale=max(0.01, min(10.0, scale)),
+                sx=sx,
+                sy=sy,
+                z_offset=z_offset,
+            )
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+        return (
+            f"Depth shadow added: id='{shadow.id}', source='{region_id}', "
+            f"direction={direction:g}, distance={distance:g}, softness={softness:g}"
+        )
+
+    @mcp.tool(
+        name="cast_shadow",
+        description="Create a soft shadow from one region clipped onto another region. "
+        "Use for objects casting onto floors, walls, tables, platforms, or panels.",
+    )
+    def cast_shadow(
+        from_region_id: str,
+        onto_region_id: str,
+        document_id: str | None = None,
+        direction: float = 45.0,
+        distance: float = 0.04,
+        softness: float = 5.0,
+        opacity: float = 0.20,
+        color: str = "#000000",
+        scale: float = 1.0,
+        sx: float | None = None,
+        sy: float | None = None,
+        z_offset: int = 1,
+        new_region_id: str | None = None,
+    ) -> str:
+        """Create a clipped cast shadow from one region onto another."""
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+            onto = scene.get_region(onto_region_id, doc_id)
+            shadow = scene.add_depth_shadow(
+                from_region_id,
+                document_id=doc_id,
+                new_region_id=new_region_id,
+                direction=direction,
+                distance=max(0.0, min(1.0, distance)),
+                softness=max(0.0, min(64.0, softness)),
+                opacity=max(0.0, min(1.0, opacity)),
+                color=color,
+                scale=max(0.01, min(10.0, scale)),
+                sx=sx,
+                sy=sy,
+                z_offset=0,
+                clip_to=onto_region_id,
+                layer=onto.layer,
+            )
+            shadow.z_index = onto.z_index + z_offset
+            scene.get_document(doc_id).version += 1
+            scene._persist(doc_id)
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+        return (
+            f"Cast shadow added: id='{shadow.id}', from='{from_region_id}', "
+            f"onto='{onto_region_id}', clipped=true"
+        )
 
     # Individual z-ordering: use edit_region(region_id, z_index=N)
     # Layer z-ordering: use shift_layer_z

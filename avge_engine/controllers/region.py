@@ -5,8 +5,8 @@ import math
 import json as _json
 from typing import Any, Literal
 
-from avge_engine.services.engine import get_graph, resolve_doc, validate_input
-from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star
+from avge_engine.services.engine import get_graph, resolve_doc, validate_input, stroke_width_px_to_norm
+from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star, ellipse_band
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.geometry import compute_bounds
 
@@ -70,7 +70,7 @@ def _relative_shape(scene, doc_id, relative_to, shape):
         s["rx"] = s["rx"] * bw
         if "ry" in s:
             s["ry"] = s["ry"] * bh
-    elif st == "line":
+    elif st in ("line", "polyline"):
         if "points" in s:
             s["points"] = [(bx + p[0] * bw, by + p[1] * bh) for p in s["points"]]
         else:
@@ -78,6 +78,14 @@ def _relative_shape(scene, doc_id, relative_to, shape):
             s["y1"] = by + s["y1"] * bh
             s["x2"] = bx + s["x2"] * bw
             s["y2"] = by + s["y2"] * bh
+    elif st in ("compound_path", "path"):
+        if "subpaths" in s:
+            s["subpaths"] = [
+                [(bx + p[0] * bw, by + p[1] * bh) for p in subpath]
+                for subpath in s["subpaths"]
+            ]
+        elif "points" in s:
+            s["points"] = [(bx + p[0] * bw, by + p[1] * bh) for p in s["points"]]
     elif st in ("arc", "polygon", "star"):
         s["cx"] = bx + s["cx"] * bw
         s["cy"] = by + s["cy"] * bh
@@ -111,6 +119,7 @@ def create_tools(mcp):
         stroke: str | None = "#333333",
         relative_to: str | None = None,
         stroke_width: float = 0.005,
+        stroke_width_px: float | None = None,
         opacity: float = 1.0,
         fill_gradient: Any | None = None,
         smoothness_per_point: list[float] | None = None,
@@ -150,6 +159,7 @@ def create_tools(mcp):
             fill: Fill hex color, or omit for no fill.
             stroke: Stroke hex color, or omit for no stroke.
             stroke_width: Stroke width in normalized units.
+            stroke_width_px: Stroke width in canvas pixels. Overrides stroke_width.
             opacity: Object opacity 0.0–1.0.
             fill_gradient: Gradient definition (dict or JSON string).
                 Linear: {"type":"linear","x1":0,"y1":0,"x2":0,"y2":1,
@@ -185,6 +195,10 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
 
         # Resolve z_index from z_before/z_after
         resolved_z = z_index
@@ -381,6 +395,150 @@ def create_tools(mcp):
         )
 
     @mcp.tool(
+        name="create_ellipse_band",
+        description="Create a filled elliptical ring or arc band in one call. "
+        "Use for realistic circular balconies, overhead rings, rail strips, "
+        "counters, curved floors, rims, and glass bands. "
+        "Set start_angle/end_angle for partial arcs; use perspective>0 to "
+        "widen the lower/near side and narrow the upper/far side; use skew_x "
+        "for oblique architectural views.",
+    )
+    def create_ellipse_band(
+        cx: float,
+        cy: float,
+        rx: float,
+        ry: float | None = None,
+        thickness: float | None = 0.03,
+        inner_rx: float | None = None,
+        inner_ry: float | None = None,
+        start_angle: float = 0.0,
+        end_angle: float = 360.0,
+        rotation: float = 0.0,
+        samples: int = 64,
+        perspective: float = 0.0,
+        skew_x: float = 0.0,
+        region_id: str | None = None,
+        document_id: str | None = None,
+        layer: str = "default",
+        fill: str | None = "#CCCCCC",
+        stroke: str | None = "#333333",
+        stroke_width: float = 0.005,
+        stroke_width_px: float | None = None,
+        opacity: float = 1.0,
+        fill_gradient: Any | None = None,
+        smoothness: float = 0.0,
+        z_index: int = 0,
+        z_before: str | None = None,
+        z_after: str | None = None,
+        clip_to: str | None = None,
+        blend_mode: BLEND_MODES | None = None,
+        tags: dict | None = None,
+        groups: list[str] | None = None,
+    ) -> str:
+        """Create an annular ellipse/arc band as a closed vector region.
+
+        Args:
+            cx, cy: Center in normalized coordinates.
+            rx, ry: Outer radii. If ry is omitted, a circle is used before
+                perspective/rotation transforms.
+            thickness: Uniform inward thickness when inner radii are omitted.
+            inner_rx, inner_ry: Explicit inner radii. Use for tapered-looking
+                architectural bands or different horizontal/vertical thickness.
+            start_angle, end_angle: Arc range in degrees; 0 is right, 90 is down.
+                A 360-degree sweep creates a full ring with a small seam.
+            rotation: Rotate the band around its center in degrees.
+            samples: Points sampled per edge, clamped to 4..180.
+            perspective: -0.75..0.75. Positive values widen the lower/near side
+                and narrow the upper/far side.
+            skew_x: Horizontal shear based on vertical position.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document. Call create_document first."
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
+
+        resolved_z = z_index
+        try:
+            if z_before is not None:
+                ref = scene.get_region(z_before, doc_id)
+                resolved_z = ref.z_index - 1
+            elif z_after is not None:
+                ref = scene.get_region(z_after, doc_id)
+                resolved_z = ref.z_index + 1
+        except ValueError:
+            return "Error: Reference region for z-ordering not found"
+
+        resolved_fill = fill
+        if fill_gradient is not None:
+            if isinstance(fill_gradient, str):
+                try:
+                    resolved_fill = _json.loads(fill_gradient)
+                except _json.JSONDecodeError:
+                    return f"Error: invalid fill_gradient JSON: {fill_gradient}"
+            elif isinstance(fill_gradient, dict):
+                resolved_fill = fill_gradient
+
+        try:
+            outline = ellipse_band(
+                cx=cx,
+                cy=cy,
+                rx=rx,
+                ry=ry,
+                thickness=thickness,
+                inner_rx=inner_rx,
+                inner_ry=inner_ry,
+                start_angle=start_angle,
+                end_angle=end_angle,
+                rotation=rotation,
+                samples=samples,
+                perspective=perspective,
+                skew_x=skew_x,
+            )
+            region = scene.create_region(
+                outline=outline,
+                region_id=region_id,
+                document_id=doc_id,
+                layer=layer,
+                z_index=resolved_z,
+                clip_to=clip_to,
+                constraints=CurveConstraints(
+                    smoothness=max(0.0, min(1.0, smoothness)),
+                    closed=True,
+                ),
+                style=Style(
+                    fill=None if resolved_fill is None or resolved_fill in ("none", "transparent") else resolved_fill,
+                    stroke=None if stroke is None or stroke == "none" else stroke,
+                    stroke_width=max(0.001, min(0.1, stroke_width)),
+                    opacity=max(0.0, min(1.0, opacity)),
+                    blend_mode=blend_mode,
+                ),
+                metadata=dict(tags) if tags else {},
+            )
+            if groups:
+                for g in groups:
+                    scene.add_to_group(g, [region.id], doc_id)
+        except (ValueError, RuntimeError, KeyError) as e:
+            return f"Error: {e}"
+
+        bounds = compute_bounds(region.outline)
+        bounds_str = (
+            f"x={bounds['x']:.4f} y={bounds['y']:.4f} "
+            f"w={bounds['w']:.4f} h={bounds['h']:.4f}"
+            if bounds
+            else "N/A"
+        )
+        return (
+            f"Ellipse band created: id={region.id}, "
+            f"bounds=({bounds_str}), points={len(region.outline)}, "
+            f"angles={start_angle:g}→{end_angle:g}"
+        )
+
+    @mcp.tool(
         name="delete_region",
         description="Delete one or more regions by ID. Returns list of "
         "actually removed IDs. Use this to clean up stray geometry, "
@@ -432,6 +590,7 @@ def create_tools(mcp):
         fill: str | None = None,
         stroke: str | None = None,
         stroke_width: float | None = None,
+        stroke_width_px: float | None = None,
         opacity: float | None = None,
         z_index: int | None = None,
         blend_mode: BLEND_MODES | None = None,
@@ -464,6 +623,7 @@ def create_tools(mcp):
             fill: New fill hex color or gradient (omit to keep current).
             stroke: New stroke color.
             stroke_width: New stroke width.
+            stroke_width_px: New stroke width in canvas pixels. Overrides stroke_width.
             opacity: New opacity.
             z_index: New paint order (higher = on top).
             blend_mode: CSS mix-blend-mode (multiply, screen, overlay, etc.).
@@ -484,6 +644,10 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
 
         # Resolve target IDs: ids param takes precedence over region_id
         target_ids = ids if ids else ([region_id] if region_id else [])
@@ -855,21 +1019,23 @@ def create_tools(mcp):
     @mcp.tool(
         name="create_primitive",
         description="Create an SVG primitive shape (rect, ellipse, line, "
-        "polygon, star, arc) or a polyline. "
+        "polygon, star, arc), open polyline, or stroked compound path. "
         "Use for geometric objects where polygon outlines would be imprecise. "
         "💡 Stars: star shape = 4-point star in one call, not 16 tiny circles. "
         "💡 Pentagon: polygon with sides=5. "
         "💡 Fingers: rect with rx=half the width gives perfect pill shapes. "
         "💡 Palm creases: line for stroke-only wrinkles. "
-        "💡 Curved lines: use points array for multi-point smooth curves. "
+        "💡 Curved lines: use type='polyline' with points and smoothness. "
+        "💡 Compound strokes: use type='compound_path' with subpaths to keep many seams/cables as one region. "
         "Shape object keys per type:\n"
         "  rect:     x, y, width, height, rx? (corner radius), taper? (trapezoid)\n"
         "  ellipse:  cx, cy, rx, ry? (ry=rx if omitted)\n"
-        "  line:     x1, y1, x2, y2 (use {\"type\":\"line\",...} wrapper)\n"
+        "  line:     x1, y1, x2, y2 (or points for backward-compatible polyline)\n"
+        "  polyline: points ([[x,y],...]), closed?, smoothness?\n"
+        "  compound_path: subpaths ([[[x,y],...], ...]), closed?, smoothness?\n"
         "  polygon:  cx, cy, r, sides? (default 6), rotate?\n"
         "  star:     cx, cy, r, r_inner?, points? (default 5), rotate?\n"
-        "  arc:      cx, cy, r, start_angle?, end_angle?\n"
-        "  polyline: points ([[x,y],...], 3+ points for smooth curves)",
+        "  arc:      cx, cy, r, start_angle?, end_angle?",
     )
     def create_primitive(
         shape: dict,
@@ -882,10 +1048,14 @@ def create_tools(mcp):
         fill: str | None = "#CCCCCC",
         stroke: str | None = "#333333",
         stroke_width: float = 0.005,
+        stroke_width_px: float | None = None,
         opacity: float = 1.0,
         rotate: float = 0.0,
         blend_mode: BLEND_MODES | None = None,
         stroke_linecap: str | None = None,
+        stroke_dasharray: str | None = None,
+        smoothness: float | None = None,
+        closed: bool | None = None,
         groups: list[str] | None = None,
         relative_to: str | None = None,
     ) -> str:
@@ -897,10 +1067,11 @@ def create_tools(mcp):
                 rect with taper: {"type":"rect", "x":0.1, "y":0.1, "width":0.3, "height":0.5, "rx":0.02, "taper":0.3}
                 ellipse: {"type":"ellipse", "cx":0.5, "cy":0.5, "rx":0.1}
                 line:   {"type":"line", "x1":0.1, "y1":0.5, "x2":0.9, "y2":0.5}
+                polyline: {"type":"polyline", "points":[[0.1,0.5],[0.3,0.4],[0.5,0.5]]}
+                compound_path: {"type":"compound_path", "subpaths":[[[0.1,0.2],[0.9,0.2]], [[0.1,0.4],[0.9,0.4]]]}
                 star:   {"type":"star", "cx":0.5, "cy":0.5, "r":0.12, "points":4, "r_inner":0.05}
                 polygon: {"type":"polygon", "cx":0.5, "cy":0.5, "r":0.1, "sides":8}
                 arc:    {"type":"arc", "cx":0.5, "cy":0.5, "r":0.1, "start_angle":0, "end_angle":180}
-                polyline: {"type":"line", "points":[[0.1,0.5],[0.3,0.4],[0.5,0.5],[0.7,0.4]]}
             document_id: Document UUID (omit to use active document).
             region_id: Optional unique ID.
             layer: Layer name.
@@ -910,11 +1081,15 @@ def create_tools(mcp):
             fill: Fill hex color, gradient dict, or "none"/"transparent" for no fill.
             stroke: Stroke color.
             stroke_width: Stroke width.
+            stroke_width_px: Stroke width in canvas pixels. Overrides stroke_width.
             opacity: Opacity 0.0–1.0.
             rotate: Rotation in degrees around the shape center (positive = clockwise).
                 💡 For hands/pointers: create a vertical rect at center, then rotate.
             blend_mode: CSS mix-blend-mode.
             stroke_linecap: Line end style — "butt", "round", or "square" (mainly for line shapes).
+            stroke_dasharray: Dash pattern for stroked primitives.
+            smoothness: Default curve smoothness for polyline/compound_path.
+            closed: Default closed flag for polyline/compound_path.
             relative_to: Region ID to use as coordinate reference. When set,
                 outline points are treated as 0.0-1.0 fractions of the reference
                 region's bounding box, then mapped to absolute canvas coordinates.
@@ -926,6 +1101,10 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
 
         # Resolve z_index from z_before/z_after
         resolved_z = z_index
@@ -978,22 +1157,49 @@ def create_tools(mcp):
                         scene.add_to_group(g, [e.id], doc_id)
                 rys = shape.get("ry", shape["rx"])
                 return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}"
-            elif stype == "line":
+            elif stype in ("line", "polyline"):
                 pts = shape.get("points")
-                if pts is not None and len(pts) > 2:
-                    lr = scene.create_line(
-                        points=pts,
-                        document_id=doc_id, region_id=region_id,
-                        layer=layer, z_index=resolved_z,
-                        stroke=stroke, stroke_width=stroke_width,
-                        opacity=opacity, blend_mode=blend_mode,
-                        stroke_linecap=stroke_linecap,
-                        rotate=rotate,
-                    )
+                if pts is not None:
+                    if len(pts) < 2:
+                        return "Error: polyline requires at least 2 points"
+                    is_closed = bool(shape.get("closed", closed if closed is not None else False))
+                    line_smoothness = shape.get("smoothness", smoothness)
+                    if is_closed:
+                        lr = scene.create_region(
+                            outline=[(float(p[0]), float(p[1])) for p in pts],
+                            document_id=doc_id, region_id=region_id,
+                            layer=layer, z_index=resolved_z,
+                            constraints=CurveConstraints(
+                                smoothness=max(0.0, min(1.0, line_smoothness if line_smoothness is not None else 0.0)),
+                                closed=True,
+                            ),
+                            style=Style(
+                                fill=None if fill in (None, "none", "transparent") else fill,
+                                stroke=None if stroke in (None, "none") else stroke,
+                                stroke_width=stroke_width,
+                                opacity=opacity,
+                                blend_mode=blend_mode,
+                                stroke_linecap=stroke_linecap,
+                                stroke_dasharray=stroke_dasharray,
+                            ),
+                        )
+                    else:
+                        lr = scene.create_line(
+                            points=pts,
+                            document_id=doc_id, region_id=region_id,
+                            layer=layer, z_index=resolved_z,
+                            stroke=stroke, stroke_width=stroke_width,
+                            opacity=opacity, blend_mode=blend_mode,
+                            stroke_linecap=stroke_linecap,
+                            stroke_dasharray=stroke_dasharray,
+                            smoothness=line_smoothness,
+                            rotate=rotate,
+                        )
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [lr.id], doc_id)
-                        return f"Polyline created: id={lr.id}, {len(pts)} points"
+                    closed_note = ", closed" if is_closed else ""
+                    return f"Polyline created: id={lr.id}, {len(pts)} points{closed_note}"
                 else:
                     lr = scene.create_line(
                         shape.get("x1", 0.0), shape.get("y1", 0.0),
@@ -1003,12 +1209,38 @@ def create_tools(mcp):
                         stroke=stroke, stroke_width=stroke_width,
                         opacity=opacity, blend_mode=blend_mode,
                         stroke_linecap=stroke_linecap,
+                        stroke_dasharray=stroke_dasharray,
                         rotate=rotate,
                     )
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [lr.id], doc_id)
                     return f"Line created: id={lr.id}, ({shape.get('x1',0):.4f},{shape.get('y1',0):.4f}) → ({shape.get('x2',0.5):.4f},{shape.get('y2',0.5):.4f})"
+            elif stype in ("compound_path", "path"):
+                    subpaths = shape.get("subpaths")
+                    if subpaths is None and shape.get("points") is not None:
+                        subpaths = [shape["points"]]
+                    if not subpaths:
+                        return "Error: compound_path requires subpaths"
+                    r = scene.create_compound_path(
+                        subpaths=subpaths,
+                        document_id=doc_id, region_id=region_id,
+                        layer=layer, z_index=resolved_z,
+                        fill=None if fill in (None, "none", "transparent") else fill,
+                        stroke=None if stroke in (None, "none") else stroke,
+                        stroke_width=stroke_width,
+                        opacity=opacity,
+                        blend_mode=blend_mode,
+                        stroke_linecap=stroke_linecap,
+                        stroke_dasharray=stroke_dasharray,
+                        smoothness=shape.get("smoothness", smoothness if smoothness is not None else 0.0),
+                        closed=bool(shape.get("closed", closed if closed is not None else False)),
+                        rotate=rotate,
+                    )
+                    if groups:
+                        for g in groups:
+                            scene.add_to_group(g, [r.id], doc_id)
+                    return f"Compound path created: id={r.id}, {len(subpaths)} subpath(s)"
             elif stype == "arc":
                     pts = compute_arc(shape["cx"], shape["cy"], shape["r"],
                         start_angle=shape.get("start_angle", 0.0), end_angle=shape.get("end_angle", 180.0))
@@ -1031,7 +1263,7 @@ def create_tools(mcp):
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
                     return f"Star created: id={r.id}, {shape.get('points',5)} points"
             else:
-                return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, arc, polygon, star"
+                return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, polyline, compound_path, path, arc, polygon, star"
         except (ValueError, RuntimeError, KeyError) as e:
             return f"Error: {e}"
 
@@ -1056,6 +1288,7 @@ def create_tools(mcp):
         z_index: int = 0,
         stroke: str | None = "#333333",
         stroke_width: float = 0.005,
+        stroke_width_px: float | None = None,
         opacity: float = 1.0,
         smoothness: float = 0.5,
         blend_mode: BLEND_MODES | None = None,
@@ -1073,6 +1306,7 @@ def create_tools(mcp):
             z_index: Paint order (higher = on top).
             stroke: Stroke color (default "#333333").
             stroke_width: Stroke width in normalized units.
+            stroke_width_px: Stroke width in canvas pixels. Overrides stroke_width.
             opacity: Object opacity 0.0–1.0.
             smoothness: Curve smoothness 0.0–1.0 (default 0.5).
             blend_mode: CSS mix-blend-mode.
@@ -1086,6 +1320,10 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
+
+        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
+        if px_width is not None:
+            stroke_width = px_width
 
         if not points or len(points) < 2:
             return "Error: Need at least 2 points"
@@ -1270,4 +1508,3 @@ def create_tools(mcp):
             f"Copied '{region_id}' from {source_id} to "
             f"'{target_document_id}' as '{new_id}'"
         )
-

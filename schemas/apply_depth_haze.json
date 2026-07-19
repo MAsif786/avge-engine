@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/apply_depth_haze/v1.json",
+  "title": "apply_depth_haze",
+  "description": "Blend selected regions toward a haze color based on vertical depth to create atmospheric perspective.",
+  "type": "object",
+  "properties": {
+    "document_id": { "type": ["string", "null"], "default": null },
+    "selector": {
+      "type": ["object", "null"],
+      "description": "Selector like restyle: ids, group_name, fill, layer, or tags.",
+      "default": null
+    },
+    "haze_color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$",
+      "default": "#7FB8D6"
+    },
+    "near_y": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.75 },
+    "far_y": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.25 },
+    "max_strength": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.55 },
+    "affect_fill": { "type": "boolean", "default": true },
+    "affect_stroke": { "type": "boolean", "default": true },
+    "opacity_falloff": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.0 }
+  },
+  "additionalProperties": false
+}

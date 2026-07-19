@@ -711,7 +711,291 @@ class SceneGraph:
 
         return findings
 
+    def critique_preview_quality(self, document_id: str | None = None) -> list[dict[str, Any]]:
+        """Preview-oriented visual critique with actionable findings."""
+        doc_id = self._resolve_doc(document_id)
+        regions = list(self._regions_for(doc_id).values())
+        findings: list[dict[str, Any]] = []
+        if not regions:
+            return [{
+                "code": "empty_scene",
+                "severity": "high",
+                "confidence": 1.0,
+                "message": "Scene is empty — there is no preview to critique.",
+                "suggestion": "Call create_region/create_primitive before preview critique.",
+                "region_ids": [],
+            }]
+
+        visible = [r for r in regions if r.style.opacity > 0.02]
+        filled = [r for r in visible if r.style.fill is not None]
+        shadows = [
+            r for r in visible
+            if r.metadata.get("shadow_source")
+            or (r.style.blur > 0 and r.style.fill in ("#000000", "#000", "black"))
+            or r.style.blend_mode == "multiply" and r.style.opacity <= 0.35
+        ]
+        gradients = [r for r in filled if isinstance(r.style.fill, dict)]
+        material_regions = [
+            r for r in visible
+            if r.metadata.get("material") or r.metadata.get("material_source")
+        ]
+        flat = [
+            r for r in filled
+            if isinstance(r.style.fill, str)
+            and r.style.fill not in ("none", "transparent")
+            and r.style.opacity >= 0.9
+            and not r.metadata.get("shadow_source")
+            and not r.metadata.get("material_source")
+        ]
+
+        def add(code: str, severity: str, confidence: float, message: str,
+                suggestion: str, region_ids: list[str] | None = None) -> None:
+            findings.append({
+                "code": code,
+                "severity": severity,
+                "confidence": round(max(0.0, min(1.0, confidence)), 2),
+                "message": message,
+                "suggestion": suggestion,
+                "region_ids": region_ids or [],
+            })
+
+        # Too flat: many opaque flat fills, little gradient/material/shadow support.
+        if len(filled) >= 4:
+            flat_ratio = len(flat) / max(1, len(filled))
+            depth_marks = len(gradients) + len(material_regions) + len(shadows)
+            if flat_ratio >= 0.72 and depth_marks <= max(1, len(filled) // 5):
+                add(
+                    "too_flat",
+                    "high" if flat_ratio > 0.85 else "medium",
+                    flat_ratio,
+                    f"{len(flat)} of {len(filled)} filled regions are opaque flat colors with little depth treatment.",
+                    "Use restyle(material=...), fill_gradient, add_depth_shadow, or add_shading on major objects.",
+                    [r.id for r in flat[:6]],
+                )
+
+        # Over-rounded: too many pill-like rects or high-smoothness low-detail regions.
+        rounded_ids: list[str] = []
+        for r in visible:
+            if r.primitive and r.primitive.get("type") == "rect":
+                p = r.primitive
+                rx = float(p.get("rx", 0.0))
+                shortest = min(float(p.get("width", 0.0)), float(p.get("height", 0.0)))
+                if shortest > 0 and rx >= shortest * 0.42:
+                    rounded_ids.append(r.id)
+            elif r.constraints.closed and r.constraints.smoothness >= 0.78 and len(r.outline) <= 7:
+                rounded_ids.append(r.id)
+        if len(rounded_ids) >= 3 and len(rounded_ids) / max(1, len(visible)) >= 0.28:
+            add(
+                "over_rounded",
+                "medium",
+                min(1.0, len(rounded_ids) / max(1, len(visible)) + 0.25),
+                f"{len(rounded_ids)} regions look highly rounded/pill-like, which can make the preview toy-like.",
+                "Reduce rx/smoothness on structural surfaces; reserve high smoothness for organic forms.",
+                rounded_ids[:8],
+            )
+
+        # Missing contact shadows: scene-like objects in lower half without any shadow helpers.
+        shadow_sources = {str(r.metadata.get("shadow_source")) for r in shadows if r.metadata.get("shadow_source")}
+        candidates: list[str] = []
+        for r in visible:
+            if r.id in shadow_sources or r.metadata.get("shadow_source") or r.metadata.get("material_source"):
+                continue
+            b = compute_bounds(r.outline)
+            if not b:
+                continue
+            if b["w"] * b["h"] >= 0.015 and b["y"] + b["h"] >= 0.45 and r.style.fill is not None:
+                candidates.append(r.id)
+        if candidates and not shadows:
+            add(
+                "missing_contact_shadows",
+                "high" if len(candidates) >= 3 else "medium",
+                0.82,
+                f"{len(candidates)} sizeable lower-scene object(s) have no visible contact/depth shadow.",
+                "Call add_depth_shadow(region_id, direction=90, distance=0.03, softness=5, sy=0.35) for grounded objects.",
+                candidates[:6],
+            )
+        elif len(candidates) >= 4 and len(shadows) < len(candidates) // 3:
+            add(
+                "missing_contact_shadows",
+                "medium",
+                0.68,
+                f"Only {len(shadows)} shadow-like region(s) for {len(candidates)} sizeable grounded object(s).",
+                "Add depth shadows to the main foreground objects, or cast shadows onto the floor/table plane.",
+                candidates[:6],
+            )
+
+        # Bad perspective: skewed quadrilaterals with no foreshortening, or inconsistent plane ratios.
+        suspect_quads: list[str] = []
+        ratios: list[float] = []
+        for r in visible:
+            if not r.constraints.closed or len(r.outline) != 4:
+                continue
+            pts = r.outline
+            top_w = ((pts[1][0] - pts[0][0]) ** 2 + (pts[1][1] - pts[0][1]) ** 2) ** 0.5
+            bottom_w = ((pts[2][0] - pts[3][0]) ** 2 + (pts[2][1] - pts[3][1]) ** 2) ** 0.5
+            if top_w <= 0.001 or bottom_w <= 0.001:
+                continue
+            ratio = bottom_w / top_w
+            ratios.append(ratio)
+            left_skew = abs(pts[3][0] - pts[0][0])
+            right_skew = abs(pts[2][0] - pts[1][0])
+            skewed = left_skew > 0.025 or right_skew > 0.025
+            no_foreshortening = abs(ratio - 1.0) < 0.06
+            b = compute_bounds(r.outline)
+            if skewed and no_foreshortening and b and b["w"] * b["h"] > 0.025:
+                suspect_quads.append(r.id)
+        if suspect_quads:
+            add(
+                "bad_perspective",
+                "medium",
+                0.72,
+                f"{len(suspect_quads)} skewed quadrilateral panel(s) have almost no near/far foreshortening.",
+                "Use project_quad with a wider near edge or create_ellipse_band(perspective=...) for circular planes.",
+                suspect_quads[:6],
+            )
+        elif len(ratios) >= 4 and max(ratios) - min(ratios) > 0.55:
+            add(
+                "bad_perspective",
+                "low",
+                0.55,
+                "Several quadrilateral planes use very different near/far width ratios.",
+                "Normalize perspective direction across floor, table, wall, and window panels.",
+                [],
+            )
+
+        # Dominant blob shape: one large smooth filled shape overwhelms composition.
+        filled_bounds = [(r, compute_bounds(r.outline)) for r in filled]
+        filled_bounds = [(r, b) for r, b in filled_bounds if b]
+        if len(filled_bounds) >= 3:
+            areas = [(r, b["w"] * b["h"]) for r, b in filled_bounds]
+            total_area = sum(a for _, a in areas)
+            largest, largest_area = max(areas, key=lambda item: item[1])
+            if total_area > 0 and largest_area / total_area >= 0.58:
+                is_blob = (
+                    largest.constraints.smoothness >= 0.65
+                    or len(largest.outline) >= 10
+                    or not largest.primitive
+                )
+                if is_blob:
+                    add(
+                        "dominant_blob_shape",
+                        "medium",
+                        min(0.9, largest_area / total_area),
+                        f"Region '{largest.id}' visually dominates the scene and may read as a single blob.",
+                        "Break it into planes/details, add line hierarchy, or add material/shadow overlays.",
+                        [largest.id],
+                    )
+
+        return findings
+
     # ── Transform operations ───────────────────────────────────────
+
+    def project_quad(
+        self,
+        target_quad: list[Point2D],
+        document_id: str | None = None,
+        *,
+        region_id: str | None = None,
+        source_region_id: str | None = None,
+        replace_source: bool = False,
+        columns: int = 1,
+        rows: int = 1,
+        layer: str = "default",
+        z_index: int = 0,
+        fill: str | None = "#CCCCCC",
+        stroke: str | None = "#333333",
+        stroke_width: float | None = 0.005,
+        opacity: float | None = 1.0,
+        blend_mode: str | None = None,
+        smoothness: float = 0.0,
+        metadata: dict[str, Any] | None = None,
+    ) -> RegionNode:
+        """Create or warp geometry into a target quadrilateral.
+
+        ``target_quad`` order is top-left, top-right, bottom-right,
+        bottom-left. When ``source_region_id`` is omitted, a rectangular panel
+        is created and optional perimeter divisions are sampled via
+        ``columns``/``rows``. When a source region is supplied, its outline is
+        normalized to its own bounds and projected into the target quad.
+        """
+        from avge_engine.geometry.perspective import (
+            normalize_points_to_unit,
+            project_unit_points,
+            rectangle_grid_points,
+        )
+
+        doc_id = self._resolve_doc(document_id)
+        if len(target_quad) != 4:
+            raise ValueError("target_quad must contain exactly four points")
+
+        quad = [(float(x), float(y)) for x, y in target_quad]
+        if source_region_id:
+            source = self.get_region(source_region_id, doc_id)
+            unit_points = normalize_points_to_unit(list(source.outline))
+            outline = project_unit_points(unit_points, quad)
+            base_style = source.style
+            out_fill = fill if fill is not None else base_style.fill
+            out_stroke = stroke if stroke is not None else base_style.stroke
+            out_stroke_width = stroke_width if stroke_width is not None else base_style.stroke_width
+            out_opacity = opacity if opacity is not None else base_style.opacity
+            out_blend = blend_mode if blend_mode is not None else base_style.blend_mode
+            out_layer = layer if layer != "default" else source.layer
+            out_z = z_index if z_index != 0 else source.z_index
+        else:
+            outline = project_unit_points(rectangle_grid_points(columns, rows), quad)
+            out_fill = fill
+            out_stroke = stroke
+            out_stroke_width = stroke_width
+            out_opacity = opacity
+            out_blend = blend_mode
+            out_layer = layer
+            out_z = z_index
+
+        if source_region_id and replace_source:
+            rid = source_region_id
+            self.edit_region(
+                region_id=source_region_id,
+                document_id=doc_id,
+                outline=outline,
+                smoothness=smoothness,
+                fill=out_fill,
+                stroke=out_stroke,
+                stroke_width=out_stroke_width,
+                opacity=out_opacity,
+                z_index=out_z,
+                blend_mode=out_blend,
+                layer=out_layer,
+                metadata=metadata,
+            )
+            return self.get_region(rid, doc_id)
+
+        rid = region_id or f"quad_{uuid.uuid4().hex[:6]}"
+        region = RegionNode(
+            id=rid,
+            layer=out_layer,
+            z_index=out_z,
+            outline=normalize_outline(outline),
+            constraints=CurveConstraints(
+                smoothness=max(0.0, min(1.0, smoothness)),
+                closed=True,
+            ),
+            style=Style(
+                fill=None if out_fill is None or out_fill == "none" else out_fill,
+                stroke=None if out_stroke is None or out_stroke == "none" else out_stroke,
+                stroke_width=max(0.001, min(0.1, out_stroke_width if out_stroke_width is not None else 0.005)),
+                opacity=max(0.0, min(1.0, out_opacity if out_opacity is not None else 1.0)),
+                blend_mode=out_blend,
+            ),
+            metadata=metadata or {},
+        )
+        regions = self._regions_for(doc_id)
+        if rid in regions:
+            raise ValueError(f"Region '{rid}' already exists in document '{doc_id}'")
+        regions[rid] = region
+        self.get_document(doc_id).version += 1
+        self._auto_checkpoint(doc_id, "project_quad", rid)
+        self._persist(doc_id)
+        return region
 
     def transform_objects(
         self,
@@ -1025,20 +1309,46 @@ class SceneGraph:
                                 blend_mode=op.get("blend_mode"),
                             )
                             results.append({"status": "ok", "region_id": r.id})
-                        elif stype == "line":
+                        elif stype in ("line", "polyline"):
                             pts = shape.get("points")
-                            if pts is not None and len(pts) > 2:
-                                r = self.create_line(
-                                    points=pts,
-                                    document_id=doc_id, region_id=op.get("region_id"),
-                                    layer=op.get("layer", "default"),
-                                    z_index=op.get("z_index", 0),
-                                    stroke=op.get("stroke", "#333333"),
-                                    stroke_width=op.get("stroke_width", 0.005),
-                                    opacity=op.get("opacity", 1.0),
-                                    blend_mode=op.get("blend_mode"),
-                                    stroke_linecap=op.get("stroke_linecap"),
-                                )
+                            if pts is not None:
+                                if len(pts) < 2:
+                                    raise ValueError("polyline requires at least 2 points")
+                                is_closed = bool(shape.get("closed", op.get("closed", False)))
+                                if is_closed:
+                                    r = self.create_region(
+                                        outline=[(float(p[0]), float(p[1])) for p in pts],
+                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        layer=op.get("layer", "default"),
+                                        z_index=op.get("z_index", 0),
+                                        constraints=CurveConstraints(
+                                            smoothness=max(0.0, min(1.0, shape.get("smoothness", op.get("smoothness", 0.0)))),
+                                            closed=True,
+                                        ),
+                                        style=Style(
+                                            fill=op.get("fill"),
+                                            stroke=op.get("stroke", "#333333"),
+                                            stroke_width=op.get("stroke_width", 0.005),
+                                            opacity=op.get("opacity", 1.0),
+                                            blend_mode=op.get("blend_mode"),
+                                            stroke_linecap=op.get("stroke_linecap"),
+                                            stroke_dasharray=op.get("stroke_dasharray"),
+                                        ),
+                                    )
+                                else:
+                                    r = self.create_line(
+                                        points=pts,
+                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        layer=op.get("layer", "default"),
+                                        z_index=op.get("z_index", 0),
+                                        stroke=op.get("stroke", "#333333"),
+                                        stroke_width=op.get("stroke_width", 0.005),
+                                        opacity=op.get("opacity", 1.0),
+                                        blend_mode=op.get("blend_mode"),
+                                        stroke_linecap=op.get("stroke_linecap"),
+                                        stroke_dasharray=op.get("stroke_dasharray"),
+                                        smoothness=shape.get("smoothness", op.get("smoothness")),
+                                    )
                             else:
                                 r = self.create_line(
                                     shape.get("x1", 0.0), shape.get("y1", 0.0),
@@ -1051,7 +1361,31 @@ class SceneGraph:
                                     opacity=op.get("opacity", 1.0),
                                     blend_mode=op.get("blend_mode"),
                                     stroke_linecap=op.get("stroke_linecap"),
+                                    stroke_dasharray=op.get("stroke_dasharray"),
                                 )
+                            results.append({"status": "ok", "region_id": r.id})
+                        elif stype in ("compound_path", "path"):
+                            subpaths = shape.get("subpaths")
+                            if subpaths is None and shape.get("points") is not None:
+                                subpaths = [shape["points"]]
+                            if not subpaths:
+                                raise ValueError("compound_path requires subpaths")
+                            r = self.create_compound_path(
+                                subpaths=subpaths,
+                                document_id=doc_id,
+                                region_id=op.get("region_id"),
+                                layer=op.get("layer", "default"),
+                                z_index=op.get("z_index", 0),
+                                fill=op.get("fill"),
+                                stroke=op.get("stroke", "#333333"),
+                                stroke_width=op.get("stroke_width", 0.005),
+                                opacity=op.get("opacity", 1.0),
+                                blend_mode=op.get("blend_mode"),
+                                stroke_linecap=op.get("stroke_linecap"),
+                                stroke_dasharray=op.get("stroke_dasharray"),
+                                smoothness=shape.get("smoothness", op.get("smoothness", 0.0)),
+                                closed=bool(shape.get("closed", op.get("closed", False))),
+                            )
                             results.append({"status": "ok", "region_id": r.id})
                         else:
                             results.append({"status": "error", "message": f"Unknown shape type: {stype}"})
@@ -1094,6 +1428,46 @@ class SceneGraph:
                         rotate=op.get("rotate", 0.0),
                     )
                     results.append({"status": "ok", "region_id": d.id})
+                elif tool == "add_depth_shadow":
+                    shadow = self.add_depth_shadow(
+                        op.pop("region_id"),
+                        document_id=doc_id,
+                        new_region_id=op.get("new_region_id"),
+                        direction=op.get("direction", 45.0),
+                        distance=op.get("distance", 0.03),
+                        softness=op.get("softness", 4.0),
+                        opacity=op.get("opacity", 0.22),
+                        color=op.get("color", "#000000"),
+                        scale=op.get("scale", 1.0),
+                        sx=op.get("sx"),
+                        sy=op.get("sy"),
+                        z_offset=op.get("z_offset", -1),
+                    )
+                    results.append({"status": "ok", "region_id": shadow.id})
+                elif tool == "cast_shadow":
+                    from_id = op.pop("from_region_id")
+                    onto_id = op.pop("onto_region_id")
+                    onto = self.get_region(onto_id, doc_id)
+                    shadow = self.add_depth_shadow(
+                        from_id,
+                        document_id=doc_id,
+                        new_region_id=op.get("new_region_id"),
+                        direction=op.get("direction", 45.0),
+                        distance=op.get("distance", 0.04),
+                        softness=op.get("softness", 5.0),
+                        opacity=op.get("opacity", 0.20),
+                        color=op.get("color", "#000000"),
+                        scale=op.get("scale", 1.0),
+                        sx=op.get("sx"),
+                        sy=op.get("sy"),
+                        z_offset=0,
+                        clip_to=onto_id,
+                        layer=onto.layer,
+                    )
+                    shadow.z_index = onto.z_index + op.get("z_offset", 1)
+                    self.get_document(doc_id).version += 1
+                    self._persist(doc_id)
+                    results.append({"status": "ok", "region_id": shadow.id})
                 elif tool == "create_primitive":
                     # Alias — same logic as create_shape
                     shape = op.pop("shape", {})
@@ -1128,20 +1502,46 @@ class SceneGraph:
                                 blend_mode=op.get("blend_mode"),
                             )
                             results.append({"status": "ok", "region_id": r.id})
-                        elif stype == "line":
+                        elif stype in ("line", "polyline"):
                             pts = shape.get("points")
-                            if pts is not None and len(pts) > 2:
-                                r = self.create_line(
-                                    points=pts,
-                                    document_id=doc_id, region_id=op.get("region_id"),
-                                    layer=op.get("layer", "default"),
-                                    z_index=op.get("z_index", 0),
-                                    stroke=op.get("stroke", "#333333"),
-                                    stroke_width=op.get("stroke_width", 0.005),
-                                    opacity=op.get("opacity", 1.0),
-                                    blend_mode=op.get("blend_mode"),
-                                    stroke_linecap=op.get("stroke_linecap"),
-                                )
+                            if pts is not None:
+                                if len(pts) < 2:
+                                    raise ValueError("polyline requires at least 2 points")
+                                is_closed = bool(shape.get("closed", op.get("closed", False)))
+                                if is_closed:
+                                    r = self.create_region(
+                                        outline=[(float(p[0]), float(p[1])) for p in pts],
+                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        layer=op.get("layer", "default"),
+                                        z_index=op.get("z_index", 0),
+                                        constraints=CurveConstraints(
+                                            smoothness=max(0.0, min(1.0, shape.get("smoothness", op.get("smoothness", 0.0)))),
+                                            closed=True,
+                                        ),
+                                        style=Style(
+                                            fill=op.get("fill"),
+                                            stroke=op.get("stroke", "#333333"),
+                                            stroke_width=op.get("stroke_width", 0.005),
+                                            opacity=op.get("opacity", 1.0),
+                                            blend_mode=op.get("blend_mode"),
+                                            stroke_linecap=op.get("stroke_linecap"),
+                                            stroke_dasharray=op.get("stroke_dasharray"),
+                                        ),
+                                    )
+                                else:
+                                    r = self.create_line(
+                                        points=pts,
+                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        layer=op.get("layer", "default"),
+                                        z_index=op.get("z_index", 0),
+                                        stroke=op.get("stroke", "#333333"),
+                                        stroke_width=op.get("stroke_width", 0.005),
+                                        opacity=op.get("opacity", 1.0),
+                                        blend_mode=op.get("blend_mode"),
+                                        stroke_linecap=op.get("stroke_linecap"),
+                                        stroke_dasharray=op.get("stroke_dasharray"),
+                                        smoothness=shape.get("smoothness", op.get("smoothness")),
+                                    )
                             else:
                                 r = self.create_line(
                                     shape.get("x1", 0.0), shape.get("y1", 0.0),
@@ -1154,7 +1554,31 @@ class SceneGraph:
                                     opacity=op.get("opacity", 1.0),
                                     blend_mode=op.get("blend_mode"),
                                     stroke_linecap=op.get("stroke_linecap"),
+                                    stroke_dasharray=op.get("stroke_dasharray"),
                                 )
+                            results.append({"status": "ok", "region_id": r.id})
+                        elif stype in ("compound_path", "path"):
+                            subpaths = shape.get("subpaths")
+                            if subpaths is None and shape.get("points") is not None:
+                                subpaths = [shape["points"]]
+                            if not subpaths:
+                                raise ValueError("compound_path requires subpaths")
+                            r = self.create_compound_path(
+                                subpaths=subpaths,
+                                document_id=doc_id,
+                                region_id=op.get("region_id"),
+                                layer=op.get("layer", "default"),
+                                z_index=op.get("z_index", 0),
+                                fill=op.get("fill"),
+                                stroke=op.get("stroke", "#333333"),
+                                stroke_width=op.get("stroke_width", 0.005),
+                                opacity=op.get("opacity", 1.0),
+                                blend_mode=op.get("blend_mode"),
+                                stroke_linecap=op.get("stroke_linecap"),
+                                stroke_dasharray=op.get("stroke_dasharray"),
+                                smoothness=shape.get("smoothness", op.get("smoothness", 0.0)),
+                                closed=bool(shape.get("closed", op.get("closed", False))),
+                            )
                             results.append({"status": "ok", "region_id": r.id})
                         else:
                             results.append({"status": "error", "message": f"Unknown shape type: {stype}"})
@@ -1637,6 +2061,85 @@ class SceneGraph:
         self._persist(doc_id)
         return dup
 
+    def add_depth_shadow(
+        self,
+        region_id: str,
+        *,
+        document_id: str | None = None,
+        new_region_id: str | None = None,
+        direction: float = 45.0,
+        distance: float = 0.03,
+        softness: float = 4.0,
+        opacity: float = 0.22,
+        color: str = "#000000",
+        scale: float = 1.0,
+        sx: float | None = None,
+        sy: float | None = None,
+        z_offset: int = -1,
+        clip_to: str | None = None,
+        layer: str | None = None,
+    ) -> RegionNode:
+        """Create a soft offset shadow derived from an existing region."""
+        import math
+        import uuid
+
+        doc_id = self._resolve_doc(document_id)
+        source = self.get_region(region_id, doc_id)
+        if not source.outline:
+            raise ValueError(f"Region '{region_id}' has no outline to shadow")
+
+        bounds = compute_bounds(source.outline)
+        if not bounds:
+            raise ValueError(f"Region '{region_id}' has empty bounds")
+        cx = bounds["x"] + bounds["w"] / 2
+        cy = bounds["y"] + bounds["h"] / 2
+        scale_x = sx if sx is not None else scale
+        scale_y = sy if sy is not None else scale
+        angle = math.radians(direction)
+        dx = math.cos(angle) * distance
+        dy = math.sin(angle) * distance
+
+        shadow_outline = [
+            (
+                (x - cx) * scale_x + cx + dx,
+                (y - cy) * scale_y + cy + dy,
+            )
+            for x, y in source.outline
+        ]
+        rid = new_region_id or f"{region_id}_depth_shadow_{uuid.uuid4().hex[:6]}"
+        shadow = RegionNode(
+            id=rid,
+            layer=layer if layer is not None else source.layer,
+            z_index=source.z_index + z_offset,
+            clip_to=clip_to,
+            outline=normalize_outline(shadow_outline),
+            constraints=CurveConstraints(
+                smoothness=source.constraints.smoothness,
+                closed=source.constraints.closed,
+                corner_style=source.constraints.corner_style,
+                tensions=source.constraints.tensions,
+                handle_in=source.constraints.handle_in,
+                handle_out=source.constraints.handle_out,
+            ),
+            style=Style(
+                fill=color,
+                stroke=None,
+                stroke_width=source.style.stroke_width,
+                opacity=max(0.0, min(1.0, opacity)),
+                blend_mode="multiply",
+                blur=max(0.0, min(64.0, softness)),
+            ),
+            metadata={
+                "shadow_source": region_id,
+                "shadow_kind": "depth" if clip_to is None else "cast",
+            },
+        )
+        self._regions_for(doc_id)[rid] = shadow
+        self.get_document(doc_id).version += 1
+        self._auto_checkpoint(doc_id, "add_depth_shadow", f"{region_id}->{rid}")
+        self._persist(doc_id)
+        return shadow
+
     # ── Primitive shape operations ──────────────────────────────────
 
     def create_rect(
@@ -1782,6 +2285,9 @@ class SceneGraph:
         doc_id = self._resolve_doc(document_id)
         rid = region_id or f"line_{uuid.uuid4().hex[:6]}"
 
+        if points is not None and len(points) < 2:
+            raise ValueError("points must contain at least 2 coordinate pairs")
+
         if points is not None and len(points) > 2:
             # Multi-point polyline — path-based with smoothness
             surr = [(float(p[0]), float(p[1])) for p in points]
@@ -1796,6 +2302,9 @@ class SceneGraph:
                 primitive=None,
             )
         else:
+            if points is not None:
+                x1, y1 = float(points[0][0]), float(points[0][1])
+                x2, y2 = float(points[1][0]), float(points[1][1])
             surr = [(x1, y1), (x2, y2)]
             region = RegionNode(
                 id=rid, layer=layer, z_index=z_index,
@@ -1812,6 +2321,73 @@ class SceneGraph:
             object.__setattr__(region.transform, "rotate", rotate)
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_line", rid)
+        self._persist(doc_id)
+        return region
+
+    def create_compound_path(
+        self,
+        subpaths: list[list[list[float]]],
+        *,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        layer: str = "default",
+        z_index: int = 0,
+        fill: str | GradientDef | None = None,
+        stroke: str | None = "#333333",
+        stroke_width: float = 0.005,
+        opacity: float = 1.0,
+        blend_mode: str | None = None,
+        stroke_linecap: str | None = None,
+        stroke_dasharray: str | None = None,
+        smoothness: float = 0.0,
+        closed: bool = False,
+        rotate: float = 0.0,
+    ) -> RegionNode:
+        """Create one SVG path containing multiple subpaths."""
+        import uuid
+        doc_id = self._resolve_doc(document_id)
+        rid = region_id or f"path_{uuid.uuid4().hex[:6]}"
+        if len(subpaths) < 1:
+            raise ValueError("compound_path requires at least one subpath")
+
+        normalized_subpaths: list[list[Point2D]] = []
+        outline: list[Point2D] = []
+        for subpath in subpaths:
+            if len(subpath) < 2:
+                raise ValueError("Each compound_path subpath needs at least 2 points")
+            pts = normalize_outline([(float(p[0]), float(p[1])) for p in subpath])
+            normalized_subpaths.append(pts)
+            outline.extend(pts)
+
+        smooth = max(0.0, min(1.0, smoothness))
+        region = RegionNode(
+            id=rid,
+            layer=layer,
+            z_index=z_index,
+            outline=outline,
+            constraints=CurveConstraints(smoothness=smooth, closed=closed),
+            style=Style(
+                fill=fill,
+                stroke=stroke,
+                stroke_width=max(0.001, min(0.1, stroke_width)),
+                opacity=max(0.0, min(1.0, opacity)),
+                blend_mode=blend_mode,
+                stroke_linecap=stroke_linecap,
+                stroke_dasharray=stroke_dasharray,
+            ),
+            primitive={
+                "type": "compound_path",
+                "subpaths": normalized_subpaths,
+                "closed": closed,
+                "smoothness": smooth,
+            },
+        )
+        self._regions_for(doc_id)[rid] = region
+        region.version += 1
+        if abs(rotate) > 0.001:
+            object.__setattr__(region.transform, "rotate", rotate)
+        self.get_document(doc_id).version += 1
+        self._auto_checkpoint(doc_id, "create_compound_path", rid)
         self._persist(doc_id)
         return region
 

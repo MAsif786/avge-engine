@@ -198,6 +198,24 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
             parts.append("/>")
             return "".join(parts)
 
+        if ptype == "compound_path":
+            path_data = _build_compound_path_data(
+                region.primitive.get("subpaths", []),
+                canvas_w,
+                canvas_h,
+                bool(region.primitive.get("closed", False)),
+                float(region.primitive.get("smoothness", region.constraints.smoothness)),
+            )
+            if not path_data:
+                return None
+            parts = [f'    <path d="{path_data}"']
+            _append_style(parts)
+            bounds = compute_bounds(region.outline)
+            if bounds:
+                _append_transform(parts, bounds["x"] + bounds["w"] / 2, bounds["y"] + bounds["h"] / 2)
+            parts.append("/>")
+            return "".join(parts)
+
         if ptype == "text":
             tx = region.primitive["x"] * canvas_w
             ty = region.primitive["y"] * canvas_h
@@ -305,6 +323,33 @@ def _build_path_data(segments, scale_x: float, scale_y: float, closed: bool) -> 
         )
     if closed and segments:
         parts.append("Z")
+    return " ".join(parts)
+
+
+def _build_compound_path_data(
+    subpaths,
+    scale_x: float,
+    scale_y: float,
+    closed: bool,
+    smoothness: float,
+) -> str:
+    """Build SVG path data for multiple independent subpaths."""
+    parts: list[str] = []
+    for subpath in subpaths:
+        if len(subpath) < 2:
+            continue
+        if smoothness <= 0.001:
+            first = subpath[0]
+            parts.append(f"M{_fmt(first[0] * scale_x)},{_fmt(first[1] * scale_y)}")
+            for p in subpath[1:]:
+                parts.append(f"L{_fmt(p[0] * scale_x)},{_fmt(p[1] * scale_y)}")
+            if closed:
+                parts.append("Z")
+        else:
+            segments = fit_curves(subpath, closed=closed, smoothness=smoothness)
+            path_data = _build_path_data(segments, scale_x, scale_y, closed)
+            if path_data:
+                parts.append(path_data)
     return " ".join(parts)
 
 

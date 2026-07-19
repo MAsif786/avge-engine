@@ -87,6 +87,13 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
+    def test_create_region_stroke_width_px_valid(self):
+        errs = validate_input("create_region", {
+            "outline": [[0.1, 0.1], [0.9, 0.9]],
+            "stroke_width_px": 2,
+        })
+        assert errs == []
+
     def test_create_region_invalid_smoothness(self):
         errs = validate_input("create_region", {
             "outline": [[0, 0], [1, 0], [1, 1]],
@@ -97,6 +104,101 @@ class TestSchemaRegistry:
     def test_create_region_invalid_coords(self):
         errs = validate_input("create_region", {
             "outline": [[-0.5, 1.5], [1, 0], [0, 1]],
+        })
+        assert len(errs) > 0
+
+    def test_create_ellipse_band_valid(self):
+        errs = validate_input("create_ellipse_band", {
+            "cx": 0.5,
+            "cy": 0.42,
+            "rx": 0.36,
+            "ry": 0.12,
+            "thickness": 0.035,
+            "start_angle": 190,
+            "end_angle": 350,
+            "perspective": 0.25,
+        })
+        assert errs == []
+
+    def test_create_ellipse_band_requires_center_and_radius(self):
+        errs = validate_input("create_ellipse_band", {"cx": 0.5, "cy": 0.5})
+        assert len(errs) > 0
+
+    def test_create_ellipse_band_rejects_bad_perspective(self):
+        errs = validate_input("create_ellipse_band", {
+            "cx": 0.5,
+            "cy": 0.5,
+            "rx": 0.3,
+            "perspective": 2.0,
+        })
+        assert len(errs) > 0
+
+    def test_project_quad_valid(self):
+        errs = validate_input("project_quad", {
+            "target_quad": [[0.1, 0.2], [0.8, 0.12], [0.72, 0.62], [0.16, 0.72]],
+            "region_id": "tile",
+            "fill": "#DDEEFF",
+            "columns": 2,
+            "rows": 2,
+            "stroke_width_px": 1.5,
+        })
+        assert errs == []
+
+    def test_project_quad_requires_four_points(self):
+        errs = validate_input("project_quad", {
+            "target_quad": [[0.1, 0.2], [0.8, 0.12], [0.72, 0.62]],
+        })
+        assert len(errs) > 0
+
+    def test_project_quad_rejects_out_of_range_point(self):
+        errs = validate_input("project_quad", {
+            "target_quad": [[0.1, 0.2], [1.8, 0.12], [0.72, 0.62], [0.16, 0.72]],
+        })
+        assert len(errs) > 0
+
+    def test_add_depth_shadow_valid(self):
+        errs = validate_input("add_depth_shadow", {
+            "region_id": "chair",
+            "direction": 90,
+            "distance": 0.04,
+            "softness": 5,
+            "opacity": 0.25,
+            "sy": 0.35,
+        })
+        assert errs == []
+
+    def test_add_depth_shadow_invalid_distance(self):
+        errs = validate_input("add_depth_shadow", {
+            "region_id": "chair",
+            "distance": 2.0,
+        })
+        assert len(errs) > 0
+
+    def test_cast_shadow_valid(self):
+        errs = validate_input("cast_shadow", {
+            "from_region_id": "chair",
+            "onto_region_id": "floor",
+            "direction": 45,
+            "distance": 0.05,
+        })
+        assert errs == []
+
+    def test_cast_shadow_requires_receiver(self):
+        errs = validate_input("cast_shadow", {
+            "from_region_id": "chair",
+        })
+        assert len(errs) > 0
+
+    def test_critique_preview_valid(self):
+        errs = validate_input("critique_preview", {
+            "min_confidence": 0.5,
+            "as_json": True,
+        })
+        assert errs == []
+
+    def test_critique_preview_invalid_confidence(self):
+        errs = validate_input("critique_preview", {
+            "min_confidence": 1.5,
         })
         assert len(errs) > 0
 
@@ -114,6 +216,22 @@ class TestSchemaRegistry:
     def test_style_objects_no_style_change(self):
         errs = validate_input("style_objects", {"ids": ["r1"]})
         assert len(errs) > 0  # at least one style field required
+
+    def test_style_objects_material_valid(self):
+        errs = validate_input("style_objects", {
+            "ids": ["r1"],
+            "material": "glass",
+            "material_detail": True,
+            "material_intensity": 0.8,
+        })
+        assert errs == []
+
+    def test_style_objects_material_invalid(self):
+        errs = validate_input("style_objects", {
+            "ids": ["r1"],
+            "material": "plastic",
+        })
+        assert len(errs) > 0
 
     def test_describe_scene_valid(self):
         errs = validate_input("describe_scene", {})

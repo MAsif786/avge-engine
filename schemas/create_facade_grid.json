@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_facade_grid/v1.json",
+  "title": "create_facade_grid",
+  "description": "Create a perspective-aware facade panel with repeated editable window quads and deterministic lit windows.",
+  "type": "object",
+  "properties": {
+    "target_quad": {
+      "type": "array",
+      "description": "Four normalized facade corners in order: top-left, top-right, bottom-right, bottom-left.",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "rows": { "type": "integer", "minimum": 1, "maximum": 80 },
+    "columns": { "type": "integer", "minimum": 1, "maximum": 40 },
+    "document_id": { "type": ["string", "null"], "default": null },
+    "region_id": { "type": ["string", "null"], "default": null },
+    "layer": { "type": "string", "default": "architecture" },
+    "z_index": { "type": "integer", "default": 0 },
+    "facade_fill": { "type": "string", "default": "#2C3542" },
+    "facade_stroke": { "type": "string", "default": "#0A1018" },
+    "window_fill": { "type": "string", "default": "#182536" },
+    "lit_fill": { "type": "string", "default": "#FFE8A3" },
+    "window_stroke": { "type": ["string", "null"], "default": "#A9C8D6" },
+    "stroke_width": { "type": "number", "minimum": 0.0, "maximum": 0.1, "default": 0.001 },
+    "stroke_width_px": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 1.0 },
+    "lit_ratio": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.22 },
+    "margin_u": { "type": "number", "minimum": 0.0, "maximum": 0.45, "default": 0.18 },
+    "margin_v": { "type": "number", "minimum": 0.0, "maximum": 0.45, "default": 0.18 },
+    "variation": { "type": "number", "minimum": 0.0, "maximum": 0.4, "default": 0.08 },
+    "seed": { "type": "integer", "default": 1 },
+    "create_base": { "type": "boolean", "default": true }
+  },
+  "required": ["target_quad", "rows", "columns"],
+  "additionalProperties": false
+}

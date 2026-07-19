@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (43 tools)
+# AVGE Engine — Tool Reference (51 tools)
 
-_Generated from `__main__` — tool set: m0b-v1_
+_Generated from `__main__` — tool set: m0b-v8_
 
 ## `add_bumps`
 
@@ -21,6 +21,29 @@ Add small protrusions (bumps/knuckles/jagged edges) at specified segments of a r
 
 ---
 
+## `add_depth_shadow`
+
+Create a soft offset shadow from a region outline. Use to ground objects quickly without manually drawing shadow blobs. direction is degrees (0=right, 90=down); distance is normalized canvas units; softness is blur radius in pixels.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `color` | `string` |  |  |
+| `direction` | `number` |  |  |
+| `distance` | `number` |  |  |
+| `document_id` | `any` |  |  |
+| `new_region_id` | `any` |  |  |
+| `opacity` | `number` |  |  |
+| `region_id` | `string` | ✓ |  |
+| `scale` | `number` |  |  |
+| `softness` | `number` |  |  |
+| `sx` | `any` |  |  |
+| `sy` | `any` |  |  |
+| `z_offset` | `integer` |  |  |
+
+---
+
 ## `add_shading`
 
 Add directional shading to a region. Creates highlight + shadow copies offset perpendicular to light direction, auto-colored via HSL. IDs use timestamp suffix — safe to call in parallel.
@@ -33,6 +56,26 @@ Add directional shading to a region. Creates highlight + shadow copies offset pe
 | `intensity` | `number` |  |  |
 | `light_direction` | `number` |  |  |
 | `region_id` | `string` | ✓ |  |
+
+---
+
+## `apply_depth_haze`
+
+Apply atmospheric perspective to existing regions by blending fills/strokes toward a haze color based on distance. Use for far buildings, skyline, canals, and background layers so scenes gain depth without manually restyling every region.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `affect_fill` | `boolean` |  |  |
+| `affect_stroke` | `boolean` |  |  |
+| `document_id` | `any` |  |  |
+| `far_y` | `number` |  |  |
+| `haze_color` | `string` |  |  |
+| `max_strength` | `number` |  |  |
+| `near_y` | `number` |  |  |
+| `opacity_falloff` | `number` |  |  |
+| `selector` | `any` |  |  |
 
 ---
 
@@ -54,17 +97,25 @@ Automate stroke-weight by depth: outer silhouette regions get thicker strokes, i
 ## `batch`
 
 Execute multiple operations in a single call. **ALL** registered tools work in batch — not just the ones listed.
-  create_region: outline, fill, stroke, smoothness, closed, z_index
-  create_primitive: shape (rect/ellipse/line), fill, stroke, stroke_width
-  create_curve: points, stroke, stroke_width, smoothness
+  Stroke rule: stroke_width_px overrides normalized stroke_width when both are provided.
+  create_region: outline, fill, stroke, smoothness, closed, z_index, stroke_width_px
+  create_ellipse_band: cx, cy, rx, ry, thickness, start_angle, end_angle, perspective
+  create_primitive: shape (rect/ellipse/line/polyline/compound_path), fill, stroke, stroke_width_px
+  create_curve: points, stroke, stroke_width_px, smoothness
   create_text: x, y, text, fill, font_size, font_family, text_anchor
   insert_image: x, y, width, height, href
   import_svg_path: path_data, fill, smoothness
   edit_region: region_id, outline, fill, stroke, z_index, shape
-  duplicate: region_id, pattern, count, dx, dy, columns, rows
-  restyle: selector, mode, fill, stroke, stroke_width
+  duplicate: region_id, pattern, count, dx, dy, columns, rows, spacing_falloff, scale_falloff
+  add_depth_shadow: region_id, direction, distance, softness, sy
+  cast_shadow: from_region_id, onto_region_id, direction, distance, softness
+  apply_depth_haze: selector, haze_color, near_y, far_y, max_strength
+  restyle: selector, mode, fill, stroke, stroke_width_px, material
   delete_region: region_id
   transform_objects: ids, mode, dx, dy, scale, rotate, alignment
+  project_quad: target_quad, source_region_id, fill, stroke, columns, rows
+  create_perspective_grid: vanishing_points, horizon_y, bounds
+  create_facade_grid: target_quad, rows, columns, lit_ratio
   copy_element: region_id OR group, target_document_id, source_document_id, offset_x/y
   generate_shape: pattern, params
 💡 Inline shapes: create primitives directly — {"tool":"create_primitive","shape":{"type":"rect","x":0.1,"y":0.66,"width":0.09,"height":0.1},"fill":"#CCC"}
@@ -97,6 +148,30 @@ Perform boolean geometry on regions using shapely/GEOS. Operations: union, inter
 | `simplify_tolerance` | `any` |  |  |
 | `stroke` | `any` |  |  |
 | `stroke_width` | `any` |  |  |
+
+---
+
+## `cast_shadow`
+
+Create a soft shadow from one region clipped onto another region. Use for objects casting onto floors, walls, tables, platforms, or panels.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `color` | `string` |  |  |
+| `direction` | `number` |  |  |
+| `distance` | `number` |  |  |
+| `document_id` | `any` |  |  |
+| `from_region_id` | `string` | ✓ |  |
+| `new_region_id` | `any` |  |  |
+| `onto_region_id` | `string` | ✓ |  |
+| `opacity` | `number` |  |  |
+| `scale` | `number` |  |  |
+| `softness` | `number` |  |  |
+| `sx` | `any` |  |  |
+| `sy` | `any` |  |  |
+| `z_offset` | `integer` |  |  |
 
 ---
 
@@ -176,6 +251,7 @@ Create a smooth curved line through 3+ control points. Unlike create_region (fil
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
 | `stroke_width` | `number` |  |  |
+| `stroke_width_px` | `any` |  |  |
 | `z_index` | `integer` |  |  |
 
 ---
@@ -197,22 +273,122 @@ Create a new canvas. Must be called first — call once per scene, then use crea
 
 ---
 
-## `create_primitive`
+## `create_ellipse_band`
 
-Create an SVG primitive shape (rect, ellipse, line, polygon, star, arc) or a polyline. Use for geometric objects where polygon outlines would be imprecise. 💡 Stars: star shape = 4-point star in one call, not 16 tiny circles. 💡 Pentagon: polygon with sides=5. 💡 Fingers: rect with rx=half the width gives perfect pill shapes. 💡 Palm creases: line for stroke-only wrinkles. 💡 Curved lines: use points array for multi-point smooth curves. Shape object keys per type:
-  rect:     x, y, width, height, rx? (corner radius), taper? (trapezoid)
-  ellipse:  cx, cy, rx, ry? (ry=rx if omitted)
-  line:     x1, y1, x2, y2 (use {"type":"line",...} wrapper)
-  polygon:  cx, cy, r, sides? (default 6), rotate?
-  star:     cx, cy, r, r_inner?, points? (default 5), rotate?
-  arc:      cx, cy, r, start_angle?, end_angle?
-  polyline: points ([[x,y],...], 3+ points for smooth curves)
+Create a filled elliptical ring or arc band in one call. Use for realistic circular balconies, overhead rings, rail strips, counters, curved floors, rims, and glass bands. Set start_angle/end_angle for partial arcs; use perspective>0 to widen the lower/near side and narrow the upper/far side; use skew_x for oblique architectural views.
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `blend_mode` | `any` |  |  |
+| `clip_to` | `any` |  |  |
+| `cx` | `number` | ✓ |  |
+| `cy` | `number` | ✓ |  |
+| `document_id` | `any` |  |  |
+| `end_angle` | `number` |  |  |
+| `fill` | `any` |  |  |
+| `fill_gradient` | `any` |  |  |
+| `groups` | `any` |  |  |
+| `inner_rx` | `any` |  |  |
+| `inner_ry` | `any` |  |  |
+| `layer` | `string` |  |  |
+| `opacity` | `number` |  |  |
+| `perspective` | `number` |  |  |
+| `region_id` | `any` |  |  |
+| `rotation` | `number` |  |  |
+| `rx` | `number` | ✓ |  |
+| `ry` | `any` |  |  |
+| `samples` | `integer` |  |  |
+| `skew_x` | `number` |  |  |
+| `smoothness` | `number` |  |  |
+| `start_angle` | `number` |  |  |
+| `stroke` | `any` |  |  |
+| `stroke_width` | `number` |  |  |
+| `stroke_width_px` | `any` |  |  |
+| `tags` | `any` |  |  |
+| `thickness` | `any` |  |  |
+| `z_after` | `any` |  |  |
+| `z_before` | `any` |  |  |
+| `z_index` | `integer` |  |  |
+
+---
+
+## `create_facade_grid`
+
+Create a perspective-aware building facade with repeated window quads. Supports lit_ratio, deterministic seed, and subtle per-window inset variation so night-city facades read as buildings instead of flat sign slabs.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `columns` | `integer` | ✓ |  |
+| `create_base` | `boolean` |  |  |
+| `document_id` | `any` |  |  |
+| `facade_fill` | `string` |  |  |
+| `facade_stroke` | `string` |  |  |
+| `layer` | `string` |  |  |
+| `lit_fill` | `string` |  |  |
+| `lit_ratio` | `number` |  |  |
+| `margin_u` | `number` |  |  |
+| `margin_v` | `number` |  |  |
+| `opacity` | `number` |  |  |
+| `region_id` | `any` |  |  |
+| `rows` | `integer` | ✓ |  |
+| `seed` | `integer` |  |  |
+| `stroke_width` | `number` |  |  |
+| `stroke_width_px` | `any` |  |  |
+| `target_quad` | `array` | ✓ |  |
+| `variation` | `number` |  |  |
+| `window_fill` | `string` |  |  |
+| `window_stroke` | `any` |  |  |
+| `z_index` | `integer` |  |  |
+
+---
+
+## `create_perspective_grid`
+
+Create two-point perspective construction guides from shared vanishing points. Use before project_quad/create_facade_grid so building edges, signs, rails, and street objects converge to the same off-canvas vanishing points. Emits editable compound-path guide regions.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `bounds` | `any` |  |  |
+| `document_id` | `any` |  |  |
+| `horizon_y` | `number` |  |  |
+| `horizontals` | `integer` |  |  |
+| `include_horizon` | `boolean` |  |  |
+| `layer` | `string` |  |  |
+| `opacity` | `number` |  |  |
+| `region_id` | `any` |  |  |
+| `stroke` | `string` |  |  |
+| `stroke_width` | `number` |  |  |
+| `stroke_width_px` | `any` |  |  |
+| `vanishing_points` | `array` | ✓ |  |
+| `verticals` | `integer` |  |  |
+| `z_index` | `integer` |  |  |
+
+---
+
+## `create_primitive`
+
+Create an SVG primitive shape (rect, ellipse, line, polygon, star, arc), open polyline, or stroked compound path. Use for geometric objects where polygon outlines would be imprecise. 💡 Stars: star shape = 4-point star in one call, not 16 tiny circles. 💡 Pentagon: polygon with sides=5. 💡 Fingers: rect with rx=half the width gives perfect pill shapes. 💡 Palm creases: line for stroke-only wrinkles. 💡 Curved lines: use type='polyline' with points and smoothness. 💡 Compound strokes: use type='compound_path' with subpaths to keep many seams/cables as one region. Shape object keys per type:
+  rect:     x, y, width, height, rx? (corner radius), taper? (trapezoid)
+  ellipse:  cx, cy, rx, ry? (ry=rx if omitted)
+  line:     x1, y1, x2, y2 (or points for backward-compatible polyline)
+  polyline: points ([[x,y],...]), closed?, smoothness?
+  compound_path: subpaths ([[[x,y],...], ...]), closed?, smoothness?
+  polygon:  cx, cy, r, sides? (default 6), rotate?
+  star:     cx, cy, r, r_inner?, points? (default 5), rotate?
+  arc:      cx, cy, r, start_angle?, end_angle?
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `blend_mode` | `any` |  |  |
+| `closed` | `any` |  |  |
 | `document_id` | `any` |  |  |
 | `fill` | `any` |  |  |
 | `groups` | `any` |  |  |
@@ -222,9 +398,12 @@ Create an SVG primitive shape (rect, ellipse, line, polygon, star, arc) or a pol
 | `relative_to` | `any` |  |  |
 | `rotate` | `number` |  |  |
 | `shape` | `object` | ✓ |  |
+| `smoothness` | `any` |  |  |
 | `stroke` | `any` |  |  |
+| `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
 | `stroke_width` | `number` |  |  |
+| `stroke_width_px` | `any` |  |  |
 | `z_after` | `any` |  |  |
 | `z_before` | `any` |  |  |
 | `z_index` | `integer` |  |  |
@@ -262,6 +441,7 @@ Create a vector region from an outline defined by points. The engine fits smooth
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
 | `stroke_width` | `number` |  |  |
+| `stroke_width_px` | `any` |  |  |
 | `tags` | `any` |  |  |
 | `z_after` | `any` |  |  |
 | `z_before` | `any` |  |  |
@@ -317,6 +497,20 @@ Auto-check the scene against design skill rules. Returns structured findings abo
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
+
+---
+
+## `critique_preview`
+
+Preview-quality visual critique. Flags likely visual issues such as too_flat, over_rounded, missing_contact_shadows, bad_perspective, and dominant_blob_shape. Returns actionable suggestions with affected region IDs.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `as_json` | `boolean` |  |  |
+| `document_id` | `any` |  |  |
+| `min_confidence` | `number` |  |  |
 
 ---
 
@@ -378,10 +572,10 @@ Get a text description of the current canvas — object list, bounds, styles, an
 
 ## `duplicate`
 
-Make copies of a region or group according to a placement pattern. Consolidates and duplicate_group into one configurable tool.
+Make copies of a region or group according to a placement pattern. Consolidates duplicate_region, duplicate_grid, duplicate_radial, and duplicate_group into one configurable tool.
 Patterns:
   single — one copy with offset/mirror/scale. Params: region_id, dx, dy, mirror_x, mirror_axis_x, scale
-  linear — N copies in a row. Params: region_id, count, dx, dy
+  linear — N copies in a row. Params: region_id, count, dx, dy, spacing_falloff, scale_falloff
   grid — N×M grid. Params: region_id, columns, rows, spacing_x, spacing_y
   radial — circular array. Params: region_id, count, center_x, center_y, radius
   group — duplicate group with transforms. Params: group_name, dx, dy, scale, rotate
@@ -411,7 +605,9 @@ Patterns:
 | `rotate_copies` | `boolean` |  |  |
 | `rows` | `integer` |  |  |
 | `scale` | `number` |  |  |
+| `scale_falloff` | `number` |  |  |
 | `shadow_mode` | `boolean` |  |  |
+| `spacing_falloff` | `number` |  |  |
 | `spacing_x` | `number` |  |  |
 | `spacing_y` | `number` |  |  |
 | `start_angle` | `number` |  |  |
@@ -465,6 +661,7 @@ Modify an existing region's outline, style, z_index, or shape. Only provided fie
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
 | `stroke_width` | `any` |  |  |
+| `stroke_width_px` | `any` |  |  |
 | `tags` | `any` |  |  |
 | `z_index` | `any` |  |  |
 
@@ -730,6 +927,35 @@ Load a previously saved document from disk into the editor. Use list_documents t
 
 ---
 
+## `project_quad`
+
+Create or perspective-warp a rectangular/panel region into a target quadrilateral. Use for realistic tables, windows, floor tiles, wall panels, screens, and signs. target_quad order is top-left, top-right, bottom-right, bottom-left. Pass source_region_id to warp an existing region; omit it to create a projected panel.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `blend_mode` | `any` |  |  |
+| `columns` | `integer` |  |  |
+| `document_id` | `any` |  |  |
+| `fill` | `any` |  |  |
+| `group_name` | `any` |  |  |
+| `inherit_style` | `boolean` |  |  |
+| `layer` | `string` |  |  |
+| `opacity` | `any` |  |  |
+| `region_id` | `any` |  |  |
+| `replace_source` | `boolean` |  |  |
+| `rows` | `integer` |  |  |
+| `smoothness` | `number` |  |  |
+| `source_region_id` | `any` |  |  |
+| `stroke` | `any` |  |  |
+| `stroke_width` | `any` |  |  |
+| `stroke_width_px` | `any` |  |  |
+| `target_quad` | `array` | ✓ |  |
+| `z_index` | `integer` |  |  |
+
+---
+
 ## `render_diff`
 
 Render a visual diff PNG comparing current state against a named checkpoint. Shows added (green), removed (red), and modified (yellow) regions. 💡 Use after checkpoint/restore to verify changes visually. Returns a data URI that can be opened in a browser.
@@ -780,8 +1006,9 @@ Modes:
   exact — set fill/stroke/opacity directly (directly)
   hsl_offset — shift each region's current color by HSL delta
   palette_swap — replace one exact fill color with another
+Materials: glass, brushed_metal, concrete, wood, tile, foliage
 Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'
-💡 restyle(selector={'group_name':'cup'}, fill='#C94C4C') — recolor group in 1 call
+💡 restyle(selector={'ids':['window']}, material='glass') — apply a material preset
 
 ### Parameters
 
@@ -793,6 +1020,9 @@ Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'
 | `fill_gradient` | `any` |  |  |
 | `fill_hsl_offset` | `any` |  |  |
 | `from_color` | `any` |  |  |
+| `material` | `any` |  |  |
+| `material_detail` | `boolean` |  |  |
+| `material_intensity` | `number` |  |  |
 | `mode` | `string` |  |  |
 | `opacity` | `any` |  |  |
 | `preset` | `any` |  |  |
@@ -800,6 +1030,7 @@ Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'
 | `stroke` | `any` |  |  |
 | `stroke_hsl_offset` | `any` |  |  |
 | `stroke_width` | `any` |  |  |
+| `stroke_width_px` | `any` |  |  |
 | `to_color` | `any` |  |  |
 | `z_index` | `any` |  |  |
 

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_perspective_grid/v1.json",
+  "title": "create_perspective_grid",
+  "description": "Create two-point perspective guide lines from shared vanishing points and a horizon.",
+  "type": "object",
+  "properties": {
+    "vanishing_points": {
+      "type": "array",
+      "description": "Two [x,y] vanishing points. Points may be off-canvas but must remain in normalized extended space.",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number", "minimum": -2.0, "maximum": 2.0 },
+          { "type": "number", "minimum": -2.0, "maximum": 2.0 }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "horizon_y": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5 },
+    "document_id": { "type": ["string", "null"], "default": null },
+    "region_id": { "type": ["string", "null"], "default": null },
+    "verticals": { "type": "integer", "minimum": 2, "maximum": 64, "default": 9 },
+    "horizontals": { "type": "integer", "minimum": 2, "maximum": 64, "default": 9 },
+    "bounds": {
+      "type": ["array", "null"],
+      "description": "Optional [x0,y0,x1,y1] guide area.",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+      "default": null
+    },
+    "include_horizon": { "type": "boolean", "default": true },
+    "layer": { "type": "string", "default": "guides" },
+    "z_index": { "type": "integer", "default": -100 },
+    "stroke": { "type": "string", "default": "#55C7FF" },
+    "stroke_width": { "type": "number", "minimum": 0.0, "maximum": 0.1, "default": 0.001 },
+    "stroke_width_px": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.35 }
+  },
+  "required": ["vanishing_points"],
+  "additionalProperties": false
+}

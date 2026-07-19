@@ -13,6 +13,94 @@ from typing import Any
 from avge_engine.geometry.types import Point2D
 
 
+# ── Ellipse / arc bands ───────────────────────────────────────────────
+
+def ellipse_band(
+    cx: float,
+    cy: float,
+    rx: float,
+    ry: float | None = None,
+    *,
+    thickness: float | None = None,
+    inner_rx: float | None = None,
+    inner_ry: float | None = None,
+    start_angle: float = 0.0,
+    end_angle: float = 360.0,
+    rotation: float = 0.0,
+    samples: int = 64,
+    perspective: float = 0.0,
+    skew_x: float = 0.0,
+) -> list[Point2D]:
+    """Generate a filled elliptical or partial-arc band outline.
+
+    The returned outline walks the outer arc, then the inner arc in reverse,
+    creating a single closed polygon suitable for ``SceneGraph.create_region``.
+
+    Args:
+        cx, cy: Center of the band in normalized canvas coordinates.
+        rx, ry: Outer ellipse radii. If ``ry`` is omitted it equals ``rx``.
+        thickness: Uniform inward thickness used when inner radii are omitted.
+        inner_rx, inner_ry: Explicit inner ellipse radii.
+        start_angle, end_angle: Arc angles in degrees. 0 is right, 90 is down.
+        rotation: Rotate the whole band around ``cx/cy`` in degrees.
+        samples: Number of samples along each arc edge.
+        perspective: Near/far width adjustment. Positive values widen the
+            lower/near half and narrow the upper/far half.
+        skew_x: Horizontal shear based on vertical position, useful for
+            matching oblique architectural photos.
+
+    Returns:
+        Closed outline points: outer arc + reversed inner arc.
+    """
+    outer_ry = rx if ry is None else ry
+    if rx <= 0 or outer_ry <= 0:
+        raise ValueError("rx and ry must be positive")
+
+    if inner_rx is None or inner_ry is None:
+        t = 0.02 if thickness is None else thickness
+        if t <= 0:
+            raise ValueError("thickness must be positive")
+        inner_rx = rx - t if inner_rx is None else inner_rx
+        inner_ry = outer_ry - t if inner_ry is None else inner_ry
+
+    if inner_rx <= 0 or inner_ry <= 0:
+        raise ValueError("inner radii must be positive")
+    if inner_rx >= rx or inner_ry >= outer_ry:
+        raise ValueError("inner radii must be smaller than outer radii")
+
+    sample_count = max(4, min(180, int(samples)))
+    sweep = end_angle - start_angle
+    if abs(sweep) < 1e-6:
+        raise ValueError("start_angle and end_angle must differ")
+    if abs(sweep) > 360:
+        sweep = 360 if sweep > 0 else -360
+        end_angle = start_angle + sweep
+
+    rot = math.radians(rotation)
+    cos_r, sin_r = math.cos(rot), math.sin(rot)
+    perspective = max(-0.75, min(0.75, perspective))
+
+    def point(angle_deg: float, rad_x: float, rad_y: float) -> Point2D:
+        a = math.radians(angle_deg)
+        ca, sa = math.cos(a), math.sin(a)
+        # Positive perspective makes the lower half (sa > 0) wider and the
+        # upper half narrower, mimicking a near/far elliptical ring in photos.
+        px = ca * rad_x * (1.0 + perspective * sa)
+        py = sa * rad_y
+        px += skew_x * py
+        x = cx + px * cos_r - py * sin_r
+        y = cy + px * sin_r + py * cos_r
+        return (round(x, 6), round(y, 6))
+
+    angles = [
+        start_angle + sweep * (i / sample_count)
+        for i in range(sample_count + 1)
+    ]
+    outer = [point(a, rx, outer_ry) for a in angles]
+    inner = [point(a, inner_rx, inner_ry) for a in reversed(angles)]
+    return outer + inner
+
+
 # ── Edge helpers (shared by radial_spread and distribute_points) ───────
 
 def _filter_edge(
