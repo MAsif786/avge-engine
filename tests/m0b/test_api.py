@@ -36,6 +36,12 @@ class TestHealth:
         data = r.json()
         assert len(data["tools"]) >= 4
 
+    async def test_openapi_schema(self, client):
+        r = await client.get("/openapi.json")
+        assert r.status_code == 200
+        data = r.json()
+        assert "/tools/copy_element" in data["paths"]
+
 
 class TestDocument:
     async def test_create_document(self, client):

@@ -128,6 +128,16 @@ class DeleteRegionRequest(BaseModel):
     confirm: bool = False
 
 
+class CopyElementRequest(BaseModel):
+    source_document_id: str | None = None
+    target_document_id: str
+    region_id: str | None = None
+    group: str | None = None
+    new_region_id: str | None = None
+    offset_x: float = 0.0
+    offset_y: float = 0.0
+
+
 class BooleanOpRequest(BaseModel):
     operation: BOOLEAN_OPS = "union"
     region_ids: list[str] = Field(min_length=2)
