@@ -5,6 +5,7 @@ from avge_engine.services.engine import (
     set_active_doc,
     validate_input,
     load_design_guidelines,
+    load_environment_guidelines,
     SMOOTHNESS_GUIDANCE,
 )
 
@@ -14,5 +15,6 @@ __all__ = [
     "set_active_doc",
     "validate_input",
     "load_design_guidelines",
+    "load_environment_guidelines",
     "SMOOTHNESS_GUIDANCE",
 ]

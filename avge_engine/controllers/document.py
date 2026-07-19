@@ -68,7 +68,9 @@ def create_tools(mcp):
                 f"background={doc.background}\n\n"
                 f"📌 Use this document_id=\"{doc.id}\" in subsequent tool calls.\n"
                 f"💡 Tip: before styling, see resource avge://skill/design-guidelines "
-                f"— flat single-tone fills on every region is a common miss."
+                f"— flat single-tone fills on every region is a common miss. "
+                f"For streets, interiors, and architecture, see "
+                f"avge://skill/environment-guidelines."
             )
         except RuntimeError as e:
             return f"Error: {e}"

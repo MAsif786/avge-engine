@@ -2,7 +2,7 @@
 AVGE Engine — MCP server (controllers).
 
 The primary LLM-facing interface. Registers MCP tools via controllers
-and the design guidelines resource. Each controller module defines its
+and the skill guideline resources. Each controller module defines its
 own tools — this file only wires them together.
 
 §12.3: The M0b tools are registered as MCP tools, with input schemas
@@ -19,6 +19,7 @@ from mcp.server.fastmcp import FastMCP
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.services.engine import (
     load_design_guidelines,
+    load_environment_guidelines,
     load_tool_reference,
     SMOOTHNESS_GUIDANCE,
     TOOL_MAP,
@@ -43,6 +44,14 @@ avge://skill/design-guidelines Rule 5 for full guidance.
 {SMOOTHNESS_GUIDANCE}
 
 {TOOL_MAP}
+
+🏙 **Environment scenes (see avge://skill/environment-guidelines):**
+For streets, interiors, building exteriors, canals, bridges, and city scenes,
+start with `create_perspective_grid`, block massing before detail, use
+`create_facade_grid` for windows, and finish the first pass with
+`apply_depth_haze`. Then run a densify pass: add overlapping buildings,
+secondary signs/props, facade clutter, wires, and falloff-spaced poles.
+Delete/hide all guide regions before final export.
 
 📝 **Workflow — edit the same document, never rebuild from scratch:**
 1. `create_document` once with a `name` for your scene.
@@ -87,10 +96,23 @@ async def design_guidelines_resource() -> str:
 
 
 @mcp.resource(
+    uri="avge://skill/environment-guidelines",
+    name="AVGE Environment Guidelines",
+    description="Full environment skill: perspective construction, building massing, "
+    "facade/window density, signage perspective, atmospheric haze, "
+    "and QA flow for street, interior, and architecture scenes.",
+    mime_type="text/markdown",
+)
+async def environment_guidelines_resource() -> str:
+    """Return the full environment guidelines markdown document."""
+    return load_environment_guidelines()
+
+
+@mcp.resource(
     uri="avge://tool-reference",
     name="AVGE Tool Reference",
-    description="Full per-tool reference: all 51 tools, params, modes, examples, "
-    "and the complete generate_shape pattern table with 16 patterns.",
+    description="Full per-tool reference: all 53 tools, params, modes, examples, "
+    "and the complete generate_shape pattern table with 19 patterns.",
     mime_type="text/markdown",
 )
 async def tool_reference_resource() -> str:
