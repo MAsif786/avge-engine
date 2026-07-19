@@ -31,10 +31,9 @@
     "window_fill": { "type": "string", "default": "#182536" },
     "lit_fill": { "type": "string", "default": "#FFE8A3" },
     "window_stroke": { "type": ["string", "null"], "default": "#A9C8D6" },
-    "stroke_width": { "type": "number", "minimum": 0.0, "maximum": 0.1, "default": 0.001 },
-    "stroke_width_px": {
+    "stroke_width": {
       "type": ["number", "null"],
-      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "description": "Stroke width in canvas pixels.",
       "minimum": 0.0,
       "maximum": 512,
       "default": null

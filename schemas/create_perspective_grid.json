@@ -37,10 +37,9 @@
     "layer": { "type": "string", "default": "guides" },
     "z_index": { "type": "integer", "default": -100 },
     "stroke": { "type": "string", "default": "#55C7FF" },
-    "stroke_width": { "type": "number", "minimum": 0.0, "maximum": 0.1, "default": 0.001 },
-    "stroke_width_px": {
+    "stroke_width": {
       "type": ["number", "null"],
-      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "description": "Stroke width in canvas pixels.",
       "minimum": 0.0,
       "maximum": 512,
       "default": null

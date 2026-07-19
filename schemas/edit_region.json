@@ -10,8 +10,12 @@
     "smoothness": {"type": "number", "minimum": 0, "maximum": 1},
     "fill": {"type": "string"},
     "stroke": {"type": "string"},
-    "stroke_width": {"type": "number", "minimum": 0, "maximum": 0.1},
-    "stroke_width_px": {"type": ["number", "null"], "minimum": 0, "maximum": 512},
+    "stroke_width": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels.",
+      "minimum": 0,
+      "maximum": 512
+    },
     "opacity": {"type": "number", "minimum": 0, "maximum": 1},
     "z_index": {"type": "integer"},
     "layer": {"type": "string"}

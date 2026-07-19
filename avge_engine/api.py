@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.scene import CurveConstraints, Style
-from avge_engine.services.engine import get_graph, reset_graph
+from avge_engine.services.engine import get_graph, reset_graph, stroke_width_to_norm
 from avge_engine.schema_registry import validate_input, list_tool_names
 from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
 from avge_engine.geometry import compute_bounds
@@ -83,15 +83,20 @@ class DeleteDocumentRequest(BaseModel):
 # ── Region ─────────────────────────────────────────────────────────
 
 class CreateRegionRequest(BaseModel):
-    outline: list[list[float]] | None = None
-    document_id: str
+    outline: list[list[float]]
+    document_id: str | None = None
     region_id: str | None = None
     layer: str = "default"
     closed: bool = True
     smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
     fill: str | None = "#CCCCCC"
     stroke: str | None = "#333333"
-    stroke_width: float = Field(default=0.005, ge=0.0, le=0.1)
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
     fill_gradient: Any = None
     smoothness_per_point: list[float] | None = None
@@ -111,7 +116,12 @@ class EditRegionRequest(BaseModel):
     smoothness_per_point: list[float] | None = None
     fill: str | None = None
     stroke: str | None = None
-    stroke_width: float | None = Field(default=None, ge=0.0, le=0.1)
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float | None = Field(default=None, ge=0.0, le=1.0)
     z_index: int | None = None
     blend_mode: BLEND_MODES | None = None
@@ -146,7 +156,12 @@ class BooleanOpRequest(BaseModel):
     keep_originals: bool = False
     fill: str | None = None
     stroke: str | None = None
-    stroke_width: float | None = None
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float | None = None
 
 
@@ -227,12 +242,18 @@ class FindObjectsRequest(BaseModel):
 
 class PreviewRequest(BaseModel):
     scale: float = Field(default=1.0, ge=0.25, le=2.0)
-    document_id: str
+    document_id: str | None = None
+    exclude_layers: list[str] | None = None
+    exclude_region_ids: list[str] | None = None
+    exclude_prefixes: list[str] | None = None
 
 
 class ExportSvgRequest(BaseModel):
     filepath: str = "output/scene.svg"
     document_id: str
+    exclude_layers: list[str] | None = None
+    exclude_region_ids: list[str] | None = None
+    exclude_prefixes: list[str] | None = None
 
 
 class ReorderLayerRequest(BaseModel):
@@ -260,7 +281,12 @@ class CreateCurveRequest(BaseModel):
     layer: str = "default"
     z_index: int = 0
     stroke: str | None = "#333333"
-    stroke_width: float = Field(default=0.005, ge=0.001, le=0.1)
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float = Field(default=1.0, ge=0.0, le=1.0)
     smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
     blend_mode: BLEND_MODES | None = None
@@ -391,7 +417,7 @@ async def create_region(req: CreateRegionRequest):
     graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
+        raise HTTPException(status_code=400, detail="No active document")
     # resolve for remainder of handler
 
     import json as _json
@@ -406,6 +432,7 @@ async def create_region(req: CreateRegionRequest):
             resolved_fill = req.fill_gradient
 
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
         constraints = CurveConstraints(
             smoothness=max(0.0, min(1.0, req.smoothness)),
             closed=req.closed,
@@ -414,7 +441,7 @@ async def create_region(req: CreateRegionRequest):
         style = Style(
             fill=None if resolved_fill is None or resolved_fill == "none" else resolved_fill,
             stroke=req.stroke,
-            stroke_width=max(0.001, min(0.1, req.stroke_width)),
+            stroke_width=stroke_width,
             opacity=max(0.0, min(1.0, req.opacity)),
             blend_mode=req.blend_mode,
         )
@@ -452,6 +479,7 @@ async def edit_region(req: EditRegionRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width)
         metadata = None
         if req.tags:
             import json as _json
@@ -462,7 +490,7 @@ async def edit_region(req: EditRegionRequest):
             outline=req.outline, smoothness=req.smoothness,
             tensions=req.smoothness_per_point,
             fill=req.fill, stroke=req.stroke,
-            stroke_width=req.stroke_width, opacity=req.opacity,
+            stroke_width=stroke_width, opacity=req.opacity,
             z_index=req.z_index, blend_mode=req.blend_mode,
             clip_to=req.clip_to, layer=req.layer,
             metadata=metadata,
@@ -563,7 +591,12 @@ class CreateRectRequest(BaseModel):
     z_index: int = 0
     fill: str | None = "#CCCCCC"
     stroke: str | None = "#333333"
-    stroke_width: float = 0.005
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float = 1.0
     blend_mode: str | None = None
 
@@ -579,7 +612,12 @@ class CreateEllipseRequest(BaseModel):
     z_index: int = 0
     fill: str | None = "#CCCCCC"
     stroke: str | None = "#333333"
-    stroke_width: float = 0.005
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float = 1.0
     blend_mode: str | None = None
 
@@ -594,7 +632,12 @@ class CreateLineRequest(BaseModel):
     layer: str = "default"
     z_index: int = 0
     stroke: str | None = "#333333"
-    stroke_width: float = 0.005
+    stroke_width: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=512,
+        description="Stroke width in canvas pixels.",
+    )
     opacity: float = 1.0
     blend_mode: str | None = None
 
@@ -606,12 +649,13 @@ async def create_rect(req: CreateRectRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
         r = graph.create_rect(
             req.x, req.y, req.width, req.height, rx=req.rx,
             document_id=req.document_id, region_id=req.region_id,
             layer=req.layer, z_index=req.z_index,
             fill=req.fill, stroke=req.stroke,
-            stroke_width=req.stroke_width, opacity=req.opacity,
+            stroke_width=stroke_width, opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
         return ToolResponse(data={"region_id": r.id})
@@ -626,12 +670,13 @@ async def create_ellipse(req: CreateEllipseRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
         e = graph.create_ellipse(
             req.cx, req.cy, req.rx, ry=req.ry,
             document_id=req.document_id, region_id=req.region_id,
             layer=req.layer, z_index=req.z_index,
             fill=req.fill, stroke=req.stroke,
-            stroke_width=req.stroke_width, opacity=req.opacity,
+            stroke_width=stroke_width, opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
         return ToolResponse(data={"region_id": e.id})
@@ -646,11 +691,12 @@ async def create_line(req: CreateLineRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
         lr = graph.create_line(
             req.x1, req.y1, req.x2, req.y2,
             document_id=req.document_id, region_id=req.region_id,
             layer=req.layer, z_index=req.z_index,
-            stroke=req.stroke, stroke_width=req.stroke_width,
+            stroke=req.stroke, stroke_width=stroke_width,
             opacity=req.opacity, blend_mode=req.blend_mode,
         )
         return ToolResponse(data={"region_id": lr.id})
@@ -667,13 +713,14 @@ async def create_curve(req: CreateCurveRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=400, detail="No active document")
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
         if len(req.points) == 2:
             x1, y1 = req.points[0]
             x2, y2 = req.points[1]
             lr = graph.create_line(
                 x1, y1, x2, y2, document_id=doc_id, region_id=req.region_id,
                 layer=req.layer, z_index=req.z_index,
-                stroke=req.stroke, stroke_width=req.stroke_width,
+                stroke=req.stroke, stroke_width=stroke_width,
                 opacity=req.opacity, blend_mode=req.blend_mode,
                 stroke_linecap=req.stroke_linecap,
             )
@@ -681,7 +728,7 @@ async def create_curve(req: CreateCurveRequest):
             lr = graph.create_line(
                 points=req.points, document_id=doc_id, region_id=req.region_id,
                 layer=req.layer, z_index=req.z_index,
-                stroke=req.stroke, stroke_width=req.stroke_width,
+                stroke=req.stroke, stroke_width=stroke_width,
                 opacity=req.opacity, blend_mode=req.blend_mode,
                 stroke_linecap=req.stroke_linecap,
                 smoothness=req.smoothness,
@@ -703,7 +750,7 @@ async def create_curve(req: CreateCurveRequest):
         resolved_fill = req.fill
 
     resolved_stroke = None if req.stroke is None or req.stroke == "none" else req.stroke
-    resolved_sw = max(0.001, min(0.1, req.stroke_width)) if req.stroke_width is not None else None
+    resolved_sw = stroke_width_to_norm(doc_id, req.stroke_width)
     resolved_op = max(0.0, min(1.0, req.opacity)) if req.opacity is not None else None
 
     # Route through edit_region if blend_mode or clip_to
@@ -737,11 +784,12 @@ async def boolean_operation(req: BooleanOpRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
+        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width)
         result = graph.boolean_operation(
             operation=req.operation, region_ids=req.region_ids,
             new_region_id=req.new_region_id, document_id=req.document_id,
             keep_originals=req.keep_originals, fill=req.fill,
-            stroke=req.stroke, stroke_width=req.stroke_width,
+            stroke=req.stroke, stroke_width=stroke_width,
             opacity=req.opacity,
         )
         return ToolResponse(data={"region_id": result.id, "outline_points": len(result.outline)})
@@ -867,19 +915,19 @@ async def add_bumps(req: ExtrudeOutlineRequest):
 
 # ── Query / View Endpoints ─────────────────────────────────────────
 
-@app.post("/tools/describe_scene", response_model=ToolResponse)
+@app.post("/tools/describe_scene")
 async def describe_scene(req: DescribeSceneRequest):
     graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     desc = graph.describe_scene(detail=req.detail, filter_layer=req.filter_layer, document_id=req.document_id)
-    return ToolResponse(data={
+    return {
         "document": desc["document"],
         "regions": desc["regions"],
         "region_count": desc["region_count"],
         "warnings": desc.get("warnings", []),
-    })
+    }
 
 
 @app.post("/tools/find_objects", response_model=ToolResponse)
@@ -934,8 +982,14 @@ async def render_preview(req: PreviewRequest):
     graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    svg = svg_serialize(graph, req.document_id)
+        raise HTTPException(status_code=400, detail="No active document")
+    svg = svg_serialize(
+        graph,
+        req.document_id,
+        exclude_layers=req.exclude_layers,
+        exclude_region_ids=req.exclude_region_ids,
+        exclude_prefixes=req.exclude_prefixes,
+    )
     try:
         b64 = render_preview_base64(svg, scale=max(0.25, min(2.0, req.scale)))
         return ToolResponse(data={"preview": b64})
@@ -950,7 +1004,13 @@ async def export_svg(req: ExportSvgRequest):
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
-    svg = svg_serialize(graph, req.document_id)
+    svg = svg_serialize(
+        graph,
+        req.document_id,
+        exclude_layers=req.exclude_layers,
+        exclude_region_ids=req.exclude_region_ids,
+        exclude_prefixes=req.exclude_prefixes,
+    )
     path = Path(req.filepath)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(svg)

@@ -7,7 +7,7 @@ from typing import Any, Literal
 from avge_engine.effects import Style
 from avge_engine.geometry import CurveConstraints, compute_bounds
 from avge_engine.scene.models import RegionNode
-from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_px_to_norm
+from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
@@ -289,8 +289,7 @@ def create_tools(mcp):
         document_id: str | None = None,
         fill: str | None = None,
         stroke: str | None = None,
-        stroke_width: float | None = None,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float | None = None,
         z_index: int | None = None,
         fill_gradient: Any | None = None,
@@ -314,8 +313,7 @@ def create_tools(mcp):
             document_id: Document UUID.
             fill: New fill color (exact mode) or target color (palette_swap mode).
             stroke: New stroke color (exact mode).
-            stroke_width: New stroke width.
-            stroke_width_px: New stroke width in canvas pixels. Overrides stroke_width.
+            stroke_width: New stroke width in canvas pixels.
             opacity: New opacity.
             fill_gradient: Gradient definition.
             blend_mode: CSS mix-blend-mode.
@@ -337,9 +335,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width)
 
         # Resolve target region IDs from selector
         target_ids = None

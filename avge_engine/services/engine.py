@@ -6,7 +6,9 @@ The storage adapter is attached at startup so every mutation auto-persists to di
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Annotated
 
+from pydantic import Field
 from avge_engine.scene import SceneGraph
 from avge_engine.schema_registry import validate_input as _validate
 from avge_engine.storage import FileStorageAdapter
@@ -17,6 +19,15 @@ _active_doc: str | None = None
 
 # Storage directory (relative to project root)
 STORAGE_DIR: str = ".avge_data"
+
+StrokeWidthInput = Annotated[
+    float | None,
+    Field(
+        description="Stroke width in canvas pixels.",
+        ge=0.0,
+        le=512,
+    ),
+]
 
 
 
@@ -99,22 +110,23 @@ def get_storage_dir() -> str:
     return str(Path(STORAGE_DIR).resolve())
 
 
-def stroke_width_px_to_norm(document_id: str, stroke_width_px: float | None) -> float | None:
+def stroke_width_to_norm(document_id: str, stroke_width: float | None) -> float | None:
     """Convert a pixel stroke width to AVGE normalized stroke width.
 
     Stroke widths are stored as a fraction of the shorter canvas dimension.
     Returning ``None`` lets callers preserve omitted style values.
     """
-    if stroke_width_px is None:
+    if stroke_width is None:
         return None
     doc = get_graph().get_document(document_id)
     shorter = max(1, min(doc.width, doc.height))
-    return max(0.001, min(0.1, float(stroke_width_px) / shorter))
+    return max(0.001, min(0.1, float(stroke_width) / shorter))
 
 
-# ── Design guidelines resource ────────────────────────────────────
+# ── Skill guideline resources ─────────────────────────────────────
 
 DESIGN_GUIDELINES_PATH: Path | None = None  # resolved on first access
+ENVIRONMENT_GUIDELINES_PATH: Path | None = None
 
 
 def load_design_guidelines() -> str:
@@ -127,6 +139,21 @@ def load_design_guidelines() -> str:
     if DESIGN_GUIDELINES_PATH.exists():
         return DESIGN_GUIDELINES_PATH.read_text()
     return "# Design Guidelines\n\n(See design-guidelines.md — file not found on this server.)"
+
+
+def load_environment_guidelines() -> str:
+    """Load the environment guidelines markdown file, or return a fallback string."""
+    global ENVIRONMENT_GUIDELINES_PATH
+    if ENVIRONMENT_GUIDELINES_PATH is None:
+        ENVIRONMENT_GUIDELINES_PATH = (
+            Path(__file__).resolve().parent.parent.parent / "docs" / "environment-guidelines.md"
+        )
+    if ENVIRONMENT_GUIDELINES_PATH.exists():
+        return ENVIRONMENT_GUIDELINES_PATH.read_text()
+    return (
+        "# Environment Guidelines\n\n"
+        "(See docs/environment-guidelines.md — file not found on this server.)"
+    )
 
 
 TOOL_REFERENCE_PATH: Path | None = None
@@ -146,16 +173,18 @@ def load_tool_reference() -> str:
 
 # ── Centralized tool map — single source of truth ────────────────
 
-TOOL_MAP = """📋 TOOL MAP (51 tools — all available in batch):
+TOOL_MAP = """📋 TOOL MAP (53 tools — all available in batch):
 
 🗂 Document:   create_document · list_documents · load_document ·
                delete_document · set_background
 ✏️  Create:     create_region · create_primitive · create_curve ·
-               create_ellipse_band · create_text · insert_image · import_svg_path
+               create_ellipse_band · generate_cloud · create_text ·
+               insert_image · import_svg_path
 🔧 Edit:       edit_region · edit_regions · delete_region ·
                get_region · copy_element
 🔄 Transform:  transform_objects · project_quad · create_perspective_grid ·
-               create_facade_grid · duplicate · boolean_operation
+               create_facade_grid · create_surface_stripes · duplicate ·
+               boolean_operation
 🕶 Depth:      add_depth_shadow · cast_shadow · add_shading
 🎨 Style:      restyle · apply_depth_haze · add_bumps ·
                generate_palette · define_gradient ·
@@ -163,7 +192,7 @@ TOOL_MAP = """📋 TOOL MAP (51 tools — all available in batch):
                (restyle supports material presets: glass, brushed_metal,
                concrete, wood, tile, foliage)
 👥 Groups:     edit_group · list_groups · list_layers · shift_layer_z
-🔷 Procedural: generate_shape (16 patterns — see tool description)
+🔷 Procedural: generate_shape (19 patterns — see tool description)
 👁 View:       describe_scene · critique_preview · render_preview ·
                render_diff · checkpoint_diff · export_svg
 📜 History:    checkpoint · restore · get_history

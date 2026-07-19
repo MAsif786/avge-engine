@@ -27,14 +27,8 @@
       "description": "Stroke color as hex string, or null for no stroke."
     },
     "stroke_width": {
-      "type": "number",
-      "description": "Stroke width in normalized units.",
-      "minimum": 0.0,
-      "maximum": 0.1
-    },
-    "stroke_width_px": {
       "type": ["number", "null"],
-      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "description": "Stroke width in canvas pixels.",
       "minimum": 0.0,
       "maximum": 512
     },
@@ -68,7 +62,6 @@
     { "required": ["fill"] },
     { "required": ["stroke"] },
     { "required": ["stroke_width"] },
-    { "required": ["stroke_width_px"] },
     { "required": ["opacity"] },
     { "required": ["material"] }
   ]

@@ -39,10 +39,9 @@
       ],
       "default": "#333333"
     },
-    "stroke_width": { "type": "number", "minimum": 0.0, "maximum": 0.1, "default": 0.005 },
-    "stroke_width_px": {
+    "stroke_width": {
       "type": ["number", "null"],
-      "description": "Stroke width in canvas pixels. Overrides stroke_width when provided.",
+      "description": "Stroke width in canvas pixels.",
       "minimum": 0.0,
       "maximum": 512,
       "default": null

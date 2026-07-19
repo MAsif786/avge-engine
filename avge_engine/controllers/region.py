@@ -5,7 +5,13 @@ import math
 import json as _json
 from typing import Any, Literal
 
-from avge_engine.services.engine import get_graph, resolve_doc, validate_input, stroke_width_px_to_norm
+from avge_engine.services.engine import (
+    StrokeWidthInput,
+    get_graph,
+    resolve_doc,
+    validate_input,
+    stroke_width_to_norm,
+)
 from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star, ellipse_band
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.geometry import compute_bounds
@@ -118,8 +124,7 @@ def create_tools(mcp):
         fill: str | None = "#CCCCCC",
         stroke: str | None = "#333333",
         relative_to: str | None = None,
-        stroke_width: float = 0.005,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float = 1.0,
         fill_gradient: Any | None = None,
         smoothness_per_point: list[float] | None = None,
@@ -158,8 +163,7 @@ def create_tools(mcp):
             smoothness: 0.0–1.0. See description above for per-category guidance.
             fill: Fill hex color, or omit for no fill.
             stroke: Stroke hex color, or omit for no stroke.
-            stroke_width: Stroke width in normalized units.
-            stroke_width_px: Stroke width in canvas pixels. Overrides stroke_width.
+            stroke_width: Stroke width in canvas pixels.
             opacity: Object opacity 0.0–1.0.
             fill_gradient: Gradient definition (dict or JSON string).
                 Linear: {"type":"linear","x1":0,"y1":0,"x2":0,"y2":1,
@@ -196,9 +200,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document. Call create_document first."
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         # Resolve z_index from z_before/z_after
         resolved_z = z_index
@@ -422,8 +424,7 @@ def create_tools(mcp):
         layer: str = "default",
         fill: str | None = "#CCCCCC",
         stroke: str | None = "#333333",
-        stroke_width: float = 0.005,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float = 1.0,
         fill_gradient: Any | None = None,
         smoothness: float = 0.0,
@@ -458,9 +459,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document. Call create_document first."
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         resolved_z = z_index
         try:
@@ -589,8 +588,7 @@ def create_tools(mcp):
         smoothness_per_point: list[float] | None = None,
         fill: str | None = None,
         stroke: str | None = None,
-        stroke_width: float | None = None,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float | None = None,
         z_index: int | None = None,
         blend_mode: BLEND_MODES | None = None,
@@ -622,8 +620,7 @@ def create_tools(mcp):
             smoothness_per_point: JSON array of per-vertex tensions.
             fill: New fill hex color or gradient (omit to keep current).
             stroke: New stroke color.
-            stroke_width: New stroke width.
-            stroke_width_px: New stroke width in canvas pixels. Overrides stroke_width.
+            stroke_width: New stroke width in canvas pixels.
             opacity: New opacity.
             z_index: New paint order (higher = on top).
             blend_mode: CSS mix-blend-mode (multiply, screen, overlay, etc.).
@@ -645,9 +642,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width)
 
         # Resolve target IDs: ids param takes precedence over region_id
         target_ids = ids if ids else ([region_id] if region_id else [])
@@ -1047,8 +1042,7 @@ def create_tools(mcp):
         z_after: str | None = None,
         fill: str | None = "#CCCCCC",
         stroke: str | None = "#333333",
-        stroke_width: float = 0.005,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float = 1.0,
         rotate: float = 0.0,
         blend_mode: BLEND_MODES | None = None,
@@ -1080,8 +1074,7 @@ def create_tools(mcp):
             z_after: Place this region directly in front of the region with this ID.
             fill: Fill hex color, gradient dict, or "none"/"transparent" for no fill.
             stroke: Stroke color.
-            stroke_width: Stroke width.
-            stroke_width_px: Stroke width in canvas pixels. Overrides stroke_width.
+            stroke_width: Stroke width in canvas pixels.
             opacity: Opacity 0.0–1.0.
             rotate: Rotation in degrees around the shape center (positive = clockwise).
                 💡 For hands/pointers: create a vertical rect at center, then rotate.
@@ -1102,9 +1095,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document. Call create_document first."
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         # Resolve z_index from z_before/z_after
         resolved_z = z_index
@@ -1274,9 +1265,9 @@ def create_tools(mcp):
         "create_curve produces a thin stroked path that curves through your "
         "points with Catmull-Rom interpolation. "
         "💡 Hair strands: 4-6 points with smoothness=0.5, stroke='#3D2B1F', "
-        "stroke_width=0.003, stroke_linecap='round' "
+        "stroke_width=3, stroke_linecap='round' "
         "💡 Wrinkles/creases: 3-4 points with smoothness=0.4, "
-        "stroke_width=0.0015, stroke_linecap='round' "
+        "stroke_width=1.5, stroke_linecap='round' "
         "💡 Eyebrows, smile lines: 3 points, smoothness=0.6, "
         "stroke_linecap='round'",
     )
@@ -1287,8 +1278,7 @@ def create_tools(mcp):
         layer: str = "default",
         z_index: int = 0,
         stroke: str | None = "#333333",
-        stroke_width: float = 0.005,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float = 1.0,
         smoothness: float = 0.5,
         blend_mode: BLEND_MODES | None = None,
@@ -1305,8 +1295,7 @@ def create_tools(mcp):
             layer: Layer name (default "default").
             z_index: Paint order (higher = on top).
             stroke: Stroke color (default "#333333").
-            stroke_width: Stroke width in normalized units.
-            stroke_width_px: Stroke width in canvas pixels. Overrides stroke_width.
+            stroke_width: Stroke width in canvas pixels.
             opacity: Object opacity 0.0–1.0.
             smoothness: Curve smoothness 0.0–1.0 (default 0.5).
             blend_mode: CSS mix-blend-mode.
@@ -1321,9 +1310,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document. Call create_document first."
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         if not points or len(points) < 2:
             return "Error: Need at least 2 points"
