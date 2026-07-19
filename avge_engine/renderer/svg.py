@@ -22,7 +22,13 @@ from avge_engine.geometry import compute_bounds, fit_curves
 from avge_engine.effects import resolve_fill, resolve_stroke, is_gradient, gradient_to_svg_def
 
 
-def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
+def svg_serialize(
+    scene: SceneGraph,
+    document_id: str | None = None,
+    exclude_layers: list[str] | None = None,
+    exclude_region_ids: list[str] | None = None,
+    exclude_prefixes: list[str] | None = None,
+) -> str:
     """Produce a canonical SVG string from the scene graph.
 
     Args:
@@ -36,6 +42,16 @@ def svg_serialize(scene: SceneGraph, document_id: str | None = None) -> str:
         return ""  # No document to render
     doc = scene.get_document(doc_id)
     regions = scene.get_all_regions(doc_id)
+    if exclude_layers or exclude_region_ids or exclude_prefixes:
+        layer_set = set(exclude_layers or [])
+        id_set = set(exclude_region_ids or [])
+        prefixes = tuple(exclude_prefixes or [])
+        regions = [
+            r for r in regions
+            if r.layer not in layer_set
+            and r.id not in id_set
+            and not (prefixes and r.id.startswith(prefixes))
+        ]
 
     # Collect gradient definitions (regions + document background)
     gradient_defs: list[str] = []

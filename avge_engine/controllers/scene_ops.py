@@ -6,7 +6,7 @@ from typing import Literal
 
 PIVOT_MODES = Literal["center", "base", "fixed"]
 
-from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_px_to_norm
+from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 
 
 def _clamp01(value: float) -> float:
@@ -99,7 +99,7 @@ def create_tools(mcp):
         keep_originals: bool = False,
         fill: str | None = None,
         stroke: str | None = None,
-        stroke_width: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float | None = None,
         simplify_tolerance: float | None = None,
     ) -> str:
@@ -113,7 +113,7 @@ def create_tools(mcp):
             keep_originals: If True, keep input regions (default False — they are deleted).
             fill: Fill color for the result region.
             stroke: Stroke color for the result region.
-            stroke_width: Stroke width for the result region.
+            stroke_width: Stroke width in canvas pixels for the result region.
             opacity: Opacity for the result region.
         """
         scene = get_graph()
@@ -128,6 +128,8 @@ def create_tools(mcp):
         valid_ops = ("union", "intersect", "subtract", "xor", "difference", "sym_diff")
         if operation not in valid_ops:
             return f"Error: Invalid operation '{operation}'. Valid: union, intersect, subtract, xor"
+
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width)
 
         try:
             result = scene.boolean_operation(
@@ -381,8 +383,7 @@ def create_tools(mcp):
         z_index: int = 0,
         fill: str | None = "#CCCCCC",
         stroke: str | None = "#333333",
-        stroke_width: float | None = 0.005,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float | None = 1.0,
         blend_mode: str | None = None,
         smoothness: float = 0.0,
@@ -418,10 +419,8 @@ def create_tools(mcp):
             stroke_width = None
             opacity = None
             blend_mode = None
-
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        else:
+            stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         try:
             region = scene.project_quad(
@@ -468,8 +467,7 @@ def create_tools(mcp):
         layer: str = "guides",
         z_index: int = -100,
         stroke: str = "#55C7FF",
-        stroke_width: float = 0.001,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float = 0.35,
     ) -> str:
         """Create two-point perspective guide lines.
@@ -481,7 +479,7 @@ def create_tools(mcp):
             horizontals: Number of guide samples on each side.
             bounds: Optional [x0,y0,x1,y1] construction area, default canvas.
             include_horizon: Also create a horizon guide line.
-            stroke_width_px: Pixel stroke width. Overrides stroke_width.
+            stroke_width: Pixel stroke width.
         """
         scene = get_graph()
         try:
@@ -497,9 +495,7 @@ def create_tools(mcp):
         if x1 <= x0 or y1 <= y0:
             return "Error: bounds must be [x0,y0,x1,y1] with positive size"
 
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.001
 
         subpaths: list[list[list[float]]] = []
         vertical_count = max(2, int(verticals))
@@ -571,8 +567,7 @@ def create_tools(mcp):
         window_fill: str = "#182536",
         lit_fill: str = "#FFE8A3",
         window_stroke: str | None = "#A9C8D6",
-        stroke_width: float = 0.001,
-        stroke_width_px: float | None = None,
+        stroke_width: StrokeWidthInput = None,
         opacity: float = 1.0,
         lit_ratio: float = 0.22,
         margin_u: float = 0.18,
@@ -588,7 +583,7 @@ def create_tools(mcp):
             rows, columns: Window grid dimensions.
             lit_ratio: Fraction of windows using lit_fill.
             variation: Deterministic inset variation per window.
-            stroke_width_px: Pixel stroke width. Overrides stroke_width.
+            stroke_width: Pixel stroke width.
         """
         scene = get_graph()
         try:
@@ -602,9 +597,7 @@ def create_tools(mcp):
             return "Error: rows and columns must be >= 1"
 
         quad = [[float(p[0]), float(p[1])] for p in target_quad]
-        px_width = stroke_width_px_to_norm(doc_id, stroke_width_px)
-        if px_width is not None:
-            stroke_width = px_width
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.001
 
         prefix = region_id or "facade"
         rng = random.Random(seed)
@@ -1051,14 +1044,18 @@ def create_tools(mcp):
     @mcp.tool(
         name="add_shading",
         description="Add directional shading to a region. "
-        "Creates highlight + shadow copies offset perpendicular to light direction, "
-        "auto-colored via HSL. IDs use timestamp suffix — safe to call in parallel.",
+        "mode='two_tone' creates highlight + shadow copies; mode='gradient' "
+        "applies a soft gradient fill across the existing region for architecture.",
     )
     def add_shading(
         region_id: str,
         light_direction: float = 135,
         document_id: str | None = None,
         intensity: float = 0.5,
+        mode: Literal["two_tone", "gradient"] = "two_tone",
+        highlight_color: str | None = None,
+        mid_color: str | None = None,
+        shadow_color: str | None = None,
     ) -> str:
         """Add directional shading to a region.
 
@@ -1067,6 +1064,11 @@ def create_tools(mcp):
             light_direction: Angle in degrees (0=right, 90=top).
             document_id: Document UUID.
             intensity: 0.0–1.0 contrast strength.
+            mode: "two_tone" for highlight/shadow copies, "gradient" for
+                continuous plane shading on the existing region.
+            highlight_color: Optional explicit highlight stop color.
+            mid_color: Optional explicit middle stop color.
+            shadow_color: Optional explicit shadow stop color.
         """
         from avge_engine.effects.color import apply_hsl_offset
         scene = get_graph()
@@ -1086,8 +1088,29 @@ def create_tools(mcp):
         cur_fill = r.style.fill
         if not isinstance(cur_fill, str) or not cur_fill.startswith("#"):
             return "Error: add_shading requires a hex fill color"
-        highlight = apply_hsl_offset(cur_fill, l_offset=intensity * 25, s_offset=-10)
-        shadow = apply_hsl_offset(cur_fill, l_offset=-intensity * 30, s_offset=15)
+        highlight = highlight_color or apply_hsl_offset(cur_fill, l_offset=intensity * 25, s_offset=-10)
+        middle = mid_color or cur_fill
+        shadow = shadow_color or apply_hsl_offset(cur_fill, l_offset=-intensity * 30, s_offset=15)
+        if mode == "gradient":
+            grad = {
+                "type": "linear",
+                "angle": light_direction,
+                "stops": [
+                    {"offset": 0.0, "color": highlight},
+                    {"offset": 0.52, "color": middle},
+                    {"offset": 1.0, "color": shadow},
+                ],
+            }
+            # Normalize angle the same way restyle does.
+            grad_angle = grad.pop("angle")
+            grad["x1"] = round(0.5 - 0.5 * math.cos(angle), 2)
+            grad["y1"] = round(0.5 - 0.5 * math.sin(angle), 2)
+            grad["x2"] = round(0.5 + 0.5 * math.cos(angle), 2)
+            grad["y2"] = round(0.5 + 0.5 * math.sin(angle), 2)
+            scene.edit_region(region_id=region_id, document_id=doc_id, fill=grad)
+            return f"Gradient shading applied to '{region_id}', light={grad_angle:.0f}deg"
+        if mode != "two_tone":
+            return "Error: mode must be 'two_tone' or 'gradient'"
         import uuid as _uuid, time as _time
         _seq = int(_time.time() * 1000) % 100000
         h_dup = scene.duplicate_region(
@@ -1105,6 +1128,205 @@ def create_tools(mcp):
             z_index=r.z_index - 1,
         )
         return f"Shading added: highlight='{h_dup.id}' shadow='{s_dup.id}', light={light_direction:.0f}deg"
+
+    @mcp.tool(
+        name="generate_cloud",
+        description="Create a soft irregular cloud from overlapping blurred puffs, "
+        "with lighter top lobes and subtle shaded underside. Use instead of "
+        "hard single ellipses for sky detail.",
+    )
+    def generate_cloud(
+        cx: float,
+        cy: float,
+        width: float,
+        height: float,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        puff_count: int = 7,
+        puff_variance: float = 0.28,
+        shade_direction: float = 135.0,
+        blur: float = 3.0,
+        opacity: float = 0.82,
+        fill: str = "#F4FDFF",
+        shade_fill: str = "#CFEAF5",
+        layer: str = "sky",
+        z_index: int = -70,
+        seed: int = 1,
+    ) -> str:
+        """Create an editable cloud group from multiple soft puffs.
+
+        Args:
+            cx, cy: Cloud center in normalized coordinates.
+            width, height: Overall cloud size in normalized units.
+            puff_count: Number of overlapping lobes.
+            puff_variance: Size/position irregularity from 0.0–1.0.
+            shade_direction: Light direction in degrees; underside is offset opposite it.
+            blur: Gaussian blur radius in pixels.
+            opacity: Overall cloud opacity.
+            fill: Main/lit cloud color.
+            shade_fill: Underside shadow color.
+        """
+        import math
+        from avge_engine.scene import CurveConstraints, Style
+
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if width <= 0 or height <= 0:
+            return "Error: width and height must be positive"
+        puff_count = max(2, min(32, int(puff_count)))
+        rng = random.Random(seed)
+        prefix = region_id or f"cloud_{abs(hash((cx, cy, width, height, seed))) & 0xFFFF:x}"
+        angle = math.radians(shade_direction + 180.0)
+        shade_dx = math.cos(angle) * width * 0.035
+        shade_dy = abs(math.sin(angle)) * height * 0.12 + height * 0.08
+
+        created: list[str] = []
+        try:
+            # Underpaint shadow puffs first so the lit lobes sit on top.
+            for pass_name, color, pass_opacity, dy_extra, z in (
+                ("shade", shade_fill, opacity * 0.42, shade_dy, z_index),
+                ("puff", fill, opacity, 0.0, z_index + 1),
+            ):
+                for i in range(puff_count):
+                    t = i / (puff_count - 1) if puff_count > 1 else 0.5
+                    jitter_x = (rng.random() - 0.5) * width * puff_variance * 0.35
+                    jitter_y = (rng.random() - 0.5) * height * puff_variance * 0.45
+                    px = cx - width * 0.42 + width * 0.84 * t + jitter_x + (shade_dx if pass_name == "shade" else 0.0)
+                    py = cy + math.sin(t * math.pi) * -height * 0.16 + jitter_y + dy_extra
+                    rx = width / max(3.2, puff_count * 0.72) * (0.9 + rng.random() * puff_variance)
+                    ry = height * (0.25 + rng.random() * 0.22)
+                    outline = [(px - rx, py - ry), (px + rx, py - ry), (px + rx, py + ry), (px - rx, py + ry)]
+                    r = scene.create_region(
+                        outline=outline,
+                        region_id=f"{prefix}_{pass_name}_{i:02d}",
+                        document_id=doc_id,
+                        layer=layer,
+                        z_index=z,
+                        constraints=CurveConstraints(smoothness=0.72, closed=True),
+                        style=Style(fill=color, stroke=None, opacity=pass_opacity, blur=max(0.0, blur)),
+                        metadata={"tool": "generate_cloud", "cloud": prefix, "part": pass_name},
+                    )
+                    created.append(r.id)
+            # A broad low-opacity body fill ties the lobes together.
+            body = scene.create_region(
+                outline=[
+                    (cx - width * 0.46, cy + height * 0.05),
+                    (cx - width * 0.20, cy - height * 0.28),
+                    (cx + width * 0.23, cy - height * 0.24),
+                    (cx + width * 0.48, cy + height * 0.04),
+                    (cx + width * 0.22, cy + height * 0.22),
+                    (cx - width * 0.28, cy + height * 0.20),
+                ],
+                region_id=f"{prefix}_body",
+                document_id=doc_id,
+                layer=layer,
+                z_index=z_index,
+                constraints=CurveConstraints(smoothness=0.78, closed=True),
+                style=Style(fill=fill, stroke=None, opacity=opacity * 0.38, blur=max(0.0, blur * 0.7)),
+                metadata={"tool": "generate_cloud", "cloud": prefix, "part": "body"},
+            )
+            created.append(body.id)
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+        return f"Cloud generated: {prefix}, puffs={puff_count}, regions={len(created)}"
+
+    @mcp.tool(
+        name="create_surface_stripes",
+        description="Create evenly spaced project_quad stripes on a road/floor surface. "
+        "Use for crosswalks, lane markings, floor tiles, and plaza seams that "
+        "must converge with the same surface perspective.",
+    )
+    def create_surface_stripes(
+        target_quad: list[list[float]],
+        count: int,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        orientation: Literal["u", "v"] = "u",
+        start: float = 0.08,
+        end: float = 0.92,
+        stripe_width: float = 0.05,
+        gap: float | None = None,
+        spacing_falloff: float = 1.0,
+        fill: str = "#F1F7F8",
+        stroke: str | None = None,
+        stroke_width: StrokeWidthInput = None,
+        opacity: float = 0.95,
+        layer: str = "road",
+        z_index: int = 0,
+    ) -> str:
+        """Create a stripe set in normalized surface coordinates.
+
+        Args:
+            target_quad: Surface corners top-left, top-right, bottom-right, bottom-left.
+            count: Number of stripes.
+            orientation: "u" creates crosswise bands varying along U; "v" creates lengthwise bands.
+            start, end: Surface-coordinate range for stripe placement.
+            stripe_width: Stripe width in surface-coordinate units.
+            gap: Optional initial gap; defaults to evenly filling the range.
+            spacing_falloff: Multiplier applied to each next gap, for receding spacing.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if len(target_quad) != 4:
+            return "Error: target_quad must contain exactly four points"
+        count = max(1, min(100, int(count)))
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width)
+        prefix = region_id or "surface_stripe"
+        start = _clamp01(start)
+        end = _clamp01(end)
+        if end <= start:
+            return "Error: end must be greater than start"
+        if gap is None:
+            gap = max(0.0, (end - start - stripe_width * count) / max(1, count - 1))
+
+        pos = start
+        created: list[str] = []
+        try:
+            for i in range(count):
+                w = max(0.001, stripe_width * (spacing_falloff ** i if spacing_falloff < 1.0 else 1.0))
+                p0 = pos
+                p1 = min(end, pos + w)
+                if p1 <= p0:
+                    break
+                if orientation == "u":
+                    quad = [
+                        _quad_point(target_quad, p0, 0.0),
+                        _quad_point(target_quad, p1, 0.0),
+                        _quad_point(target_quad, p1, 1.0),
+                        _quad_point(target_quad, p0, 1.0),
+                    ]
+                else:
+                    quad = [
+                        _quad_point(target_quad, 0.0, p0),
+                        _quad_point(target_quad, 1.0, p0),
+                        _quad_point(target_quad, 1.0, p1),
+                        _quad_point(target_quad, 0.0, p1),
+                    ]
+                r = scene.project_quad(
+                    quad,
+                    document_id=doc_id,
+                    region_id=f"{prefix}_{i:02d}",
+                    layer=layer,
+                    z_index=z_index + i,
+                    fill=fill,
+                    stroke=stroke,
+                    stroke_width=stroke_width,
+                    opacity=opacity,
+                    metadata={"tool": "create_surface_stripes", "stripe_index": i},
+                )
+                created.append(r.id)
+                pos = p1 + gap * (spacing_falloff ** i)
+                if pos >= end:
+                    break
+        except (ValueError, RuntimeError) as e:
+            return f"Error: {e}"
+        return f"Surface stripes created: {len(created)} stripe(s), ids={', '.join(created[:5])}{'...' if len(created) > 5 else ''}"
 
     @mcp.tool(
         name="add_depth_shadow",

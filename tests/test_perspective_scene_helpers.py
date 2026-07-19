@@ -1,4 +1,5 @@
-from avge_engine.controllers import scene_ops, style
+from avge_engine.controllers import procedural, scene_ops, scene_view, style
+from avge_engine.scene import Style
 from avge_engine.services.engine import reset_graph
 
 
@@ -116,3 +117,152 @@ def test_duplicate_linear_supports_spacing_and_scale_falloff():
     second = graph.get_region("pole_copy_1", doc.id)
     assert first.outline[0][0] == 0.2
     assert second.outline[0][0] < 0.3
+
+
+def test_add_shading_gradient_styles_existing_region():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+    graph.create_region(
+        document_id=doc.id,
+        region_id="facade",
+        outline=[(0.2, 0.2), (0.6, 0.2), (0.6, 0.7), (0.2, 0.7)],
+        style=Style(fill="#406070"),
+    )
+
+    result = mcp.tools["add_shading"](
+        document_id=doc.id,
+        region_id="facade",
+        mode="gradient",
+        light_direction=135,
+        intensity=0.4,
+    )
+
+    facade = graph.get_region("facade", doc.id)
+    assert "Gradient shading applied" in result
+    assert facade.style.fill["type"] == "linear"
+    assert len(facade.style.fill["stops"]) == 3
+
+
+def test_generate_cloud_creates_soft_layered_regions():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+
+    result = mcp.tools["generate_cloud"](
+        document_id=doc.id,
+        region_id="cloud",
+        cx=0.45,
+        cy=0.18,
+        width=0.28,
+        height=0.08,
+        puff_count=5,
+        seed=4,
+    )
+
+    cloud_regions = [
+        r for r in graph.get_all_regions(doc.id)
+        if r.metadata.get("tool") == "generate_cloud"
+    ]
+    assert "Cloud generated: cloud" in result
+    assert len(cloud_regions) >= 6
+    assert any(r.style.blur > 0 for r in cloud_regions)
+    assert {r.metadata.get("part") for r in cloud_regions} >= {"shade", "puff", "body"}
+
+
+def test_create_surface_stripes_projects_repeated_road_markings():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document(width=1200, height=800)
+
+    result = mcp.tools["create_surface_stripes"](
+        document_id=doc.id,
+        region_id="crosswalk",
+        target_quad=[[0.35, 0.45], [0.65, 0.45], [0.92, 0.82], [0.08, 0.82]],
+        count=4,
+        orientation="u",
+        stripe_width=0.08,
+        spacing_falloff=0.75,
+        stroke_width=2,
+    )
+
+    stripes = [
+        r for r in graph.get_all_regions(doc.id)
+        if r.metadata.get("tool") == "create_surface_stripes"
+    ]
+    assert "Surface stripes created: 4" in result
+    assert len(stripes) == 4
+    assert all(r.style.stroke_width == 0.0025 for r in stripes)
+
+
+def test_environment_densify_generate_shape_patterns():
+    reset_graph()
+    mcp = _FakeMCP()
+    procedural.create_tools(mcp)
+    graph = procedural.get_graph()
+    doc = graph.create_document()
+    graph.create_region(
+        document_id=doc.id,
+        region_id="shop",
+        outline=[(0.15, 0.25), (0.45, 0.25), (0.45, 0.72), (0.15, 0.72)],
+    )
+
+    assert "cornice: created" in mcp.tools["generate_shape"](
+        document_id=doc.id,
+        pattern="cornice",
+        params={"region_id": "shop", "region_id_out": "shop_cornice", "style": "stepped"},
+    )
+    assert "awning: created" in mcp.tools["generate_shape"](
+        document_id=doc.id,
+        pattern="awning",
+        params={"region_id": "shop", "region_id_out": "shop_awning", "stripe_count": 3},
+    )
+    assert "rooftop_props: created" in mcp.tools["generate_shape"](
+        document_id=doc.id,
+        pattern="rooftop_props",
+        params={"region_id": "shop", "count": 4, "seed": 9},
+    )
+
+    assert graph.has_region("shop_cornice", doc.id)
+    assert graph.has_region("shop_awning", doc.id)
+    assert len([r for r in graph.get_all_regions(doc.id) if r.metadata.get("pattern") == "rooftop_props"]) == 4
+
+
+def test_export_svg_can_exclude_construction_guides(tmp_path):
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_view.create_tools(mcp)
+    graph = scene_view.get_graph()
+    doc = graph.create_document()
+    graph.create_region(
+        document_id=doc.id,
+        region_id="final_building",
+        outline=[(0.2, 0.2), (0.5, 0.2), (0.5, 0.7), (0.2, 0.7)],
+        layer="architecture",
+        style=Style(fill="#223344"),
+    )
+    graph.create_region(
+        document_id=doc.id,
+        region_id="guide_line",
+        outline=[(0.0, 0.4), (1.0, 0.4)],
+        layer="guides",
+        style=Style(fill=None, stroke="#FF00FF"),
+    )
+    output = tmp_path / "scene.svg"
+
+    result = mcp.tools["export_svg"](
+        document_id=doc.id,
+        filepath=str(output),
+        exclude_layers=["guides"],
+    )
+    svg = output.read_text()
+
+    assert "SVG saved" in result
+    assert "#223344" in svg
+    assert "#FF00FF" not in svg

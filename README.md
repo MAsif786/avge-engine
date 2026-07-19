@@ -1,6 +1,6 @@
 # AVGE Engine — AI-Native Vector Graphics Engine
 
-**Version:** 0.5.7 | **Tool set:** m0b-v8
+**Version:** 0.5.7 | **Tool set:** m0b-v9
 
 Vector illustration tools for AI agents — create editable vector art with shapes, armatures, materials, and rendering. Output is clean SVG you can open in Illustrator, Figma, or any vector editor. Runs as an MCP server.
 
@@ -24,7 +24,7 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 - **Armature skeletons** — node-edge graphs with tapered segments, junction separation, filleted V-gaps, curved Catmull-Rom chains, and unary union merging
 - **Boolean operations** — union, intersect, subtract, xor with Ramer-Douglas-Peucker simplification
 - **Perspective projection** — `project_quad` maps panels, tables, windows, signs, and floor tiles into real quadrilateral perspective
-- **HSL shading** — auto highlight + shadow from light direction
+- **HSL shading** — auto highlight + shadow from light direction, plus gradient mode for architectural planes
 - **Depth shadows** — `add_depth_shadow` and `cast_shadow` create soft blurred shadows from existing outlines
 - **Preview critique** — `critique_preview` flags flatness, over-rounding, missing contact shadows, perspective issues, and dominant blob shapes
 - **Primitives** — rects (including tapered/trapezoid), ellipses, ellipse/arc bands, lines, open polylines, compound paths, arcs, polygons, stars, and isometric boxes
@@ -32,7 +32,8 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 - **Gradient backgrounds** — linear and radial gradient definitions, inline in `create_document` or via `set_background`
 - **Style system** — fill, stroke, stroke-width, opacity, blend modes, dash patterns, rgba/hsla color support
 - **Material presets** — `restyle(material=...)` for glass, brushed metal, concrete, wood, tile, and foliage with editable highlights, shadows, seams, and grain overlays
-- **Pixel stroke widths** — `stroke_width_px` maps precise pixel widths to normalized scene units for predictable rails, seams, branches, and cables
+- **Pixel stroke widths** — `stroke_width` accepts canvas pixels for predictable rails, seams, branches, and cables
+- **Environment helpers** — perspective grids, facade/window density, surface stripes, soft clouds, haze, and densify patterns for cornices, awnings, and rooftop props
 - **Batch operations** — execute multiple tools in one call, edit multiple regions with per-region transforms
 - **Palette generation** — HSL harmony presets (complementary, triadic, analogous, etc.)
 - **Named gradients** — define once with `define_gradient`, reference by name in `restyle`
@@ -42,18 +43,18 @@ Preview renders at `http://localhost:8000/preview/<document_id>.png`
 - **PNG rasterization** — via rsvg-convert (librsvg) with Unicode/emoji font support
 - **Per-document tracking** — checkpoint/restore history, tool usage stats
 
-## 51+ MCP Tools
+## 53 MCP Tools
 
 | Category | Tools |
 |----------|-------|
 | **Document** | `create_document`, `list_documents`, `set_background`, `get_document_stats` |
-| **Create** | `create_region`, `create_ellipse_band`, `create_primitive`, `create_curve`, `create_text`, `insert_image`, `import_svg_path` |
+| **Create** | `create_region`, `create_ellipse_band`, `generate_cloud`, `create_primitive`, `create_curve`, `create_text`, `insert_image`, `import_svg_path` |
 | **Edit** | `edit_region` (point-level nudge), `edit_regions` (batch transforms), `delete_region`, `copy_element`, `get_region` (inspect outline) |
-| **Transform** | `transform_objects`, `project_quad`, `create_perspective_grid`, `create_facade_grid`, `duplicate`, `boolean_operation`, `mirror_region` |
+| **Transform** | `transform_objects`, `project_quad`, `create_perspective_grid`, `create_facade_grid`, `create_surface_stripes`, `duplicate`, `boolean_operation` |
 | **Depth** | `add_depth_shadow`, `cast_shadow`, `add_shading` |
 | **Style** | `restyle` (including material presets), `apply_depth_haze`, `generate_palette`, `define_gradient`, `apply_line_hierarchy`, `compare_style_consistency` |
 | **Groups** | `group_regions`, `ungroup_regions` |
-| **Procedural** | `generate_shape` (15 patterns: armature, segmented_chain, radial_spread, speech_bubble, create_burst, isometric_box, attach, ...) |
+| **Procedural** | `generate_shape` (19 patterns: armature, segmented_chain, radial_spread, speech_bubble, create_burst, cornice, awning, rooftop_props, isometric_box, attach, ...) |
 | **View** | `render_preview`, `describe_scene`, `critique_preview`, `checkpoint_diff`, `render_diff` |
 | **History** | `checkpoint`, `restore`, `get_history`, `batch` |
 

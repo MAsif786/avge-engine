@@ -205,6 +205,9 @@ def create_tools(mcp):
     def export_svg(
         filepath: str = "output/scene.svg",
         document_id: str | None = None,
+        exclude_layers: list[str] | None = None,
+        exclude_region_ids: list[str] | None = None,
+        exclude_prefixes: list[str] | None = None,
     ) -> str:
         """Export the current canvas as an SVG file on disk.
 
@@ -212,6 +215,10 @@ def create_tools(mcp):
             filepath: Path to save the SVG file (default "output/scene.svg").
                 Relative paths are resolved from the project root.
             document_id: Document UUID (omit to use active document).
+            exclude_layers: Optional layer names to omit from final export.
+                Use ["guides"] to keep construction guides out of final art.
+            exclude_region_ids: Optional exact region IDs to omit.
+            exclude_prefixes: Optional ID prefixes to omit, e.g. ["guide_"].
         """
         scene = get_graph()
         try:
@@ -219,7 +226,13 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No document — call create_document first"
 
-        svg = svg_serialize(scene, doc_id)
+        svg = svg_serialize(
+            scene,
+            doc_id,
+            exclude_layers=exclude_layers,
+            exclude_region_ids=exclude_region_ids,
+            exclude_prefixes=exclude_prefixes,
+        )
 
         path = Path(filepath)
         path.parent.mkdir(parents=True, exist_ok=True)

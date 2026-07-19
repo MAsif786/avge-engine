@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (51 tools)
+# AVGE Engine — Tool Reference (53 tools)
 
-_Generated from `__main__` — tool set: m0b-v8_
+_Generated from `__main__` — tool set: m0b-v9_
 
 ## `add_bumps`
 
@@ -46,16 +46,20 @@ Create a soft offset shadow from a region outline. Use to ground objects quickly
 
 ## `add_shading`
 
-Add directional shading to a region. Creates highlight + shadow copies offset perpendicular to light direction, auto-colored via HSL. IDs use timestamp suffix — safe to call in parallel.
+Add directional shading to a region. mode='two_tone' creates highlight + shadow copies; mode='gradient' applies a soft gradient fill across the existing region for architecture.
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
+| `highlight_color` | `any` |  |  |
 | `intensity` | `number` |  |  |
 | `light_direction` | `number` |  |  |
+| `mid_color` | `any` |  |  |
+| `mode` | `string` |  |  |
 | `region_id` | `string` | ✓ |  |
+| `shadow_color` | `any` |  |  |
 
 ---
 
@@ -97,11 +101,10 @@ Automate stroke-weight by depth: outer silhouette regions get thicker strokes, i
 ## `batch`
 
 Execute multiple operations in a single call. **ALL** registered tools work in batch — not just the ones listed.
-  Stroke rule: stroke_width_px overrides normalized stroke_width when both are provided.
-  create_region: outline, fill, stroke, smoothness, closed, z_index, stroke_width_px
+  create_region: outline, fill, stroke, smoothness, closed, z_index, stroke_width
   create_ellipse_band: cx, cy, rx, ry, thickness, start_angle, end_angle, perspective
-  create_primitive: shape (rect/ellipse/line/polyline/compound_path), fill, stroke, stroke_width_px
-  create_curve: points, stroke, stroke_width_px, smoothness
+  create_primitive: shape (rect/ellipse/line/polyline/compound_path), fill, stroke, stroke_width
+  create_curve: points, stroke, stroke_width, smoothness
   create_text: x, y, text, fill, font_size, font_family, text_anchor
   insert_image: x, y, width, height, href
   import_svg_path: path_data, fill, smoothness
@@ -110,7 +113,7 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
   add_depth_shadow: region_id, direction, distance, softness, sy
   cast_shadow: from_region_id, onto_region_id, direction, distance, softness
   apply_depth_haze: selector, haze_color, near_y, far_y, max_strength
-  restyle: selector, mode, fill, stroke, stroke_width_px, material
+  restyle: selector, mode, fill, stroke, stroke_width, material
   delete_region: region_id
   transform_objects: ids, mode, dx, dy, scale, rotate, alignment
   project_quad: target_quad, source_region_id, fill, stroke, columns, rows
@@ -147,7 +150,7 @@ Perform boolean geometry on regions using shapely/GEOS. Operations: union, inter
 | `region_ids` | `array` | ✓ |  |
 | `simplify_tolerance` | `any` |  |  |
 | `stroke` | `any` |  |  |
-| `stroke_width` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 
 ---
 
@@ -233,7 +236,7 @@ Copy any element (region, rect, text, image, ellipse, line) or group from one do
 
 ## `create_curve`
 
-Create a smooth curved line through 3+ control points. Unlike create_region (filled shapes) or create_shape (primitives), create_curve produces a thin stroked path that curves through your points with Catmull-Rom interpolation. 💡 Hair strands: 4-6 points with smoothness=0.5, stroke='#3D2B1F', stroke_width=0.003, stroke_linecap='round' 💡 Wrinkles/creases: 3-4 points with smoothness=0.4, stroke_width=0.0015, stroke_linecap='round' 💡 Eyebrows, smile lines: 3 points, smoothness=0.6, stroke_linecap='round'
+Create a smooth curved line through 3+ control points. Unlike create_region (filled shapes) or create_shape (primitives), create_curve produces a thin stroked path that curves through your points with Catmull-Rom interpolation. 💡 Hair strands: 4-6 points with smoothness=0.5, stroke='#3D2B1F', stroke_width=3, stroke_linecap='round' 💡 Wrinkles/creases: 3-4 points with smoothness=0.4, stroke_width=1.5, stroke_linecap='round' 💡 Eyebrows, smile lines: 3 points, smoothness=0.6, stroke_linecap='round'
 
 ### Parameters
 
@@ -250,8 +253,7 @@ Create a smooth curved line through 3+ control points. Unlike create_region (fil
 | `stroke` | `any` |  |  |
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
-| `stroke_width` | `number` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `z_index` | `integer` |  |  |
 
 ---
@@ -304,8 +306,7 @@ Create a filled elliptical ring or arc band in one call. Use for realistic circu
 | `smoothness` | `number` |  |  |
 | `start_angle` | `number` |  |  |
 | `stroke` | `any` |  |  |
-| `stroke_width` | `number` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `tags` | `any` |  |  |
 | `thickness` | `any` |  |  |
 | `z_after` | `any` |  |  |
@@ -336,8 +337,7 @@ Create a perspective-aware building facade with repeated window quads. Supports 
 | `region_id` | `any` |  |  |
 | `rows` | `integer` | ✓ |  |
 | `seed` | `integer` |  |  |
-| `stroke_width` | `number` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `target_quad` | `array` | ✓ |  |
 | `variation` | `number` |  |  |
 | `window_fill` | `string` |  |  |
@@ -363,8 +363,7 @@ Create two-point perspective construction guides from shared vanishing points. U
 | `opacity` | `number` |  |  |
 | `region_id` | `any` |  |  |
 | `stroke` | `string` |  |  |
-| `stroke_width` | `number` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `vanishing_points` | `array` | ✓ |  |
 | `verticals` | `integer` |  |  |
 | `z_index` | `integer` |  |  |
@@ -402,8 +401,7 @@ Create an SVG primitive shape (rect, ellipse, line, polygon, star, arc), open po
 | `stroke` | `any` |  |  |
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
-| `stroke_width` | `number` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `z_after` | `any` |  |  |
 | `z_before` | `any` |  |  |
 | `z_index` | `integer` |  |  |
@@ -440,11 +438,37 @@ Create a vector region from an outline defined by points. The engine fits smooth
 | `stroke` | `any` |  |  |
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
-| `stroke_width` | `number` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `tags` | `any` |  |  |
 | `z_after` | `any` |  |  |
 | `z_before` | `any` |  |  |
+| `z_index` | `integer` |  |  |
+
+---
+
+## `create_surface_stripes`
+
+Create evenly spaced project_quad stripes on a road/floor surface. Use for crosswalks, lane markings, floor tiles, and plaza seams that must converge with the same surface perspective.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `count` | `integer` | ✓ |  |
+| `document_id` | `any` |  |  |
+| `end` | `number` |  |  |
+| `fill` | `string` |  |  |
+| `gap` | `any` |  |  |
+| `layer` | `string` |  |  |
+| `opacity` | `number` |  |  |
+| `orientation` | `string` |  |  |
+| `region_id` | `any` |  |  |
+| `spacing_falloff` | `number` |  |  |
+| `start` | `number` |  |  |
+| `stripe_width` | `number` |  |  |
+| `stroke` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
+| `target_quad` | `array` | ✓ |  |
 | `z_index` | `integer` |  |  |
 
 ---
@@ -660,8 +684,7 @@ Modify an existing region's outline, style, z_index, or shape. Only provided fie
 | `stroke` | `any` |  |  |
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
-| `stroke_width` | `any` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `tags` | `any` |  |  |
 | `z_index` | `any` |  |  |
 
@@ -690,6 +713,9 @@ Export the current canvas to an SVG file on disk. Returns the file path and SVG 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
+| `exclude_layers` | `any` |  |  |
+| `exclude_prefixes` | `any` |  |  |
+| `exclude_region_ids` | `any` |  |  |
 | `filepath` | `string` |  |  |
 
 ---
@@ -717,6 +743,33 @@ Query regions by visual properties and bounds. Lets you target e.g. 'all regions
 | `tags` | `any` |  |  |
 | `z_max` | `any` |  |  |
 | `z_min` | `any` |  |  |
+
+---
+
+## `generate_cloud`
+
+Create a soft irregular cloud from overlapping blurred puffs, with lighter top lobes and subtle shaded underside. Use instead of hard single ellipses for sky detail.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `blur` | `number` |  |  |
+| `cx` | `number` | ✓ |  |
+| `cy` | `number` | ✓ |  |
+| `document_id` | `any` |  |  |
+| `fill` | `string` |  |  |
+| `height` | `number` | ✓ |  |
+| `layer` | `string` |  |  |
+| `opacity` | `number` |  |  |
+| `puff_count` | `integer` |  |  |
+| `puff_variance` | `number` |  |  |
+| `region_id` | `any` |  |  |
+| `seed` | `integer` |  |  |
+| `shade_direction` | `number` |  |  |
+| `shade_fill` | `string` |  |  |
+| `width` | `number` | ✓ |  |
+| `z_index` | `integer` |  |  |
 
 ---
 
@@ -771,6 +824,12 @@ Generate geometry from a generic pattern function. Each pattern is a pure geomet
     Params: cx, cy, width, height, tail_direction (top/bottom/left/right),
     tail_length, tail_width, rx (corner radius), fill, stroke
     💡 Creates a region — add text inside with create_text.
+  cornice — Add a decorative band along a building edge.
+    Params: region_id, edge, depth, style, fill, stroke
+  awning — Add an angled canopy with optional stripes along a facade edge.
+    Params: region_id, edge, width, height, tilt_angle, stripe_count, colors
+  rooftop_props — Scatter rooftop silhouettes along a roof edge.
+    Params: region_id, edge, count, seed, prop_types, density
   isometric_box — Generate 3 visible faces of an isometric 3D box.
     Params: x, y, width, depth, height, angle, fill, top_fill, left_fill, right_fill,
       skip_faces (e.g. ["top"] for hidden leg faces), shadow (bool),
@@ -857,7 +916,7 @@ Import an SVG path data string as a vector region. Parses M, L, C, Q, Z commands
 | `samples_per_curve` | `integer` |  |  |
 | `smoothness` | `number` |  |  |
 | `stroke` | `any` |  |  |
-| `stroke_width` | `number` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `z_index` | `integer` |  |  |
 
 ---
@@ -949,8 +1008,7 @@ Create or perspective-warp a rectangular/panel region into a target quadrilatera
 | `smoothness` | `number` |  |  |
 | `source_region_id` | `any` |  |  |
 | `stroke` | `any` |  |  |
-| `stroke_width` | `any` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `target_quad` | `array` | ✓ |  |
 | `z_index` | `integer` |  |  |
 
@@ -1029,8 +1087,7 @@ Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'
 | `selector` | `any` |  |  |
 | `stroke` | `any` |  |  |
 | `stroke_hsl_offset` | `any` |  |  |
-| `stroke_width` | `any` |  |  |
-| `stroke_width_px` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `to_color` | `any` |  |  |
 | `z_index` | `any` |  |  |
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.geometry import compute_bounds
 
@@ -22,6 +22,9 @@ PATTERNS = Literal[
     "armature",
     "foreshorten",
     "surface_detail",
+    "cornice",
+    "awning",
+    "rooftop_props",
     "isometric_box",
     "attach",
 ]
@@ -67,6 +70,12 @@ def create_tools(mcp):
         "    Params: cx, cy, width, height, tail_direction (top/bottom/left/right),\n"
         "    tail_length, tail_width, rx (corner radius), fill, stroke\n"
         "    💡 Creates a region — add text inside with create_text.\n"
+        "  cornice — Add a decorative band along a building edge.\n"
+        "    Params: region_id, edge, depth, style, fill, stroke\n"
+        "  awning — Add an angled canopy with optional stripes along a facade edge.\n"
+        "    Params: region_id, edge, width, height, tilt_angle, stripe_count, colors\n"
+        "  rooftop_props — Scatter rooftop silhouettes along a roof edge.\n"
+        "    Params: region_id, edge, count, seed, prop_types, density\n"
         "  isometric_box — Generate 3 visible faces of an isometric 3D box.\n"
         "    Params: x, y, width, depth, height, angle, fill, top_fill, left_fill, right_fill,\n"
         "      skip_faces (e.g. [\"top\"] for hidden leg faces), shadow (bool),\n"
@@ -142,6 +151,12 @@ def create_tools(mcp):
                 return _do_foreshorten(scene, doc_id, params)
             elif pattern == "surface_detail":
                 return _do_surface_detail(scene, doc_id, params)
+            elif pattern == "cornice":
+                return _do_cornice(scene, doc_id, params)
+            elif pattern == "awning":
+                return _do_awning(scene, doc_id, params)
+            elif pattern == "rooftop_props":
+                return _do_rooftop_props(scene, doc_id, params)
             elif pattern == "isometric_box":
                 return _do_isometric_box(scene, doc_id, params)
             elif pattern == "attach":
@@ -167,7 +182,7 @@ def create_tools(mcp):
         z_index: int = 0,
         fill: str | None = "#CCCCCC",
         stroke: str | None = "#333333",
-        stroke_width: float = 0.005,
+        stroke_width: StrokeWidthInput = None,
         smoothness: float = 0.0,
         closed: bool = True,
         samples_per_curve: int = 12,
@@ -184,7 +199,7 @@ def create_tools(mcp):
             z_index: Paint order.
             fill: Fill hex color.
             stroke: Stroke hex color.
-            stroke_width: Stroke width.
+            stroke_width: Stroke width in canvas pixels.
             smoothness: Curve smoothness (0.0 = preserve straight edges).
             closed: Whether the path is closed.
             samples_per_curve: Points per bezier segment (higher = smoother curves).
@@ -197,6 +212,8 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
+
+        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         from avge_engine.geometry.procedural import parse_svg_path
 
@@ -855,6 +872,214 @@ def _do_surface_detail(scene, doc_id: str, params: dict) -> str:
         except (ValueError, RuntimeError) as e:
             return f"Error at detail {i}: {e}"
     return f"surface_detail: {len(created)} motif(s) on '{region_id}'"
+
+
+def _edge_segment(region, edge: str) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return an approximate edge segment for a region outline."""
+    pts = list(region.outline)
+    if not pts:
+        raise ValueError(f"Region '{region.id}' has no outline")
+    b = compute_bounds(pts)
+    min_x, min_y = b["x"], b["y"]
+    max_x, max_y = b["x"] + b["w"], b["y"] + b["h"]
+    if edge in ("top", "bottom"):
+        y_ref = min_y if edge == "top" else max_y
+        tol = max(0.01, b["h"] * 0.18)
+        edge_pts = [p for p in pts if abs(p[1] - y_ref) <= tol]
+        if len(edge_pts) >= 2:
+            edge_pts = sorted(edge_pts, key=lambda p: p[0])
+            return tuple(edge_pts[0]), tuple(edge_pts[-1])
+        return (min_x, y_ref), (max_x, y_ref)
+    x_ref = min_x if edge == "left" else max_x
+    tol = max(0.01, b["w"] * 0.18)
+    edge_pts = [p for p in pts if abs(p[0] - x_ref) <= tol]
+    if len(edge_pts) >= 2:
+        edge_pts = sorted(edge_pts, key=lambda p: p[1])
+        return tuple(edge_pts[0]), tuple(edge_pts[-1])
+    return (x_ref, min_y), (x_ref, max_y)
+
+
+def _edge_normal(edge: str) -> tuple[float, float]:
+    if edge == "top":
+        return (0.0, -1.0)
+    if edge == "bottom":
+        return (0.0, 1.0)
+    if edge == "left":
+        return (-1.0, 0.0)
+    return (1.0, 0.0)
+
+
+def _lerp(a: tuple[float, float], b: tuple[float, float], t: float) -> tuple[float, float]:
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+
+def _quad_point(quad: list[list[float]], u: float, v: float) -> list[float]:
+    top = _lerp(tuple(quad[0]), tuple(quad[1]), u)
+    bottom = _lerp(tuple(quad[3]), tuple(quad[2]), u)
+    p = _lerp(top, bottom, v)
+    return [p[0], p[1]]
+
+
+def _do_cornice(scene, doc_id: str, params: dict) -> str:
+    region_id = params.get("region_id")
+    if not region_id or not scene.has_region(region_id, doc_id):
+        return "Error: region_id required"
+    region = scene.get_region(region_id, doc_id)
+    edge = params.get("edge", "top")
+    depth = float(params.get("depth", 0.018))
+    style = params.get("style", "flat")
+    p0, p1 = _edge_segment(region, edge)
+    nx, ny = _edge_normal(edge)
+    quad = [
+        [p0[0], p0[1]],
+        [p1[0], p1[1]],
+        [p1[0] + nx * depth, p1[1] + ny * depth],
+        [p0[0] + nx * depth, p0[1] + ny * depth],
+    ]
+    rid = params.get("region_id_out") or f"{region_id}_{edge}_cornice"
+    fill = params.get("fill", "#DDE8EA")
+    stroke = params.get("stroke", region.style.stroke)
+    sw = params.get("stroke_width", region.style.stroke_width)
+    z = params.get("z_index", region.z_index + 4)
+    try:
+        base = scene.project_quad(
+            quad, document_id=doc_id, region_id=rid, layer=region.layer,
+            z_index=z, fill=fill, stroke=stroke, stroke_width=sw,
+            metadata={"tool": "generate_shape", "pattern": "cornice", "source": region_id},
+        )
+        created = [base.id]
+        if style in ("stepped", "molded"):
+            inner_depth = depth * (0.35 if style == "stepped" else 0.55)
+            q2 = [
+                [p0[0] + nx * inner_depth, p0[1] + ny * inner_depth],
+                [p1[0] + nx * inner_depth, p1[1] + ny * inner_depth],
+                [p1[0] + nx * depth, p1[1] + ny * depth],
+                [p0[0] + nx * depth, p0[1] + ny * depth],
+            ]
+            trim = scene.project_quad(
+                q2, document_id=doc_id, region_id=f"{rid}_trim", layer=region.layer,
+                z_index=z + 1, fill=params.get("trim_fill", "#F5FBFC"),
+                stroke=None, stroke_width=sw,
+                metadata={"tool": "generate_shape", "pattern": "cornice_trim", "source": region_id},
+            )
+            created.append(trim.id)
+    except (ValueError, RuntimeError) as e:
+        return f"Error: {e}"
+    return f"cornice: created {len(created)} region(s) on '{region_id}'"
+
+
+def _do_awning(scene, doc_id: str, params: dict) -> str:
+    region_id = params.get("region_id")
+    if not region_id or not scene.has_region(region_id, doc_id):
+        return "Error: region_id required"
+    region = scene.get_region(region_id, doc_id)
+    edge = params.get("edge", "bottom")
+    p0, p1 = _edge_segment(region, edge)
+    width_frac = max(0.05, min(1.0, float(params.get("width", 0.45))))
+    center = float(params.get("center", 0.5))
+    half = width_frac / 2
+    a = _lerp(p0, p1, max(0.0, center - half))
+    b = _lerp(p0, p1, min(1.0, center + half))
+    nx, ny = _edge_normal(edge)
+    height = float(params.get("height", 0.055))
+    tilt = float(params.get("tilt_angle", 12.0)) / 90.0
+    q = [
+        [a[0], a[1]],
+        [b[0], b[1]],
+        [b[0] + nx * height + tilt * 0.01, b[1] + ny * height + abs(tilt) * 0.015],
+        [a[0] + nx * height + tilt * 0.01, a[1] + ny * height + abs(tilt) * 0.015],
+    ]
+    rid = params.get("region_id_out") or f"{region_id}_{edge}_awning"
+    colors = params.get("colors", ["#F3D56B", "#FFFFFF"])
+    z = params.get("z_index", region.z_index + 8)
+    created: list[str] = []
+    try:
+        base = scene.project_quad(
+            q, document_id=doc_id, region_id=rid, layer=region.layer,
+            z_index=z, fill=colors[0], stroke=params.get("stroke", "#5E6C70"),
+            stroke_width=params.get("stroke_width", region.style.stroke_width),
+            metadata={"tool": "generate_shape", "pattern": "awning", "source": region_id},
+        )
+        created.append(base.id)
+        stripe_count = max(0, min(16, int(params.get("stripe_count", 0))))
+        for i in range(stripe_count):
+            if i % 2 == 0:
+                continue
+            u0 = i / stripe_count
+            u1 = (i + 1) / stripe_count
+            sq = [
+                _quad_point(q, u0, 0.0),
+                _quad_point(q, u1, 0.0),
+                _quad_point(q, u1, 1.0),
+                _quad_point(q, u0, 1.0),
+            ]
+            stripe = scene.project_quad(
+                sq, document_id=doc_id, region_id=f"{rid}_stripe_{i:02d}",
+                layer=region.layer, z_index=z + 1, fill=colors[i % len(colors)],
+                stroke=None, stroke_width=params.get("stroke_width", region.style.stroke_width),
+                metadata={"tool": "generate_shape", "pattern": "awning_stripe", "source": region_id},
+            )
+            created.append(stripe.id)
+    except (ValueError, RuntimeError) as e:
+        return f"Error: {e}"
+    return f"awning: created {len(created)} region(s) on '{region_id}'"
+
+
+def _do_rooftop_props(scene, doc_id: str, params: dict) -> str:
+    import random as _random
+    region_id = params.get("region_id")
+    if not region_id or not scene.has_region(region_id, doc_id):
+        return "Error: region_id required"
+    region = scene.get_region(region_id, doc_id)
+    edge = params.get("edge", "top")
+    p0, p1 = _edge_segment(region, edge)
+    nx, ny = _edge_normal(edge)
+    count = max(1, min(32, int(params.get("count", 4))))
+    density = max(0.05, min(1.0, float(params.get("density", 0.7))))
+    prop_types = params.get("prop_types", ["vent", "antenna", "box", "tank"])
+    rng = _random.Random(int(params.get("seed", 1)))
+    z = params.get("z_index", region.z_index + 6)
+    fill = params.get("fill", "#6F7F83")
+    stroke = params.get("stroke", "#33464D")
+    sw = params.get("stroke_width", region.style.stroke_width)
+    created: list[str] = []
+    span_start = (1.0 - density) / 2
+    try:
+        for i in range(count):
+            t = span_start + density * ((i + 0.5 + rng.uniform(-0.25, 0.25)) / count)
+            base = _lerp(p0, p1, max(0.0, min(1.0, t)))
+            size = rng.uniform(0.012, 0.035)
+            kind = prop_types[i % len(prop_types)] if prop_types else "box"
+            rid = f"{region_id}_roof_{kind}_{i:02d}"
+            if kind == "antenna":
+                top = [base[0] + nx * size * 0.3, base[1] + ny * size * 2.6]
+                r = scene.create_line(
+                    base[0], base[1], top[0], top[1],
+                    document_id=doc_id, region_id=rid, layer=region.layer,
+                    z_index=z + i, stroke=stroke, stroke_width=sw,
+                    stroke_linecap="round",
+                )
+            elif kind == "tank":
+                r = scene.create_ellipse(
+                    base[0] + nx * size * 0.3, base[1] + ny * size * 0.8,
+                    rx=size * 0.75, ry=size * 0.45,
+                    document_id=doc_id, region_id=rid, layer=region.layer,
+                    z_index=z + i, fill=fill, stroke=stroke, stroke_width=sw,
+                )
+            else:
+                x = base[0] - size * 0.5 + nx * size * 0.3
+                y = base[1] - size * 0.5 + ny * size * 0.7
+                r = scene.create_rect(
+                    x, y, size, size * rng.uniform(0.65, 1.3),
+                    rx=0.002, document_id=doc_id, region_id=rid,
+                    layer=region.layer, z_index=z + i,
+                    fill=fill, stroke=stroke, stroke_width=sw,
+                )
+            r.metadata.update({"tool": "generate_shape", "pattern": "rooftop_props", "source": region_id, "prop_type": kind})
+            created.append(r.id)
+    except (ValueError, RuntimeError) as e:
+        return f"Error: {e}"
+    return f"rooftop_props: created {len(created)} prop(s) on '{region_id}'"
 
 
 def _resolve_relative_box(scene, doc_id, relative_to, params):

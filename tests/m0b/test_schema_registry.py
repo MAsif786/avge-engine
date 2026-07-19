@@ -82,15 +82,15 @@ class TestSchemaRegistry:
             "smoothness": 0.3,
             "fill": "#FF0000",
             "stroke": "#000000",
-            "stroke_width": 0.01,
+            "stroke_width": 2,
             "opacity": 0.8,
         })
         assert errs == []
 
-    def test_create_region_stroke_width_px_valid(self):
+    def test_create_region_stroke_width_valid(self):
         errs = validate_input("create_region", {
             "outline": [[0.1, 0.1], [0.9, 0.9]],
-            "stroke_width_px": 2,
+            "stroke_width": 2,
         })
         assert errs == []
 
@@ -140,7 +140,7 @@ class TestSchemaRegistry:
             "fill": "#DDEEFF",
             "columns": 2,
             "rows": 2,
-            "stroke_width_px": 1.5,
+            "stroke_width": 1.5,
         })
         assert errs == []
 
@@ -155,6 +155,27 @@ class TestSchemaRegistry:
             "target_quad": [[0.1, 0.2], [1.8, 0.12], [0.72, 0.62], [0.16, 0.72]],
         })
         assert len(errs) > 0
+
+    def test_generate_cloud_valid(self):
+        errs = validate_input("generate_cloud", {
+            "cx": 0.4,
+            "cy": 0.2,
+            "width": 0.3,
+            "height": 0.08,
+            "puff_count": 6,
+            "blur": 4,
+        })
+        assert errs == []
+
+    def test_create_surface_stripes_valid(self):
+        errs = validate_input("create_surface_stripes", {
+            "target_quad": [[0.3, 0.4], [0.7, 0.4], [0.9, 0.85], [0.1, 0.85]],
+            "count": 5,
+            "orientation": "u",
+            "stripe_width": 0.06,
+            "stroke_width": 2,
+        })
+        assert errs == []
 
     def test_add_depth_shadow_valid(self):
         errs = validate_input("add_depth_shadow", {

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_surface_stripes/v1.json",
+  "title": "create_surface_stripes",
+  "description": "Create perspective-aware repeated stripe panels inside a target quadrilateral, useful for crosswalks, lane markings, floor seams, and surface bands.",
+  "type": "object",
+  "properties": {
+    "target_quad": {
+      "type": "array",
+      "description": "Four normalized surface corners in order: top-left, top-right, bottom-right, bottom-left.",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    },
+    "count": { "type": "integer", "minimum": 1, "maximum": 96 },
+    "document_id": { "type": ["string", "null"], "default": null },
+    "region_id": {
+      "type": ["string", "null"],
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$",
+      "default": null
+    },
+    "orientation": { "type": "string", "enum": ["u", "v"], "default": "u" },
+    "start": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.08 },
+    "end": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.92 },
+    "stripe_width": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 0.5, "default": 0.05 },
+    "gap": { "type": ["number", "null"], "exclusiveMinimum": 0.0, "maximum": 1.0, "default": null },
+    "spacing_falloff": { "type": "number", "minimum": 0.2, "maximum": 2.5, "default": 1.0 },
+    "fill": { "type": "string", "default": "#F1F7F8" },
+    "stroke": { "type": ["string", "null"], "default": null },
+    "stroke_width": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "opacity": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.95 },
+    "layer": { "type": "string", "default": "road", "maxLength": 64 },
+    "z_index": { "type": "integer", "default": 0 }
+  },
+  "required": ["target_quad", "count"],
+  "additionalProperties": false
+}
