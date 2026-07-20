@@ -23,6 +23,7 @@ from avge_engine import __version__, __tool_set_version__
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.services.engine import get_graph, reset_graph, stroke_width_to_norm
 from avge_engine.services.document_service import DocumentService
+from avge_engine.services.region_service import RegionService
 from avge_engine.schema_registry import validate_input, list_tool_names
 from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
 from avge_engine.geometry import compute_bounds
@@ -493,26 +494,18 @@ async def create_region(req: CreateRegionRequest):
 
 @app.post("/tools/edit_region", response_model=ToolResponse)
 async def edit_region(req: EditRegionRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width)
-        metadata = None
-        if req.tags:
-            import json as _json
-            metadata = dict(req.tags)
-
-        graph.edit_region(
-            region_id=req.region_id, document_id=req.document_id,
-            outline=req.outline, smoothness=req.smoothness,
-            tensions=req.smoothness_per_point,
+        RegionService().edit_region(
+            region_id=req.region_id,
+            document_id=req.document_id,
+            outline=req.outline,
+            smoothness=req.smoothness,
+            smoothness_per_point=req.smoothness_per_point,
             fill=req.fill, stroke=req.stroke,
-            stroke_width=stroke_width, opacity=req.opacity,
+            stroke_width=req.stroke_width, opacity=req.opacity,
             z_index=req.z_index, blend_mode=req.blend_mode,
             clip_to=req.clip_to, layer=req.layer,
-            metadata=metadata,
+            tags=req.tags,
             blur=req.blur,
         )
         return ToolResponse(data={"region_id": req.region_id})
@@ -524,77 +517,36 @@ async def edit_region(req: EditRegionRequest):
 
 @app.post("/tools/delete_region", response_model=ToolResponse)
 async def delete_region(req: DeleteRegionRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
+    try:
+        deleted = RegionService().delete_regions(document_id=req.document_id, ids=req.ids)
+    except RuntimeError:
         raise HTTPException(status_code=404, detail="No active document")
-    deleted = graph.delete_regions(req.document_id, req.ids)
     return ToolResponse(data={"affected": deleted, "count": len(deleted)})
 
 
 
 @app.post("/tools/copy_element", response_model=ToolResponse, tags=["copy_element"])
 async def copy_element(req: CopyElementRequest):
-    graph = get_graph()
     try:
-        from avge_engine.services.engine import resolve_doc
-        source_id = resolve_doc(req.source_document_id)
+        result = RegionService().copy_element(
+            source_document_id=req.source_document_id,
+            target_document_id=req.target_document_id,
+            region_id=req.region_id,
+            group_name=req.group,
+            new_region_id=req.new_region_id,
+            offset_x=req.offset_x,
+            offset_y=req.offset_y,
+            skip_existing=True,
+        )
     except RuntimeError:
         raise HTTPException(status_code=400, detail="No active source document")
-    try:
-        from avge_engine.scene import RegionNode
-        original = graph.get_region(req.region_id, source_id) if req.region_id else None
-        if req.group:
-            members = graph.get_group(req.group, source_id)
-            if not members:
-                raise HTTPException(status_code=404, detail=f"Group '{req.group}' not found")
-            new_ids = []
-            for m in members:
-                orig = graph.get_region(m["id"], source_id)
-                no = [(round(p[0]+req.offset_x,6), round(p[1]+req.offset_y,6)) for p in orig.outline]
-                np = dict(orig.primitive) if orig.primitive else None
-                if np:
-                    pt = np.get("type")
-                    if pt in ("rect","text","image"):
-                        np["x"] = round(np.get("x",0)+req.offset_x,6)
-                        np["y"] = round(np.get("y",0)+req.offset_y,6)
-                    elif pt == "ellipse":
-                        np["cx"] = round(np.get("cx",0)+req.offset_x,6)
-                        np["cy"] = round(np.get("cy",0)+req.offset_y,6)
-                new_id = req.new_region_id or f"{m['id']}_copy"
-                if graph.has_region(new_id, req.target_document_id):
-                    continue
-                dup = RegionNode(id=new_id, layer=orig.layer, z_index=orig.z_index,
-                    outline=no, constraints=orig.constraints, style=orig.style,
-                    transform=orig.transform, primitive=np,
-                    clip_to=orig.clip_to, metadata=dict(orig.metadata) if orig.metadata else {})
-                graph._regions_for(req.target_document_id)[new_id] = dup
-                new_ids.append(new_id)
-            graph.get_document(req.target_document_id).version += 1
-            return ToolResponse(data={"copied": new_ids, "count": len(new_ids)})
-        elif original:
-            new_id = req.new_region_id or f"{req.region_id}_copy"
-            no = [(round(p[0]+req.offset_x,6), round(p[1]+req.offset_y,6)) for p in original.outline]
-            np = dict(original.primitive) if original.primitive else None
-            if np:
-                pt = np.get("type")
-                if pt in ("rect","text","image"):
-                    np["x"] = round(np.get("x",0)+req.offset_x,6)
-                    np["y"] = round(np.get("y",0)+req.offset_y,6)
-                elif pt == "ellipse":
-                    np["cx"] = round(np.get("cx",0)+req.offset_x,6)
-                    np["cy"] = round(np.get("cy",0)+req.offset_y,6)
-            dup = RegionNode(id=new_id, layer=original.layer, z_index=original.z_index,
-                outline=no, constraints=original.constraints, style=original.style,
-                transform=original.transform, primitive=np,
-                clip_to=original.clip_to, metadata=dict(original.metadata) if original.metadata else {})
-            graph._regions_for(req.target_document_id)[new_id] = dup
-            graph.get_document(req.target_document_id).version += 1
-            return ToolResponse(data={"region_id": new_id, "source": req.region_id})
-        else:
-            raise HTTPException(status_code=400, detail="Provide region_id or group")
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except (ValueError, RuntimeError, TypeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if result.group_name:
+        return ToolResponse(data={"copied": result.copied_ids, "count": len(result.copied_ids)})
+    return ToolResponse(data={"region_id": result.copied_ids[0] if result.copied_ids else None, "source": req.region_id})
 
 
 # ── Primitive Endpoints ────────────────────────────────────────────

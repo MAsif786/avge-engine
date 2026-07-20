@@ -13,6 +13,7 @@ from avge_engine.services.engine import (
     validate_input,
     stroke_width_to_norm,
 )
+from avge_engine.services.region_service import RegionService
 from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star, ellipse_band
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.geometry import compute_bounds
@@ -826,13 +827,11 @@ def create_tools(mcp):
             ids: List of region IDs to delete (e.g. ["tag", "steam1"]).
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            deleted = RegionService().delete_regions(ids=ids, document_id=document_id)
         except RuntimeError:
             return "Error: No active document"
 
-        deleted = scene.delete_regions(doc_id, ids)
         if not deleted:
             return "No matching regions found to delete"
         # Split into multiple lines to avoid output truncation
@@ -913,132 +912,42 @@ def create_tools(mcp):
             handle_in: Per-point incoming Bézier handle vectors [[dx,dy],...].
             handle_out: Per-point outgoing Bézier handle vectors [[dx,dy],...].
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = RegionService().edit_region(
+                region_id=region_id,
+                ids=ids,
+                document_id=document_id,
+                outline=outline,
+                point_index=point_index,
+                point_coords=point_coords,
+                point_dx=point_dx,
+                point_dy=point_dy,
+                smoothness=smoothness,
+                smoothness_per_point=smoothness_per_point,
+                fill=fill,
+                stroke=stroke,
+                stroke_width=stroke_width,
+                opacity=opacity,
+                z_index=z_index,
+                blend_mode=blend_mode,
+                clip_to=clip_to,
+                layer=layer,
+                tags=tags,
+                shape=shape,
+                stroke_linecap=stroke_linecap,
+                stroke_dasharray=stroke_dasharray,
+                handle_in=handle_in,
+                handle_out=handle_out,
+            )
+            if len(result.affected) == 1:
+                return f"Region '{result.affected[0]}' updated"
+            if len(result.affected) > 1:
+                return f"Updated {len(result.affected)} region(s): {', '.join(result.affected)}"
+            return "No regions updated"
         except RuntimeError:
             return "Error: No active document"
-
-        stroke_width = stroke_width_to_norm(doc_id, stroke_width)
-
-        # Resolve target IDs: ids param takes precedence over region_id
-        target_ids = ids if ids else ([region_id] if region_id else [])
-        if not target_ids:
-            return "Error: Provide region_id or ids"
-
-        # ── Point-level editing: fetch outline, modify one point ──
-        if point_index is not None and outline is None:
-            if point_coords is not None:
-                # Absolute replacement
-                _r = scene.get_region(target_ids[0], doc_id)
-                if _r is None:
-                    return f"Error: Region '{target_ids[0]}' not found"
-                _pts = list(_r.outline)
-                if point_index < 0 or point_index >= len(_pts):
-                    return f"Error: point_index {point_index} out of range (0-{len(_pts)-1})"
-                _pts[point_index] = (float(point_coords[0]), float(point_coords[1]))
-                outline = _pts
-            elif point_dx is not None or point_dy is not None:
-                # Relative offset
-                _r = scene.get_region(target_ids[0], doc_id)
-                if _r is None:
-                    return f"Error: Region '{target_ids[0]}' not found"
-                _pts = list(_r.outline)
-                if point_index < 0 or point_index >= len(_pts):
-                    return f"Error: point_index {point_index} out of range (0-{len(_pts)-1})"
-                _off_x = point_dx if point_dx is not None else 0.0
-                _off_y = point_dy if point_dy is not None else 0.0
-                _pts[point_index] = (_pts[point_index][0] + _off_x,
-                                     _pts[point_index][1] + _off_y)
-                outline = _pts
-
-        try:
-            tensions = smoothness_per_point
-            metadata = None
-            if tags:
-                metadata = dict(tags)
-
-            affected = []
-            for rid in target_ids:
-                scene.edit_region(
-                    region_id=rid,
-                    document_id=doc_id,
-                    outline=outline,
-                    smoothness=smoothness,
-                    tensions=tensions,
-                    fill=fill,
-                    stroke=stroke,
-                    stroke_width=stroke_width,
-                    opacity=opacity,
-                    z_index=z_index,
-                    blend_mode=blend_mode,
-                    clip_to=clip_to,
-                    layer=layer,
-                    metadata=metadata,
-                    shape=shape,
-                    stroke_linecap=stroke_linecap,
-                    stroke_dasharray=stroke_dasharray,
-                    handle_in=tuple(tuple(p) for p in handle_in) if handle_in else None,
-                    handle_out=tuple(tuple(p) for p in handle_out) if handle_out else None,
-                )
-                affected.append(rid)
-                if len(target_ids) == 1:
-                    return f"Region '{rid}' updated"
-            if len(affected) > 1:
-                return f"Updated {len(affected)} region(s): {', '.join(affected)}"
-            return "No regions updated"
-        except (ValueError, RuntimeError) as e:
+        except (ValueError, IndexError) as e:
             return f"Error: {e}"
-
-    def _translate_region(scene, doc_id, rid, upd):
-        """Apply one update dict to a single region."""
-        region = scene.get_region(rid, doc_id)
-        if region is None:
-            raise ValueError(f"Region '{rid}' not found")
-
-        unsupported = [k for k in ("dx", "dy", "scale", "rotate") if k in upd]
-        if unsupported:
-            joined = ", ".join(unsupported)
-            raise ValueError(f"{joined} moved to transform_objects; edit_regions only edits content/style")
-
-        outline = list(region.outline)
-        if "outline" in upd:
-            outline = [(float(p[0]), float(p[1])) for p in upd["outline"]]
-
-        style_kw = {}
-        for key in ("fill", "stroke", "stroke_width", "opacity", "z_index",
-                    "layer", "blend_mode", "clip_to", "stroke_linecap",
-                    "stroke_dasharray"):
-            if key in upd:
-                style_kw[key] = upd[key]
-
-        pi = upd.get("point_index")
-        if pi is not None:
-            pc = upd.get("point_coords")
-            pdx = upd.get("point_dx", upd.get("pdx", 0.0))
-            pdy = upd.get("point_dy", upd.get("pdy", 0.0))
-            if pi < 0 or pi >= len(outline):
-                raise IndexError(f"point_index {pi} out of range (0-{len(outline)-1})")
-            if pc:
-                outline[pi] = (float(pc[0]), float(pc[1]))
-            elif pdx or pdy:
-                outline[pi] = (outline[pi][0] + pdx, outline[pi][1] + pdy)
-
-        scene.edit_region(
-            region_id=rid, document_id=doc_id,
-            outline=outline,
-            fill=style_kw.get("fill"),
-            stroke=style_kw.get("stroke"),
-            stroke_width=style_kw.get("stroke_width"),
-            opacity=style_kw.get("opacity"),
-            z_index=style_kw.get("z_index"),
-            blend_mode=style_kw.get("blend_mode"),
-            clip_to=style_kw.get("clip_to"),
-            layer=style_kw.get("layer"),
-            stroke_linecap=style_kw.get("stroke_linecap"),
-            stroke_dasharray=style_kw.get("stroke_dasharray"),
-        )
-
 
     @mcp.tool(
         name="edit_regions",
@@ -1064,27 +973,13 @@ def create_tools(mcp):
                 Other ``edit_region`` fields also work.
             document_id: Document UUID (omit for active doc).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = RegionService().edit_regions(updates=updates, document_id=document_id)
         except RuntimeError:
             return "Error: No active document"
 
-        lines = []
-        ok = 0
-        for i, upd in enumerate(updates):
-            rid = upd.get("id")
-            if not rid:
-                lines.append(f"  ✗ [{i}] Missing 'id'")
-                continue
-            try:
-                _translate_region(scene, doc_id, rid, upd)
-                ok += 1
-                lines.append(f"  ✓ [{i}] {rid}")
-            except (ValueError, RuntimeError, IndexError) as e:
-                lines.append(f"  ✗ [{i}] {rid}: {e}")
-        summary = f"edit_regions: {ok}/{len(updates)} updated"
-        return "\n".join([summary] + lines)
+        summary = f"edit_regions: {result.ok}/{result.total} updated"
+        return "\n".join([summary] + result.lines)
 
 
 
@@ -1741,113 +1636,30 @@ def create_tools(mcp):
             new_region_id: Optional new ID for the copy (single region only).
             offset_x, offset_y: Position offset for the copy.
         """
-        scene = get_graph()
         try:
-            source_id = resolve_doc(source_document_id)
+            result = RegionService().copy_element(
+                region_id=region_id,
+                group_name=group_name,
+                target_document_id=target_document_id,
+                source_document_id=source_document_id,
+                new_region_id=new_region_id,
+                offset_x=offset_x,
+                offset_y=offset_y,
+            )
         except RuntimeError:
             return "Error: No active source document"
+        except LookupError as e:
+            return f"Error: {e}"
+        except ValueError as e:
+            return f"Error: {e}"
 
-        if not scene.has_document(target_document_id):
-            return f"Error: Target document '{target_document_id}' not found"
-
-        # ── Group mode: copy all group members ──
-        if group_name is not None:
-            members = scene.get_group(group_name, source_id)
-            if not members:
-                return f"Error: Group '{group}' not found in source"
-            member_ids = [m["id"] for m in members]
-
-            created: list[str] = []
-            for mid in member_ids:
-                try:
-                    original = scene.get_region(mid, source_id)
-                except ValueError:
-                    continue
-
-                new_id = f"{mid}_copy"
-                new_outline = [(round(p[0] + offset_x, 6), round(p[1] + offset_y, 6)) for p in original.outline]
-
-                new_primitive = None
-                if original.primitive:
-                    new_primitive = dict(original.primitive)
-                    pt = new_primitive.get("type")
-                    if pt in ("rect", "text", "image"):
-                        new_primitive["x"] = round(new_primitive.get("x", 0) + offset_x, 6)
-                        new_primitive["y"] = round(new_primitive.get("y", 0) + offset_y, 6)
-                    elif pt == "ellipse":
-                        new_primitive["cx"] = round(new_primitive.get("cx", 0) + offset_x, 6)
-                        new_primitive["cy"] = round(new_primitive.get("cy", 0) + offset_y, 6)
-                    elif pt == "line":
-                        new_primitive["x1"] = round(new_primitive.get("x1", 0) + offset_x, 6)
-                        new_primitive["y1"] = round(new_primitive.get("y1", 0) + offset_y, 6)
-                        new_primitive["x2"] = round(new_primitive.get("x2", 0) + offset_x, 6)
-                        new_primitive["y2"] = round(new_primitive.get("y2", 0) + offset_y, 6)
-
-                from avge_engine.scene import RegionNode
-                dup = RegionNode(
-                    id=new_id, layer=original.layer, z_index=original.z_index,
-                    outline=new_outline, constraints=original.constraints,
-                    style=original.style, transform=original.transform,
-                    primitive=new_primitive, clip_to=original.clip_to,
-                    metadata=dict(original.metadata) if original.metadata else {},
-                )
-                scene._regions_for(target_document_id)[new_id] = dup
-                created.append(new_id)
-
-            scene.get_document(target_document_id).version += 1
-            scene._auto_checkpoint(target_document_id, "copy_element_group", str(created))
-            scene._persist(target_document_id)
-
+        if result.group_name is not None:
             return (
-                f"Copied group '{group_name}' ({len(created)} elements) "
-                f"to '{target_document_id}': {', '.join(created)}"
+                f"Copied group '{result.group_name}' ({len(result.copied_ids)} elements) "
+                f"to '{result.target_document_id}': {', '.join(result.copied_ids)}"
             )
 
-        # ── Single element mode ──
-        if not region_id:
-            return "Error: Provide either region_id or group_name"
-
-        try:
-            original = scene.get_region(region_id, source_id)
-        except ValueError:
-            return f"Error: Element '{region_id}' not found in source"
-
-        new_id = new_region_id or f"{region_id}_copy"
-        if scene.has_region(new_id, target_document_id):
-            return f"Error: '{new_id}' already exists in target"
-
-        new_outline = [(round(p[0] + offset_x, 6), round(p[1] + offset_y, 6)) for p in original.outline]
-
-        new_primitive = None
-        if original.primitive:
-            new_primitive = dict(original.primitive)
-            pt = new_primitive.get("type")
-            if pt in ("rect", "text", "image"):
-                new_primitive["x"] = round(new_primitive.get("x", 0) + offset_x, 6)
-                new_primitive["y"] = round(new_primitive.get("y", 0) + offset_y, 6)
-            elif pt == "ellipse":
-                new_primitive["cx"] = round(new_primitive.get("cx", 0) + offset_x, 6)
-                new_primitive["cy"] = round(new_primitive.get("cy", 0) + offset_y, 6)
-            elif pt == "line":
-                new_primitive["x1"] = round(new_primitive.get("x1", 0) + offset_x, 6)
-                new_primitive["y1"] = round(new_primitive.get("y1", 0) + offset_y, 6)
-                new_primitive["x2"] = round(new_primitive.get("x2", 0) + offset_x, 6)
-                new_primitive["y2"] = round(new_primitive.get("y2", 0) + offset_y, 6)
-
-        from avge_engine.scene import RegionNode
-        dup = RegionNode(
-            id=new_id, layer=original.layer, z_index=original.z_index,
-            outline=new_outline, constraints=original.constraints,
-            style=original.style, transform=original.transform,
-            primitive=new_primitive, clip_to=original.clip_to,
-            metadata=dict(original.metadata) if original.metadata else {},
-        )
-        scene._regions_for(target_document_id)[new_id] = dup
-        scene.get_document(target_document_id).version += 1
-        scene._auto_checkpoint(target_document_id, "copy_element", new_id)
-        scene._persist(target_document_id)
-
         return (
-            f"Copied '{region_id}' from {source_id} to "
-            f"'{target_document_id}' as '{new_id}'"
+            f"Copied '{result.source_region_id}' from {result.source_document_id} to "
+            f"'{result.target_document_id}' as '{result.copied_ids[0]}'"
         )
