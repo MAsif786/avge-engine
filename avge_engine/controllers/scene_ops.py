@@ -8,6 +8,7 @@ PIVOT_MODES = Literal["center", "base", "fixed"]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
+from avge_engine.services.shadow_service import ShadowService
 
 
 def _clamp01(value: float) -> float:
@@ -1066,76 +1067,30 @@ def create_tools(mcp):
             mid_color: Optional explicit middle stop color.
             shadow_color: Optional explicit shadow stop color.
         """
-        from avge_engine.effects.color import apply_hsl_offset
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = ShadowService().add_shading(
+                region_id=region_id,
+                selector=selector,
+                light_direction=light_direction,
+                document_id=document_id,
+                intensity=intensity,
+                mode=mode,
+                highlight_color=highlight_color,
+                mid_color=mid_color,
+                shadow_color=shadow_color,
+            )
         except RuntimeError:
             return "Error: No active document"
-        if selector:
-            target_ids = select_region_ids(scene, doc_id, selector)
-        elif region_id:
-            target_ids = [region_id]
-        else:
-            return "Error: region_id or selector required"
-        if not target_ids:
+        except LookupError:
             return "Error: No matching regions found via selector"
-        import math
-        angle = math.radians(light_direction)
-        offset = intensity * 0.015
-        dx = math.cos(angle) * offset
-        dy = math.sin(angle) * offset
-        if mode not in ("two_tone", "gradient"):
-            return "Error: mode must be 'two_tone' or 'gradient'"
-        targets = []
-        for rid in target_ids:
-            try:
-                r = scene.get_region(rid, doc_id)
-            except ValueError:
-                return f"Error: Region '{rid}' not found"
-            cur_fill = r.style.fill
-            if not isinstance(cur_fill, str) or not cur_fill.startswith("#"):
-                return f"Error: add_shading requires a hex fill color on '{rid}'"
-            highlight = highlight_color or apply_hsl_offset(cur_fill, l_offset=intensity * 25, s_offset=-10)
-            middle = mid_color or cur_fill
-            shadow = shadow_color or apply_hsl_offset(cur_fill, l_offset=-intensity * 30, s_offset=15)
-            targets.append((r, highlight, middle, shadow))
-        if mode == "gradient":
-            for r, highlight, middle, shadow in targets:
-                grad = {
-                    "type": "linear",
-                    "stops": [
-                        {"offset": 0.0, "color": highlight},
-                        {"offset": 0.52, "color": middle},
-                        {"offset": 1.0, "color": shadow},
-                    ],
-                    "x1": round(0.5 - 0.5 * math.cos(angle), 2),
-                    "y1": round(0.5 - 0.5 * math.sin(angle), 2),
-                    "x2": round(0.5 + 0.5 * math.cos(angle), 2),
-                    "y2": round(0.5 + 0.5 * math.sin(angle), 2),
-                }
-                scene.edit_region(region_id=r.id, document_id=doc_id, fill=grad)
-            return f"Gradient shading applied to {len(targets)} region(s), light={light_direction:.0f}deg"
-        import time as _time
-        _seq = int(_time.time() * 1000) % 100000
-        created = []
-        for r, highlight, _middle, shadow in targets:
-            h_dup = scene.duplicate_region(
-                r.id, document_id=doc_id,
-                new_region_id=f"{r.id}_highlight_{_seq}",
-                offset_x=-dx, offset_y=-dy,
-                fill=highlight, stroke=None,
-                z_index=r.z_index + 1,
-            )
-            s_dup = scene.duplicate_region(
-                r.id, document_id=doc_id,
-                new_region_id=f"{r.id}_shadow_{_seq}",
-                offset_x=dx, offset_y=dy,
-                fill=shadow, stroke=None,
-                z_index=r.z_index - 1,
-            )
-            created.extend([h_dup.id, s_dup.id])
-        return f"Shading added to {len(targets)} region(s), overlays={len(created)}, light={light_direction:.0f}deg"
+        except ValueError as e:
+            return f"Error: {e}"
+        if result.mode == "gradient":
+            return f"Gradient shading applied to {result.target_count} region(s), light={result.light_direction:.0f}deg"
+        return (
+            f"Shading added to {result.target_count} region(s), "
+            f"overlays={result.overlay_count}, light={result.light_direction:.0f}deg"
+        )
 
     @mcp.tool(
         name="generate_cloud",
@@ -1376,41 +1331,32 @@ def create_tools(mcp):
             z_offset: Relative z-index from the source, usually negative.
             new_region_id: Optional explicit shadow ID.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
-            receiver = scene.get_region(onto_region_id, doc_id) if onto_region_id else None
-            resolved_z_offset = z_offset if z_offset is not None else (1 if receiver else -1)
-            shadow = scene.add_depth_shadow(
-                region_id,
-                document_id=doc_id,
-                new_region_id=new_region_id,
+            result = ShadowService().create_shadow(
+                region_id=region_id,
+                onto_region_id=onto_region_id,
+                document_id=document_id,
                 direction=direction,
-                distance=max(0.0, min(1.0, distance)),
-                softness=max(0.0, min(64.0, softness)),
-                opacity=max(0.0, min(1.0, opacity)),
+                distance=distance,
+                softness=softness,
+                opacity=opacity,
                 color=color,
-                scale=max(0.01, min(10.0, scale)),
+                scale=scale,
                 sx=sx,
                 sy=sy,
-                z_offset=0 if receiver else resolved_z_offset,
-                clip_to=onto_region_id,
-                layer=receiver.layer if receiver else None,
+                z_offset=z_offset,
+                new_region_id=new_region_id,
             )
-            if receiver:
-                shadow.z_index = receiver.z_index + resolved_z_offset
-                scene.get_document(doc_id).version += 1
-                scene._persist(doc_id)
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
-        if receiver:
+        if result.clipped:
             return (
-                f"Shadow created: id='{shadow.id}', source='{region_id}', "
-                f"onto='{onto_region_id}', clipped=true, softness={softness:g}"
+                f"Shadow created: id='{result.shadow.id}', source='{result.source_id}', "
+                f"onto='{result.onto_region_id}', clipped=true, softness={result.softness:g}"
             )
         return (
-            f"Shadow created: id='{shadow.id}', source='{region_id}', "
-            f"direction={direction:g}, distance={distance:g}, softness={softness:g}"
+            f"Shadow created: id='{result.shadow.id}', source='{result.source_id}', "
+            f"direction={result.direction:g}, distance={result.distance:g}, softness={result.softness:g}"
         )
 
     # Individual z-ordering: use edit_region(region_id, z_index=N)

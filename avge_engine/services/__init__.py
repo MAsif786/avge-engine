@@ -10,11 +10,13 @@ from avge_engine.services.engine import (
 )
 from avge_engine.services.document_service import DocumentService
 from avge_engine.services.selector_service import SelectorService, select_region_ids, selector_from_legacy
+from avge_engine.services.shadow_service import ShadowService
 from avge_engine.services.style_service import StyleService
 
 __all__ = [
     "DocumentService",
     "SelectorService",
+    "ShadowService",
     "StyleService",
     "get_graph",
     "resolve_doc",
