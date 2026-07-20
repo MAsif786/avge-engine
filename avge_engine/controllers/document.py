@@ -3,10 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from avge_engine.services.engine import (
-    get_graph, resolve_doc, set_active_doc, validate_input,
-    list_stored_documents, load_stored_document, get_storage_dir,
-)
+from avge_engine.services.document_service import DocumentService
+from avge_engine.services.engine import validate_input
 
 
 def create_tools(mcp):
@@ -40,26 +38,15 @@ def create_tools(mcp):
         if errs:
             return f"Validation error: {'; '.join(errs)}"
 
-        scene = get_graph()
-
-        # Resolve gradient background
-        import json as _json
-        bg_resolved = background
-        if fill_gradient is not None:
-            if isinstance(fill_gradient, str):
-                bg_resolved = _json.loads(fill_gradient)
-            else:
-                bg_resolved = fill_gradient
-
         try:
-            doc = scene.create_document(
-                width=max(100, min(width, 4000)),
-                height=max(100, min(height, 4000)),
+            doc = DocumentService().create_document(
+                width=width,
+                height=height,
                 unit=unit,
-                background=bg_resolved,
+                background=background,
+                fill_gradient=fill_gradient,
                 name=name,
             )
-            set_active_doc(doc.id)
             name_str = f" name='{doc.name}'" if doc.name else ""
             ts = f" created={doc.created_at[:19]}" if doc.created_at else ""
             return (
@@ -74,6 +61,8 @@ def create_tools(mcp):
             )
         except RuntimeError as e:
             return f"Error: {e}"
+        except ValueError:
+            return f"Error: invalid fill_gradient JSON"
 
     @mcp.tool(
         name="get_document",
@@ -88,26 +77,22 @@ def create_tools(mcp):
         Args:
             document_id: Document UUID (omit to use the active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            summary = DocumentService().get_document_summary(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
-
-        try:
-            desc = scene.describe_scene(doc_id)
         except ValueError as e:
             return f"Error: {e}"
 
-        doc_info = desc["document"]
+        doc_info = summary.document
         lines = [
             f"Document: {doc_info['id']}",
             f"Name: {doc_info.get('name', '') or '(unnamed)'}",
             f"Canvas: {doc_info['width']}x{doc_info['height']}",
             f"Background: {doc_info['background']}",
-            f"Regions: {desc['region_count']}",
+            f"Regions: {summary.region_count}",
             f"Version: {doc_info['version']}",
-            f"Preview: http://localhost:8000/preview/{doc_id}.png",
+            f"Preview: http://localhost:8000/preview/{doc_info['id']}.png",
         ]
         return "\n".join(lines)
 
@@ -118,7 +103,7 @@ def create_tools(mcp):
     )
     def list_documents() -> str:
         """List all persisted documents."""
-        stored = list_stored_documents()
+        stored = DocumentService().list_documents()
         if not stored:
             return "No saved documents found."
 
@@ -151,21 +136,19 @@ def create_tools(mcp):
             name: Optional name for the cloned document.
             set_active: If True, make the clone the active document.
         """
-        scene = get_graph()
         try:
-            source_id = resolve_doc(source_document_id)
-        except RuntimeError:
-            return "Error: No active document. Call create_document first."
-        try:
-            clone = scene.clone_document(source_id, name=name, set_active=set_active)
-            if set_active:
-                set_active_doc(clone.id)
-            desc = scene.describe_scene(clone.id)
+            clone, source_id, region_count = DocumentService().clone_document(
+                source_document_id=source_document_id,
+                name=name,
+                set_active=set_active,
+            )
             return (
                 f"Document cloned: source={source_id} clone={clone.id} "
                 f"name='{clone.name}' {clone.width}x{clone.height} "
-                f"regions={desc['region_count']}"
+                f"regions={region_count}"
             )
+        except RuntimeError:
+            return "Error: No active document. Call create_document first."
         except ValueError as e:
             return f"Error: {e}"
 
@@ -180,12 +163,11 @@ def create_tools(mcp):
         Args:
             document_id: Document UUID to load.
         """
-        if load_stored_document(document_id):
-            scene = get_graph()
-            desc = scene.describe_scene(document_id)
+        summary = DocumentService().load_document(document_id)
+        if summary is not None:
             return (
                 f"Document '{document_id}' loaded "
-                f"({desc['region_count']} regions, version {desc['document']['version']}). "
+                f"({summary.region_count} regions, version {summary.document['version']}). "
                 f"Ready for editing."
             )
         return f"Error: Document '{document_id}' not found on disk."
@@ -209,48 +191,28 @@ def create_tools(mcp):
             confirm: Set to True to actually delete. False (default)
                 just shows what would be deleted.
         """
-        stored = {d["id"]: d for d in list_stored_documents()}
-        found = []
-        missing = []
-        for doc_id in ids:
-            if doc_id in stored:
-                found.append(doc_id)
-            else:
-                missing.append(doc_id)
-
-        if not found and not missing:
+        service = DocumentService()
+        try:
+            result = service.delete_documents(ids, confirm=confirm)
+        except RuntimeError as e:
+            return f"Error: {e}"
+        if not result.found and not result.missing:
             return "No documents found or provided."
 
         if not confirm:
             lines = ["⚠️ **Preview — no documents deleted yet.**"]
-            lines.append(f"  Call with confirm=True to delete {len(found)} document(s):")
-            for doc_id in found:
-                d = stored[doc_id]
+            lines.append(f"  Call with confirm=True to delete {len(result.found)} document(s):")
+            for d in result.found:
+                doc_id = d["id"]
                 name = d.get("name", "") or "(unnamed)"
                 lines.append(f"    [{doc_id}] {name} | v{d['version']} | {d['region_count']} regions")
-            if missing:
-                lines.append(f"  Not found (skipped): {', '.join(missing)}")
+            if result.missing:
+                lines.append(f"  Not found (skipped): {', '.join(result.missing)}")
             return "\n".join(lines)
 
-        scene = get_graph()
-        if not scene._storage:
-            return "Error: Storage not available"
-        deleted = []
-        errors = []
-        for doc_id in found:
-            try:
-                if doc_id in scene._docs:
-                    del scene._docs[doc_id]
-                if doc_id in scene._regions_by_doc:
-                    del scene._regions_by_doc[doc_id]
-                scene._storage.delete(doc_id)
-                deleted.append(doc_id)
-            except Exception as e:
-                errors.append(f"{doc_id}: {e}")
-
-        parts = [f"Deleted {len(deleted)} document(s): {', '.join(deleted)}"]
-        if errors:
-            parts.append(f"Errors: {'; '.join(errors)}")
+        parts = [f"Deleted {len(result.deleted)} document(s): {', '.join(result.deleted)}"]
+        if result.errors:
+            parts.append(f"Errors: {'; '.join(result.errors)}")
         return "\n".join(parts)
 
     @mcp.tool(
@@ -277,33 +239,14 @@ def create_tools(mcp):
                 "stops":[{"offset":0,"color":"#FFF"},{"offset":1,"color":"#000"}]}
             document_id: Document UUID (omit for active doc).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            DocumentService().set_background(
+                document_id=document_id,
+                background=background,
+                fill_gradient=fill_gradient,
+            )
         except RuntimeError:
             return "Error: No active document"
-        if not scene.has_document(doc_id):
-            return f"Error: Document '{doc_id}' not found"
-
-        import json as _json
-        resolved = background
-        if fill_gradient is not None:
-            if isinstance(fill_gradient, str):
-                try:
-                    resolved = _json.loads(fill_gradient)
-                except _json.JSONDecodeError:
-                    return f"Error: invalid fill_gradient JSON"
-            elif isinstance(fill_gradient, dict):
-                resolved = fill_gradient
-        elif background is not None:
-            is_url = background.startswith(("http://", "https://", "data:"))
-            if not is_url and background != "none" and not (background.startswith("#") and len(background) in (4, 7, 9)):
-                return f"Error: Invalid background '{background}'"
-
-        doc = scene.get_document(doc_id)
-        old_bg = str(doc.background)[:60]
-        from avge_engine.scene import DocumentNode
-        object.__setattr__(doc, "background", resolved)
-        doc.version += 1
-        scene._persist(doc_id)
+        except ValueError as e:
+            return f"Error: {e}"
         return f"Background updated"

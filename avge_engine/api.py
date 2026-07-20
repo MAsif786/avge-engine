@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.services.engine import get_graph, reset_graph, stroke_width_to_norm
+from avge_engine.services.document_service import DocumentService
 from avge_engine.schema_registry import validate_input, list_tool_names
 from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
 from avge_engine.geometry import compute_bounds
@@ -330,9 +331,8 @@ async def health():
 
 @app.post("/tools/create_document", response_model=ToolResponse)
 async def create_document(req: CreateDocumentRequest):
-    graph = get_graph()
     try:
-        doc = graph.create_document(
+        doc = DocumentService().create_document(
             width=req.width, height=req.height,
             unit=req.unit, background=req.background,
             name=req.name,
@@ -349,62 +349,44 @@ async def create_document(req: CreateDocumentRequest):
 
 @app.post("/tools/delete_document", response_model=ToolResponse)
 async def delete_document(req: DeleteDocumentRequest):
-    scene = get_graph()
-    if not scene._storage:
-        raise HTTPException(status_code=400, detail="Storage not available")
+    service = DocumentService()
+    try:
+        result = service.delete_documents(req.ids, confirm=req.confirm)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    from avge_engine.services.engine import list_stored_documents
-    stored = {d["id"]: d for d in list_stored_documents()}
-    found = [i for i in req.ids if i in stored]
-    missing = [i for i in req.ids if i not in stored]
-
-    if not found:
-        raise HTTPException(status_code=404, detail=f"No matching documents found. Not found: {missing}")
+    if not result.found:
+        raise HTTPException(status_code=404, detail=f"No matching documents found. Not found: {result.missing}")
 
     if not req.confirm:
         return ToolResponse(data={
             "preview": True,
-            "found": [{"id": i, "name": stored[i].get("name", "") or "(unnamed)"} for i in found],
-            "message": f"Call with confirm=True to delete {len(found)} document(s)",
-            "not_found": missing,
+            "found": [{"id": d["id"], "name": d.get("name", "") or "(unnamed)"} for d in result.found],
+            "message": f"Call with confirm=True to delete {len(result.found)} document(s)",
+            "not_found": result.missing,
         })
 
-    deleted = []
-    errors = []
-    for doc_id in found:
-        try:
-            if doc_id in scene._docs:
-                del scene._docs[doc_id]
-            if doc_id in scene._regions_by_doc:
-                del scene._regions_by_doc[doc_id]
-            scene._storage.delete(doc_id)
-            deleted.append(doc_id)
-        except Exception as e:
-            errors.append(f"{doc_id}: {e}")
-
-    result = {"deleted": deleted}
-    if errors:
-        result["errors"] = errors
-    return ToolResponse(data=result)
+    data = {"deleted": result.deleted}
+    if result.errors:
+        data["errors"] = result.errors
+    return ToolResponse(data=data)
 
 
 @app.post("/tools/clone_document", response_model=ToolResponse)
 async def clone_document(req: CloneDocumentRequest):
-    graph = get_graph()
     try:
-        doc = graph.clone_document(
+        doc, source_id, region_count = DocumentService().clone_document(
             source_document_id=req.source_document_id,
             name=req.name,
             set_active=req.set_active,
         )
-        desc = graph.describe_scene(doc.id)
         return ToolResponse(data={
-            "source_document_id": req.source_document_id,
+            "source_document_id": source_id,
             "document_id": doc.id,
             "name": doc.name or "",
             "width": doc.width,
             "height": doc.height,
-            "region_count": desc["region_count"],
+            "region_count": region_count,
         })
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -414,14 +396,12 @@ async def clone_document(req: CloneDocumentRequest):
 
 @app.post("/tools/load_document", response_model=ToolResponse)
 async def load_document(req: DocIdBody):
-    from avge_engine.services.engine import load_stored_document
-    if load_stored_document(req.document_id):
-        scene = get_graph()
-        desc = scene.describe_scene(req.document_id)
+    summary = DocumentService().load_document(req.document_id)
+    if summary is not None:
         return ToolResponse(data={
             "document_id": req.document_id,
-            "region_count": desc["region_count"],
-            "version": desc["document"]["version"],
+            "region_count": summary.region_count,
+            "version": summary.document["version"],
         })
     raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
 
@@ -429,22 +409,21 @@ async def load_document(req: DocIdBody):
 @app.get("/documents")
 async def list_documents_api():
     """List all persisted documents."""
-    from avge_engine.services.engine import list_stored_documents
-    stored = list_stored_documents()
+    stored = DocumentService().list_documents()
     return ToolResponse(data={"documents": stored, "count": len(stored)})
 
 
 @app.get("/documents/{document_id}")
 async def get_document_info(document_id: str | None = None):
     """Get document metadata + preview link."""
-    graph = get_graph()
-    if not graph.has_document(document_id) and not graph.load_document(document_id):
+    try:
+        summary = DocumentService().ensure_loaded_summary(document_id)
+    except ValueError:
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
-    desc = graph.describe_scene(document_id)
     return {
-        "document": desc["document"],
-        "regions": desc["regions"],
-        "region_count": desc["region_count"],
+        "document": summary.document,
+        "regions": summary.regions,
+        "region_count": summary.region_count,
         "preview_url": f"/preview/{document_id}.png",
     }
 

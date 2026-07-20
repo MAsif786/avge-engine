@@ -8,8 +8,10 @@ from avge_engine.services.engine import (
     load_environment_guidelines,
     SMOOTHNESS_GUIDANCE,
 )
+from avge_engine.services.document_service import DocumentService
 
 __all__ = [
+    "DocumentService",
     "get_graph",
     "resolve_doc",
     "set_active_doc",
