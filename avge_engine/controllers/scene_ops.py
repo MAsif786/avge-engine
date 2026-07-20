@@ -7,7 +7,7 @@ from typing import Literal
 PIVOT_MODES = Literal["center", "base", "fixed"]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
-from avge_engine.controllers.selectors import select_region_ids, selector_from_legacy
+from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
 
 
 def _clamp01(value: float) -> float:

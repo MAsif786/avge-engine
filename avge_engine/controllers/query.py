@@ -5,7 +5,7 @@ import json as _json
 from typing import Any, Literal
 
 from avge_engine.services.engine import get_graph, resolve_doc
-from avge_engine.controllers.selectors import select_region_ids
+from avge_engine.services.selector_service import select_region_ids
 
 
 def create_tools(mcp):
