@@ -11,7 +11,8 @@ from avge_engine.effects.style import VALID_BLEND_MODES
 from avge_engine.geometry import CurveConstraints, compute_bounds
 from avge_engine.scene.models import RegionNode
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
-from avge_engine.controllers.selectors import select_region_ids
+from avge_engine.services.selector_service import select_region_ids
+from avge_engine.services.style_service import StyleService
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
@@ -923,58 +924,28 @@ def create_tools(mcp):
             affect_stroke: Blend hex strokes.
             opacity_falloff: Optional opacity reduction at maximum haze.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = StyleService().apply_depth_haze(
+                document_id=document_id,
+                selector=selector,
+                haze_color=haze_color,
+                near_y=near_y,
+                far_y=far_y,
+                max_strength=max_strength,
+                affect_fill=affect_fill,
+                affect_stroke=affect_stroke,
+                opacity_falloff=opacity_falloff,
+            )
         except RuntimeError:
             return "Error: No active document"
-
-        if _hex_to_rgb(haze_color) is None:
-            return "Error: haze_color must be a #RRGGBB hex color"
-
-        target_ids = select_region_ids(scene, doc_id, selector, default_all=True)
-
-        if not target_ids:
+        except LookupError:
             return "Error: No matching regions found"
-
-        denom = near_y - far_y
-        if abs(denom) < 1e-6:
-            return "Error: near_y and far_y must differ"
-
-        affected = 0
-        for rid in target_ids:
-            try:
-                region = scene.get_region(rid, doc_id)
-            except ValueError:
-                continue
-            bounds = compute_bounds(region.outline)
-            if not bounds:
-                continue
-            cy = bounds["y"] + bounds["h"] / 2
-            depth_t = _clamp01((near_y - cy) / denom)
-            strength = _clamp01(depth_t * max_strength)
-            if strength <= 0:
-                continue
-
-            kwargs: dict[str, Any] = {}
-            if affect_fill and isinstance(region.style.fill, str):
-                mixed_fill = _mix_hex(region.style.fill, haze_color, strength)
-                if mixed_fill:
-                    kwargs["fill"] = mixed_fill
-            if affect_stroke and isinstance(region.style.stroke, str):
-                mixed_stroke = _mix_hex(region.style.stroke, haze_color, strength)
-                if mixed_stroke:
-                    kwargs["stroke"] = mixed_stroke
-            if opacity_falloff > 0:
-                kwargs["opacity"] = max(0.0, region.style.opacity * (1.0 - opacity_falloff * depth_t))
-            if not kwargs:
-                continue
-            scene.edit_region(region_id=rid, document_id=doc_id, **kwargs)
-            affected += 1
+        except ValueError as e:
+            return f"Error: {e}"
 
         return (
-            f"Depth haze applied to {affected} region(s) "
-            f"(haze_color={haze_color}, max_strength={max_strength})"
+            f"Depth haze applied to {result.affected} region(s) "
+            f"(haze_color={result.haze_color}, max_strength={result.max_strength})"
         )
 
 
@@ -1121,52 +1092,25 @@ def create_tools(mcp):
             inner_width: Stroke width for internal detail regions in canvas pixels.
             basis: "z_index", "layer", or "bounding_size".
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = StyleService().apply_line_hierarchy(
+                document_id=document_id,
+                selector=selector,
+                outer_width=outer_width,
+                inner_width=inner_width,
+                basis=basis,
+            )
         except RuntimeError:
             return "Error: No active document"
-
-        outer_norm = stroke_width_to_norm(doc_id, outer_width)
-        inner_norm = stroke_width_to_norm(doc_id, inner_width)
-
-        target_ids = set(select_region_ids(scene, doc_id, selector, default_all=True))
-        regions = [r for r in scene.get_all_regions(doc_id) if r.id in target_ids]
-        if not regions:
+        except LookupError:
             return "Error: No regions found"
+        except ValueError as e:
+            return f"Error: {e}"
 
-        if basis == "z_index":
-            regions.sort(key=lambda r: r.z_index, reverse=True)
-        elif basis == "layer":
-            layers = {}
-            for r in regions:
-                layers.setdefault(r.layer, []).append(r)
-            regions = [r for layer_regs in layers.values() for r in layer_regs]
-        elif basis == "bounding_size":
-            from avge_engine.geometry import compute_bounds
-            regions.sort(key=lambda r: (compute_bounds(r.outline) or {}).get("w", 0) or 0, reverse=True)
-        else:
-            return f"Error: Unknown basis '{basis}'"
-
-        cutoff = max(1, len(regions) // 3)
-        outer = regions[:cutoff]
-        inner = regions[cutoff:]
-
-        affected = 0
-        for r in outer:
-            try:
-                scene.edit_region(region_id=r.id, document_id=doc_id, stroke_width=outer_norm)
-                affected += 1
-            except (ValueError, RuntimeError):
-                pass
-        for r in inner:
-            try:
-                scene.edit_region(region_id=r.id, document_id=doc_id, stroke_width=inner_norm)
-                affected += 1
-            except (ValueError, RuntimeError):
-                pass
-
-        return f"Line hierarchy applied: {len(outer)} outer ({outer_width}px), {len(inner)} inner ({inner_width}px)"
+        return (
+            f"Line hierarchy applied: {result.outer_count} outer ({result.outer_width}px), "
+            f"{result.inner_count} inner ({result.inner_width}px)"
+        )
 
     @mcp.tool(
         name="compare_style_consistency",
