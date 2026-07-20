@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (53 tools)
+# AVGE Engine — Tool Reference (56 tools)
 
-_Generated from `__main__` — tool set: m0b-v9_
+_Generated from `__main__` — tool set: m0b-v18_
 
 ## `add_bumps`
 
@@ -21,32 +21,9 @@ Add small protrusions (bumps/knuckles/jagged edges) at specified segments of a r
 
 ---
 
-## `add_depth_shadow`
-
-Create a soft offset shadow from a region outline. Use to ground objects quickly without manually drawing shadow blobs. direction is degrees (0=right, 90=down); distance is normalized canvas units; softness is blur radius in pixels.
-
-### Parameters
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `color` | `string` |  |  |
-| `direction` | `number` |  |  |
-| `distance` | `number` |  |  |
-| `document_id` | `any` |  |  |
-| `new_region_id` | `any` |  |  |
-| `opacity` | `number` |  |  |
-| `region_id` | `string` | ✓ |  |
-| `scale` | `number` |  |  |
-| `softness` | `number` |  |  |
-| `sx` | `any` |  |  |
-| `sy` | `any` |  |  |
-| `z_offset` | `integer` |  |  |
-
----
-
 ## `add_shading`
 
-Add directional shading to a region. mode='two_tone' creates highlight + shadow copies; mode='gradient' applies a soft gradient fill across the existing region for architecture.
+Add directional shading to one region or a shared selector of regions. mode='two_tone' creates highlight + shadow copies; mode='gradient' applies a soft gradient fill across existing regions for architecture. Selector keys: ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke.
 
 ### Parameters
 
@@ -58,8 +35,30 @@ Add directional shading to a region. mode='two_tone' creates highlight + shadow 
 | `light_direction` | `number` |  |  |
 | `mid_color` | `any` |  |  |
 | `mode` | `string` |  |  |
-| `region_id` | `string` | ✓ |  |
+| `region_id` | `any` |  |  |
+| `selector` | `any` |  |  |
 | `shadow_color` | `any` |  |  |
+
+---
+
+## `apply_brush_style`
+
+Apply a digital art brush preset to existing regions. Use for pencil, ink, g_pen, mapping_pen, flat, round, airbrush, soft, hard, watercolor, gouache, oil, chalk, texture, hair, grass_leaf, cloud, and particle_fx linework. Use restyle(material=...) for substance/surface looks like glass, wood, concrete, tile, or foliage. Use apply_texture_effect for separate overlay FX such as paper grain, halftone, bloom, and particles; stack brush first, then texture if both are needed. This changes editable vector style properties; optional rough/pressure behavior creates small overlay strokes rather than raster pixels.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `apply_to` | `string` |  |  |
+| `blend_mode` | `any` |  |  |
+| `brush` | `string` |  |  |
+| `color` | `any` |  |  |
+| `document_id` | `any` |  |  |
+| `opacity` | `any` |  |  |
+| `pressure` | `any` |  |  |
+| `selector` | `any` |  |  |
+| `size` | `any` |  | Stroke width in canvas pixels. |
+| `texture_strength` | `number` |  |  |
 
 ---
 
@@ -85,7 +84,7 @@ Apply atmospheric perspective to existing regions by blending fills/strokes towa
 
 ## `apply_line_hierarchy`
 
-Automate stroke-weight by depth: outer silhouette regions get thicker strokes, internal detail gets thinner. 💡 Apply after building a scene to enforce consistent line hierarchy.
+Automate stroke-weight by depth: outer silhouette regions get thicker strokes, internal detail gets thinner. Accepts the shared selector shape to limit the pass to ids, group_name, layer, fill, tags, bounds, z_min, z_max, or has_stroke. 💡 Apply after building a scene to enforce consistent line hierarchy.
 
 ### Parameters
 
@@ -93,8 +92,35 @@ Automate stroke-weight by depth: outer silhouette regions get thicker strokes, i
 |------|------|----------|-------------|
 | `basis` | `string` |  |  |
 | `document_id` | `any` |  |  |
-| `inner_width` | `number` |  |  |
-| `outer_width` | `number` |  |  |
+| `inner_width` | `any` |  | Stroke width in canvas pixels. |
+| `outer_width` | `any` |  | Stroke width in canvas pixels. |
+| `selector` | `any` |  |  |
+
+---
+
+## `apply_texture_effect`
+
+Create editable vector texture and FX overlays for selected art. Effects: noise, paper, fabric, halftone, screen_tone, bloom, particles, gradient_light, rim_light. This is an overlay/FX pass, not a medium preset; use apply_brush_style first for pencil/ink/watercolor/chalk stroke quality, then stack texture effects. Uses clipping when possible so effects stay inside the target.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `angle` | `number` |  |  |
+| `blend_mode` | `any` |  |  |
+| `bounds` | `any` |  |  |
+| `clip_to` | `any` |  |  |
+| `color` | `string` |  |  |
+| `density` | `integer` |  |  |
+| `document_id` | `any` |  |  |
+| `effect` | `string` | ✓ |  |
+| `layer` | `any` |  |  |
+| `opacity` | `number` |  |  |
+| `secondary_color` | `any` |  |  |
+| `seed` | `integer` |  |  |
+| `selector` | `any` |  |  |
+| `size` | `any` |  | Stroke width in canvas pixels. |
+| `z_index` | `any` |  |  |
 
 ---
 
@@ -110,16 +136,16 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
   import_svg_path: path_data, fill, smoothness
   edit_region: region_id, outline, fill, stroke, z_index, shape
   duplicate: region_id, pattern, count, dx, dy, columns, rows, spacing_falloff, scale_falloff
-  add_depth_shadow: region_id, direction, distance, softness, sy
-  cast_shadow: from_region_id, onto_region_id, direction, distance, softness
+  create_shadow: region_id, optional onto_region_id, direction, distance, softness, sy
   apply_depth_haze: selector, haze_color, near_y, far_y, max_strength
   restyle: selector, mode, fill, stroke, stroke_width, material
   delete_region: region_id
-  transform_objects: ids, mode, dx, dy, scale, rotate, alignment
+  transform_objects: selector, mode, dx, dy, scale, rotate, alignment
   project_quad: target_quad, source_region_id, fill, stroke, columns, rows
   create_perspective_grid: vanishing_points, horizon_y, bounds
   create_facade_grid: target_quad, rows, columns, lit_ratio
   copy_element: region_id OR group, target_document_id, source_document_id, offset_x/y
+  create_line_pattern: pattern, points/bounds, stroke_width, width_profile, role
   generate_shape: pattern, params
 💡 Inline shapes: create primitives directly — {"tool":"create_primitive","shape":{"type":"rect","x":0.1,"y":0.66,"width":0.09,"height":0.1},"fill":"#CCC"}
 💡 Batch text: multiple labels in one call — {"tool":"create_text","x":0.5,"y":0.5,"text":"Hello","font_size":0.06}
@@ -154,30 +180,6 @@ Perform boolean geometry on regions using shapely/GEOS. Operations: union, inter
 
 ---
 
-## `cast_shadow`
-
-Create a soft shadow from one region clipped onto another region. Use for objects casting onto floors, walls, tables, platforms, or panels.
-
-### Parameters
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `color` | `string` |  |  |
-| `direction` | `number` |  |  |
-| `distance` | `number` |  |  |
-| `document_id` | `any` |  |  |
-| `from_region_id` | `string` | ✓ |  |
-| `new_region_id` | `any` |  |  |
-| `onto_region_id` | `string` | ✓ |  |
-| `opacity` | `number` |  |  |
-| `scale` | `number` |  |  |
-| `softness` | `number` |  |  |
-| `sx` | `any` |  |  |
-| `sy` | `any` |  |  |
-| `z_offset` | `integer` |  |  |
-
----
-
 ## `checkpoint`
 
 Save a snapshot of the current document state. Use restore() to revert back to this point.
@@ -201,6 +203,20 @@ Compare the current scene against a named checkpoint. Shows which regions were a
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
 | `name` | `string` |  |  |
+
+---
+
+## `clone_document`
+
+Clone an existing document into a new document ID, including canvas metadata, named gradients, regions, styles, layers, groups, and editable geometry. Omit source_document_id to clone the active document.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `name` | `any` |  |  |
+| `set_active` | `boolean` |  |  |
+| `source_document_id` | `any` |  |  |
 
 ---
 
@@ -246,6 +262,13 @@ Create a smooth curved line through 3+ control points. Unlike create_region (fil
 | `document_id` | `any` |  |  |
 | `layer` | `string` |  |  |
 | `opacity` | `number` |  |  |
+| `outline_pattern` | `any` |  |  |
+| `pattern_amplitude` | `number` |  |  |
+| `pattern_density` | `integer` |  |  |
+| `pattern_jitter` | `number` |  |  |
+| `pattern_opacity` | `any` |  |  |
+| `pattern_seed` | `integer` |  |  |
+| `pattern_stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `points` | `array` | ✓ |  |
 | `region_id` | `any` |  |  |
 | `relative_to` | `any` |  |  |
@@ -291,11 +314,19 @@ Create a filled elliptical ring or arc band in one call. Use for realistic circu
 | `end_angle` | `number` |  |  |
 | `fill` | `any` |  |  |
 | `fill_gradient` | `any` |  |  |
+| `fill_pattern` | `any` |  |  |
 | `groups` | `any` |  |  |
 | `inner_rx` | `any` |  |  |
 | `inner_ry` | `any` |  |  |
 | `layer` | `string` |  |  |
 | `opacity` | `number` |  |  |
+| `outline_pattern` | `any` |  |  |
+| `pattern_amplitude` | `number` |  |  |
+| `pattern_density` | `integer` |  |  |
+| `pattern_jitter` | `number` |  |  |
+| `pattern_opacity` | `any` |  |  |
+| `pattern_seed` | `integer` |  |  |
+| `pattern_stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `perspective` | `number` |  |  |
 | `region_id` | `any` |  |  |
 | `rotation` | `number` |  |  |
@@ -346,6 +377,44 @@ Create a perspective-aware building facade with repeated window quads. Supports 
 
 ---
 
+## `create_line_pattern`
+
+Create common artistic line types and shading-line fields. Supports straight/curve/wavy/zigzag/spiral strokes, hatching, cross-hatching, contour hatching, scribbling, and stippling. Use width_profile='tapered' or 'pressure' to create a true variable-width filled ribbon instead of a uniform SVG stroke. Use role='construction'/'center'/'gesture'/'implied' to get appropriate opacity/dash defaults for structural and expressive lines.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `amplitude` | `number` |  |  |
+| `angle` | `number` |  |  |
+| `bounds` | `any` |  |  |
+| `center` | `any` |  |  |
+| `count` | `integer` |  |  |
+| `dash` | `any` |  |  |
+| `density` | `integer` |  |  |
+| `document_id` | `any` |  |  |
+| `end_width` | `any` |  | Stroke width in canvas pixels. |
+| `frequency` | `number` |  |  |
+| `jitter` | `number` |  |  |
+| `layer` | `string` |  |  |
+| `linecap` | `string` |  |  |
+| `opacity` | `any` |  |  |
+| `pattern` | `string` | ✓ |  |
+| `points` | `any` |  |  |
+| `radius` | `number` |  |  |
+| `region_id` | `any` |  |  |
+| `role` | `string` |  |  |
+| `seed` | `integer` |  |  |
+| `smoothness` | `number` |  |  |
+| `start_width` | `any` |  | Stroke width in canvas pixels. |
+| `stroke` | `any` |  |  |
+| `stroke_width` | `any` |  | Stroke width in canvas pixels. |
+| `turns` | `number` |  |  |
+| `width_profile` | `string` |  |  |
+| `z_index` | `integer` |  |  |
+
+---
+
 ## `create_perspective_grid`
 
 Create two-point perspective construction guides from shared vanishing points. Use before project_quad/create_facade_grid so building edges, signs, rails, and street objects converge to the same off-canvas vanishing points. Emits editable compound-path guide regions.
@@ -390,9 +459,17 @@ Create an SVG primitive shape (rect, ellipse, line, polygon, star, arc), open po
 | `closed` | `any` |  |  |
 | `document_id` | `any` |  |  |
 | `fill` | `any` |  |  |
+| `fill_pattern` | `any` |  |  |
 | `groups` | `any` |  |  |
 | `layer` | `string` |  |  |
 | `opacity` | `number` |  |  |
+| `outline_pattern` | `any` |  |  |
+| `pattern_amplitude` | `number` |  |  |
+| `pattern_density` | `integer` |  |  |
+| `pattern_jitter` | `number` |  |  |
+| `pattern_opacity` | `any` |  |  |
+| `pattern_seed` | `integer` |  |  |
+| `pattern_stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `region_id` | `any` |  |  |
 | `relative_to` | `any` |  |  |
 | `rotate` | `number` |  |  |
@@ -423,12 +500,20 @@ Create a vector region from an outline defined by points. The engine fits smooth
 | `document_id` | `any` |  |  |
 | `fill` | `any` |  |  |
 | `fill_gradient` | `any` |  |  |
+| `fill_pattern` | `any` |  |  |
 | `groups` | `any` |  |  |
 | `handle_in` | `any` |  |  |
 | `handle_out` | `any` |  |  |
 | `layer` | `string` |  |  |
 | `opacity` | `number` |  |  |
 | `outline` | `any` |  |  |
+| `outline_pattern` | `any` |  |  |
+| `pattern_amplitude` | `number` |  |  |
+| `pattern_density` | `integer` |  |  |
+| `pattern_jitter` | `number` |  |  |
+| `pattern_opacity` | `any` |  |  |
+| `pattern_seed` | `integer` |  |  |
+| `pattern_stroke_width` | `any` |  | Stroke width in canvas pixels. |
 | `region_id` | `any` |  |  |
 | `relative_to` | `any` |  |  |
 | `rotate` | `number` |  |  |
@@ -443,6 +528,30 @@ Create a vector region from an outline defined by points. The engine fits smooth
 | `z_after` | `any` |  |  |
 | `z_before` | `any` |  |  |
 | `z_index` | `integer` |  |  |
+
+---
+
+## `create_shadow`
+
+Create a soft shadow from a region outline. Omit onto_region_id for a grounding/depth shadow, or pass onto_region_id to clip the shadow onto another region for a cast shadow. direction is degrees (0=right, 90=down); distance is normalized canvas units; softness is blur radius in pixels.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `color` | `string` |  |  |
+| `direction` | `number` |  |  |
+| `distance` | `number` |  |  |
+| `document_id` | `any` |  |  |
+| `new_region_id` | `any` |  |  |
+| `onto_region_id` | `any` |  |  |
+| `opacity` | `number` |  |  |
+| `region_id` | `string` | ✓ |  |
+| `scale` | `number` |  |  |
+| `softness` | `number` |  |  |
+| `sx` | `any` |  |  |
+| `sy` | `any` |  |  |
+| `z_offset` | `any` |  |  |
 
 ---
 
@@ -512,21 +621,9 @@ Create a text label. ``y`` is the text **baseline** (bottom of text, not center)
 
 ---
 
-## `critique_composition`
+## `critique`
 
-Auto-check the scene against design skill rules. Returns structured findings about stroke-width uniformity, palette size, depth shading, and off-canvas objects. The mechanical version of the Design Skill checklist. 💡 Call after completing each major object, not only once before finishing — catches perspective/grounding mismatches while they're still cheap to fix.
-
-### Parameters
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `document_id` | `any` |  |  |
-
----
-
-## `critique_preview`
-
-Preview-quality visual critique. Flags likely visual issues such as too_flat, over_rounded, missing_contact_shadows, bad_perspective, and dominant_blob_shape. Returns actionable suggestions with affected region IDs.
+Run scene critique checks. mode='rules' runs mechanical design-rule checks for stroke hierarchy, palette size, depth shading, overlap, and off-canvas objects. mode='visual' runs preview-quality checks for too_flat, over_rounded, missing_contact_shadows, bad_perspective, and dominant_blob_shape. mode='both' returns both sections.
 
 ### Parameters
 
@@ -535,6 +632,7 @@ Preview-quality visual critique. Flags likely visual issues such as too_flat, ov
 | `as_json` | `boolean` |  |  |
 | `document_id` | `any` |  |  |
 | `min_confidence` | `number` |  |  |
+| `mode` | `string` |  |  |
 
 ---
 
@@ -657,7 +755,7 @@ Unified group operation tool. Use one action per call: 'create' — create or re
 
 ## `edit_region`
 
-Modify an existing region's outline, style, z_index, or shape. Only provided fields are changed; omitted fields keep their values. 💡 Single-point editing: use ``point_index`` + ``point_coords`` to nudge one vertex without resending the whole outline. 💡 Batch z-index: pass ids=[...] with z_index=N to reorder multiple regions at once.
+Modify an existing region's outline, style, z_index, or shape. Only provided fields are changed; omitted fields keep their values. 💡 Single-point editing: use ``point_index`` + ``point_coords`` to nudge one vertex without resending the whole outline. Use transform_objects for whole-region move/scale/rotate/mirror/align. 💡 Batch z-index: pass ids=[...] with z_index=N to reorder multiple regions at once.
 
 ### Parameters
 
@@ -666,8 +764,6 @@ Modify an existing region's outline, style, z_index, or shape. Only provided fie
 | `blend_mode` | `any` |  |  |
 | `clip_to` | `any` |  |  |
 | `document_id` | `any` |  |  |
-| `dx` | `any` |  |  |
-| `dy` | `any` |  |  |
 | `fill` | `any` |  |  |
 | `handle_in` | `any` |  |  |
 | `handle_out` | `any` |  |  |
@@ -676,6 +772,8 @@ Modify an existing region's outline, style, z_index, or shape. Only provided fie
 | `opacity` | `any` |  |  |
 | `outline` | `any` |  |  |
 | `point_coords` | `any` |  |  |
+| `point_dx` | `any` |  |  |
+| `point_dy` | `any` |  |  |
 | `point_index` | `any` |  |  |
 | `region_id` | `any` |  |  |
 | `shape` | `any` |  |  |
@@ -692,8 +790,8 @@ Modify an existing region's outline, style, z_index, or shape. Only provided fie
 
 ## `edit_regions`
 
-Edit multiple regions in a single call, each with its own relative transform (dx, dy, scale, rotate) or property override. 💡 Move a belt + buckle + gadgets together without extra union steps.
-Example: [{"id":"belt","dx":-0.03},{"id":"belt_buckle","dx":-0.03}]
+Edit multiple regions in a single call, each with its own content/style override. Use transform_objects for move/scale/rotate/mirror/align. 💡 Recolor or relayer many regions without extra calls.
+Example: [{"id":"belt","fill":"#222"},{"id":"belt_buckle","z_index":20}]
 
 ### Parameters
 
@@ -722,7 +820,7 @@ Export the current canvas to an SVG file on disk. Returns the file path and SVG 
 
 ## `find_objects`
 
-Query regions by visual properties and bounds. Lets you target e.g. 'all regions with fill #E8D4B0' for a palette-wide recolor without tracking every ID manually. Filters are AND-ed together; omit a filter to skip it. 💡 Use tags filter to find regions by semantic label (e.g. tags={'part':'handle'} after creating with tags).
+Query regions with the shared selector schema or legacy top-level filters. Lets you target e.g. 'all regions with fill #E8D4B0' for a palette-wide recolor without tracking every ID manually. Filters are AND-ed together; omit a filter to skip it. 💡 Use tags filter to find regions by semantic label (e.g. tags={'part':'handle'} after creating with tags).
 
 ### Parameters
 
@@ -740,6 +838,7 @@ Query regions by visual properties and bounds. Lets you target e.g. 'all regions
 | `min_w` | `any` |  |  |
 | `min_x` | `any` |  |  |
 | `min_y` | `any` |  |  |
+| `selector` | `any` |  |  |
 | `tags` | `any` |  |  |
 | `z_max` | `any` |  |  |
 | `z_min` | `any` |  |  |
@@ -1065,7 +1164,8 @@ Modes:
   hsl_offset — shift each region's current color by HSL delta
   palette_swap — replace one exact fill color with another
 Materials: glass, brushed_metal, concrete, wood, tile, foliage
-Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'
+Selector keys: ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke
+Use material=... for substance/surface presets; use apply_brush_style for medium/linework presets.
 💡 restyle(selector={'ids':['window']}, material='glass') — apply a material preset
 
 ### Parameters
@@ -1107,6 +1207,23 @@ Change the canvas background color of an existing document. 💡 Use instead of 
 
 ---
 
+## `set_layer_role`
+
+Assign an art workflow role to an existing layer and optionally normalize its z-order/style. Roles: sketch, line_art, base_color, shadow, highlight, glow, texture, fx, background, guide, mask.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `blend_mode` | `any` |  |  |
+| `document_id` | `any` |  |  |
+| `layer` | `string` | ✓ |  |
+| `opacity` | `any` |  |  |
+| `role` | `string` | ✓ |  |
+| `z_base` | `any` |  |  |
+
+---
+
 ## `shift_layer_z`
 
 Shift all regions in a layer by a z-offset. Positive offset moves them higher (top), negative moves lower (back). Use after list_layers to find which layer to adjust.
@@ -1145,6 +1262,7 @@ Move, scale, rotate, mirror, or align existing regions. Use to reposition/resize
 | `pivot_y` | `any` |  |  |
 | `rotate` | `number` |  |  |
 | `scale` | `number` |  |  |
+| `selector` | `any` |  |  |
 | `sx` | `any` |  |  |
 | `sy` | `any` |  |  |
 | `z_index` | `any` |  |  |

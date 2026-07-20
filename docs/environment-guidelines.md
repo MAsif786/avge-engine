@@ -3,7 +3,7 @@
 _Resource: `avge://skill/environment-guidelines`_
 _Sibling to `avge://skill/design-guidelines` (character/object work). This skill governs street scenes, building exteriors, interiors, and any scene where perspective, depth, and repeated architectural elements matter more than a single subject._
 
-_Tool names below are current as of `m0b-v9` (53 tools): `create_perspective_grid`, `apply_depth_haze`, `create_facade_grid`, `create_surface_stripes`, `generate_cloud`, `add_shading(mode="gradient")`, and `duplicate`'s `scale_falloff`/`spacing_falloff` params._
+_Tool names below are current as of `m0b-v18` (56 tools): `clone_document`, `create_perspective_grid`, `apply_depth_haze`, `create_facade_grid`, `create_surface_stripes`, `create_shadow`, `critique`, `generate_cloud`, `create_line_pattern`, `apply_brush_style`, `set_layer_role`, `apply_texture_effect`, region/primitive/curve `outline_pattern`/`fill_pattern`, `add_shading(mode="gradient")`, and `duplicate`'s `scale_falloff`/`spacing_falloff` params. Existing-region targeting uses the shared selector shape: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds`, `z_min`, `z_max`, `has_stroke`._
 
 _Implementation backlog for missing helpers: `docs/tool-improvement-backlog.md`._
 
@@ -100,13 +100,14 @@ Architecture usually needs continuous plane shading, not only flat fills or hard
 
 The construction order in §1 creates a correct scene, but correctness is not enough for a rich anime background. After completing the first pass, run a deliberate densify pass:
 
-1. **Run `critique_preview`.** Treat `too_flat`, weak depth, low-density, missing shadow, or bad-perspective findings as instructions to continue, not as optional polish.
+1. **Run `critique(mode="visual")`.** Treat `too_flat`, weak depth, low-density, missing shadow, or bad-perspective findings as instructions to continue, not as optional polish.
 2. **Stagger buildings in depth.** Re-examine the massing layer and add at least a few overlapping silhouettes: a shorter foreground building crossing in front of a taller rear building, a side wall partly hidden by a sign, a roofline cutting across a neighbor, or a storefront band in front of a tower base.
 3. **Add secondary architectural clutter.** Add cornices, awnings, roof-edge rails, rooftop boxes/tanks/vents, antennae, vertical pipes, small AC units, window sills, and trim. Use `project_quad`/`create_curve`/`duplicate` against existing facade edges instead of freehand placement.
 4. **Add second-layer signage.** Add smaller signs at different depths and scales after the primary signs are placed. Dense commercial streets need overlapping boards and blade signs, not one clean panel per building.
 5. **Add connective props.** Add wires/cables, poles, lamp arms, railings, bollards, and curb details after the building/sign composition exists. Use `duplicate(pattern="linear", spacing_falloff=..., scale_falloff=...)` for receding repeated props.
-6. **Re-run haze and line hierarchy.** Any densify pass that adds visible building panels or far props must be followed by another `apply_depth_haze` and stroke hierarchy pass, otherwise new overlays pop forward.
-7. **Crop-inspect dense areas.** Use `render_preview` crops around the busiest signs/facades to catch bad layering, unwarped labels, window grids drawn over boards, or free-floating props.
+6. **Add controlled linework texture.** Use `create_line_pattern(pattern="hatch"|"cross_hatch"|"contour_hatch")` for free shading fields. When the texture belongs to a created object, use `fill_pattern="hatch"|"cross_hatch"|"scribble"|"stipple"`; when the border/curve itself should be stylized, use `outline_pattern="dashed"|"dotted"|"wavy"|"zigzag"|"rough"|"sketch"|"tapered"|"pressure"`. Use `role="construction"` only on guide layers and exclude those layers from final export.
+7. **Re-run haze and line hierarchy.** Any densify pass that adds visible building panels or far props must be followed by another `apply_depth_haze` and stroke hierarchy pass, otherwise new overlays pop forward.
+8. **Crop-inspect dense areas.** Use `render_preview` crops around the busiest signs/facades to catch bad layering, unwarped labels, window grids drawn over boards, or free-floating props.
 
 Proposed tool improvements for this pass:
 
@@ -122,14 +123,14 @@ Do not skip this pass because the first checklist technically completed. "Sparse
 
 Run this sequence, not just a single check at the end:
 
-1. **After massing (step 3):** `critique_composition` — catches off-canvas objects, gross proportion problems, and stroke-uniformity issues while they're still cheap to fix, before any facade detail is invested.
+1. **After massing (step 3):** `critique(mode="rules")` — catches off-canvas objects, gross proportion problems, and stroke-uniformity issues while they're still cheap to fix, before any facade detail is invested.
 2. **After each building's facade pass (step 4), before moving to the next building:** `render_preview` with `region_id` cropped to that building, to inspect window density/alignment up close — small facade errors are easy to miss in a full-canvas view.
 3. **After signage (step 5):** re-check that skew/perspective on text matches its facade — a quick `render_preview` crop on any building with signage.
-4. **After the atmospheric pass (step 7):** `critique_preview` — this is the tool that flags `too_flat`, `bad_perspective`, and similar visual-read issues, and it's most meaningful once color/depth work is actually complete.
+4. **After the atmospheric pass (step 7):** `critique(mode="visual")` — this is the tool that flags `too_flat`, `bad_perspective`, and similar visual-read issues, and it's most meaningful once color/depth work is actually complete.
 5. **After the densify pass (§8):** run `render_preview` crops around overlapping signs, facade grids, and road markings. Check that all new elements still obey perspective and layering.
 6. **Before final export:** confirm no region on `guides` layer or named like `guide_*` remains visible; then use `compare_style_consistency` if this is one scene among a multi-panel/sequential set.
 
-Don't defer all QA to the end — per `critique_composition`'s own guidance, catching a perspective or grounding mismatch after one building is far cheaper than discovering it once ten buildings share the same mistake.
+Don't defer all QA to the end — per `critique(mode="rules")` guidance, catching a perspective or grounding mismatch after one building is far cheaper than discovering it once ten buildings share the same mistake.
 
 ---
 

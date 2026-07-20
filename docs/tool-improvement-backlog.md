@@ -61,7 +61,15 @@ Final export should warn or optionally exclude guide layers/regions.
 Suggested behavior:
 
 - `export_svg(exclude_layers=["guides"])`, or
-- `critique_preview` finding: `construction_guides_visible`.
+- `critique(mode="visual")` finding: `construction_guides_visible`.
+
+### Deferred Tool Loading / Namespaces
+
+The flat MCP namespace is now large enough that rare tools should eventually
+move behind a discovery step or namespace grouping. Keep core drawing/editing
+tools eager, then defer lower-frequency tools such as checkpoint diffs,
+style-consistency comparison, and specialized generators behind a search/load
+or namespaced surface (`shadow.*`, `geometry.*`, `scene.*`, `style.*`).
 
 ### Road-plane stripe helper
 
