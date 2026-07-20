@@ -23,6 +23,32 @@ from typing import Any
 
 # ── Gradient type ───────────────────────────────────────────────────
 
+VALID_BLEND_MODES = (
+    "normal",
+    "multiply",
+    "screen",
+    "overlay",
+    "darken",
+    "lighten",
+    "color-dodge",
+    "linear-dodge",
+    "color-burn",
+    "soft-light",
+    "hard-light",
+    "difference",
+    "hue",
+    "saturation",
+    "color",
+    "luminosity",
+)
+"""Supported SVG/CSS mix-blend-mode values."""
+
+BLEND_MODE_ALIASES = {
+    "add": "linear-dodge",
+    "linear-dodge-add": "linear-dodge",
+}
+"""Convenience aliases normalized by Style before validation."""
+
 type GradientDef = dict[str, Any]
 """A gradient definition dict. See module docstring for structure."""
 
@@ -153,10 +179,10 @@ class Style:
                 raise ValueError(f"Invalid stroke color: {self.stroke}")
         # Validate blend mode
         if self.blend_mode is not None:
-            valid = ("normal","multiply","screen","overlay","darken","lighten",
-                     "color-dodge","color-burn","soft-light","hard-light")
-            if self.blend_mode not in valid:
-                raise ValueError(f"Invalid blend_mode: {self.blend_mode}. Valid: {valid}")
+            mode = BLEND_MODE_ALIASES.get(self.blend_mode, self.blend_mode)
+            object.__setattr__(self, "blend_mode", mode)
+            if mode not in VALID_BLEND_MODES:
+                raise ValueError(f"Invalid blend_mode: {mode}. Valid: {VALID_BLEND_MODES}")
 
 
 def resolve_stroke(stroke: str | GradientDef | None) -> str:

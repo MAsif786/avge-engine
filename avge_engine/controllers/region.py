@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import json as _json
+import random
 from typing import Any, Literal
 
 from avge_engine.services.engine import (
@@ -100,6 +101,209 @@ def _relative_shape(scene, doc_id, relative_to, shape):
             s["r_inner"] = s["r_inner"] * min(bw, bh)
     return s
 
+
+def _sample_region_outline(region, samples_per_segment: int = 8) -> list[list[float]]:
+    """Return a dense closed outline suitable for patterned primitive borders."""
+    if region.primitive:
+        p = region.primitive
+        ptype = p.get("type")
+        if ptype == "rect":
+            x, y, w, h = p["x"], p["y"], p["width"], p["height"]
+            return [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]]
+        if ptype == "ellipse":
+            cx, cy, rx, ry = p["cx"], p["cy"], p["rx"], p["ry"]
+            n = max(24, samples_per_segment * 8)
+            return [
+                [cx + math.cos(math.tau * i / n) * rx, cy + math.sin(math.tau * i / n) * ry]
+                for i in range(n + 1)
+            ]
+    pts = [[float(x), float(y)] for x, y in region.outline]
+    if pts and region.constraints.closed and pts[0] != pts[-1]:
+        pts.append(list(pts[0]))
+    return pts
+
+
+def _apply_primitive_patterns(
+    scene,
+    doc_id: str,
+    base_region,
+    outline_pattern: str | None,
+    fill_pattern: str | None,
+    pattern_density: int,
+    pattern_amplitude: float,
+    pattern_jitter: float,
+    pattern_seed: int,
+    stroke: str | None,
+    pattern_width: float,
+    pattern_opacity: float | None,
+    layer: str,
+    z_index: int,
+) -> list[str]:
+    """Create line-pattern overlays for a primitive outline and/or clipped fill."""
+    from avge_engine.controllers import procedural as line_tools
+
+    created: list[str] = []
+    color = stroke or "#333333"
+    opacity = pattern_opacity
+
+    if outline_pattern in ("dashed", "dotted"):
+        dash = "1,5" if outline_pattern == "dotted" else "7,5"
+        sampled = _sample_region_outline(base_region)
+        r = scene.create_line(
+            points=sampled,
+            document_id=doc_id,
+            region_id=f"{base_region.id}_{outline_pattern}_outline",
+            layer=layer,
+            z_index=z_index + 2,
+            stroke=color,
+            stroke_width=pattern_width,
+            opacity=opacity if opacity is not None else 1.0,
+            stroke_linecap="round" if outline_pattern == "dotted" else "butt",
+            stroke_dasharray=dash,
+            smoothness=0.0 if len(sampled) <= 6 else 0.65,
+        )
+        r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
+        created.append(r.id)
+    elif outline_pattern in ("wavy", "zigzag", "rough", "sketch", "tapered", "pressure"):
+        sampled = _sample_region_outline(base_region)
+        rng = random.Random(pattern_seed)
+        if outline_pattern in ("rough", "sketch"):
+            repeats = 2 if outline_pattern == "sketch" else 1
+            for i in range(repeats):
+                pts = line_tools._jitter_points(sampled, max(pattern_jitter, pattern_amplitude * 0.45), rng)
+                r = scene.create_line(
+                    points=pts,
+                    document_id=doc_id,
+                    region_id=f"{base_region.id}_{outline_pattern}_outline_{i:02d}",
+                    layer=layer,
+                    z_index=z_index + 2 + i,
+                    stroke=color,
+                    stroke_width=pattern_width * (0.8 + i * 0.2),
+                    opacity=opacity if opacity is not None else (0.55 if outline_pattern == "sketch" else 0.75),
+                    stroke_linecap="round",
+                    smoothness=0.55,
+                )
+                r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
+                created.append(r.id)
+        elif outline_pattern in ("tapered", "pressure"):
+            widths = line_tools._width_profile_values(
+                len(sampled),
+                outline_pattern,
+                pattern_width * 2.2,
+                max(0.001, pattern_width * 0.35),
+                pattern_width,
+            )
+            ribbon = line_tools._ribbon_outline(sampled, widths)
+            r = scene.create_region(
+                outline=ribbon,
+                document_id=doc_id,
+                region_id=f"{base_region.id}_{outline_pattern}_outline",
+                layer=layer,
+                z_index=z_index + 2,
+                constraints=CurveConstraints(smoothness=0.55, closed=True),
+                style=Style(fill=color, stroke=None, opacity=opacity if opacity is not None else 0.85),
+                metadata={"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id},
+            )
+            created.append(r.id)
+        else:
+            subpaths = []
+            for i in range(len(sampled) - 1):
+                subpaths.append(line_tools._line_pattern_points(
+                    outline_pattern,
+                    [sampled[i], sampled[i + 1]],
+                    None,
+                    0.1,
+                    1.0,
+                    max(4, int(pattern_density)),
+                    pattern_amplitude,
+                    1.0,
+                ))
+            r = scene.create_compound_path(
+                subpaths=subpaths,
+                document_id=doc_id,
+                region_id=f"{base_region.id}_{outline_pattern}_outline",
+                layer=layer,
+                z_index=z_index + 2,
+                fill=None,
+                stroke=color,
+                stroke_width=pattern_width,
+                opacity=opacity if opacity is not None else 1.0,
+                stroke_linecap="round",
+                smoothness=0.65 if outline_pattern == "wavy" else 0.0,
+                closed=False,
+            )
+            r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
+            created.append(r.id)
+
+    if base_region.constraints.closed and fill_pattern in ("hatch", "cross_hatch", "contour_hatch", "scribble", "stipple"):
+        b = compute_bounds(base_region.outline)
+        if b:
+            bounds = [b["x"], b["y"], b["w"], b["h"]]
+            rng = random.Random(pattern_seed)
+            if fill_pattern in ("hatch", "cross_hatch", "contour_hatch"):
+                subpaths = line_tools._hatch_subpaths(
+                    bounds, pattern_density, 25.0, fill_pattern, pattern_amplitude, pattern_jitter, rng
+                )
+                r = scene.create_compound_path(
+                    subpaths=subpaths,
+                    document_id=doc_id,
+                    region_id=f"{base_region.id}_{fill_pattern}_fill",
+                    layer=layer,
+                    z_index=z_index + 1,
+                    fill=None,
+                    stroke=color,
+                    stroke_width=pattern_width,
+                    opacity=opacity if opacity is not None else 0.45,
+                    stroke_linecap="round",
+                    smoothness=0.55 if fill_pattern == "contour_hatch" else 0.0,
+                    closed=False,
+                )
+                r.clip_to = base_region.id
+                r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
+                created.append(r.id)
+            elif fill_pattern == "scribble":
+                for i, pts in enumerate(line_tools._scribble_paths(bounds, pattern_density, pattern_jitter, rng)):
+                    r = scene.create_line(
+                        points=pts,
+                        document_id=doc_id,
+                        region_id=f"{base_region.id}_{fill_pattern}_{i:02d}",
+                        layer=layer,
+                        z_index=z_index + 1,
+                        stroke=color,
+                        stroke_width=pattern_width * rng.uniform(0.65, 1.25),
+                        opacity=opacity if opacity is not None else 0.45,
+                        stroke_linecap="round",
+                        smoothness=0.65,
+                    )
+                    r.clip_to = base_region.id
+                    r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
+                    created.append(r.id)
+            elif fill_pattern == "stipple":
+                total = max(1, min(600, int(pattern_density)))
+                for i in range(total):
+                    dot_w = pattern_width * rng.uniform(0.7, 1.6)
+                    r = scene.create_ellipse(
+                        b["x"] + rng.random() * b["w"],
+                        b["y"] + rng.random() * b["h"],
+                        dot_w,
+                        dot_w,
+                        document_id=doc_id,
+                        region_id=f"{base_region.id}_{fill_pattern}_{i:03d}",
+                        layer=layer,
+                        z_index=z_index + 1,
+                        fill=color,
+                        stroke=None,
+                        opacity=opacity if opacity is not None else rng.uniform(0.25, 0.65),
+                    )
+                    r.clip_to = base_region.id
+                    r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
+                    created.append(r.id)
+
+    if created:
+        scene._persist(doc_id)
+    return created
+
+
 def create_tools(mcp):
     """Register region tools on the given FastMCP instance."""
 
@@ -142,6 +346,14 @@ def create_tools(mcp):
         handle_in: list[list[float]] | None = None,
         handle_out: list[list[float]] | None = None,
         groups: list[str] | None = None,
+        outline_pattern: str | None = None,
+        fill_pattern: str | None = None,
+        pattern_density: int = 12,
+        pattern_amplitude: float = 0.02,
+        pattern_jitter: float = 0.0,
+        pattern_seed: int = 1,
+        pattern_stroke_width: StrokeWidthInput = None,
+        pattern_opacity: float | None = None,
     ) -> str:
         """Create a vector region. Use ``outline`` for polygon/curve shapes,
         or ``shape`` dict for SVG primitives (rect, ellipse, line).
@@ -193,6 +405,14 @@ def create_tools(mcp):
                 region's bounding box, then mapped to absolute canvas coordinates.
                 💡 Place a bolt at (0.5, 0.5) on a belt panel without measuring.
             groups: Optional list of group names to add this region to.
+            outline_pattern: Optional primitive outline style: dashed, dotted,
+                wavy, zigzag, rough, sketch, tapered, or pressure.
+            fill_pattern: Optional clipped interior texture: hatch, cross_hatch,
+                contour_hatch, scribble, or stipple.
+            pattern_density/amplitude/jitter/seed: Controls for generated
+                outline/fill pattern overlays.
+            pattern_stroke_width: Pattern overlay stroke width in canvas pixels.
+            pattern_opacity: Pattern overlay opacity.
         """
         scene = get_graph()
         try:
@@ -201,6 +421,7 @@ def create_tools(mcp):
             return "Error: No active document. Call create_document first."
 
         stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
+        pattern_width = stroke_width_to_norm(doc_id, pattern_stroke_width) or stroke_width
 
         # Resolve z_index from z_before/z_after
         resolved_z = z_index
@@ -250,9 +471,16 @@ def create_tools(mcp):
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [r.id], doc_id)
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, fill_pattern,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
                     rxn = f", rx={shape.get('rx',0)}" if shape.get('rx',0) > 0 else ""
                     tpn = f", taper={shape.get('taper',0)}" if shape.get('taper',0) else ""
-                    return f"Rect created: id={r.id}, {shape.get('x',0):.4f},{shape.get('y',0):.4f} {shape.get('width',0):.4f}x{shape.get('height',0):.4f}{rxn}{tpn}"
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Rect created: id={r.id}, {shape.get('x',0):.4f},{shape.get('y',0):.4f} {shape.get('width',0):.4f}x{shape.get('height',0):.4f}{rxn}{tpn}{extra}"
                 elif stype == "ellipse":
                     e = scene.create_ellipse(
                         shape["cx"], shape["cy"], shape["rx"],
@@ -267,8 +495,15 @@ def create_tools(mcp):
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [e.id], doc_id)
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, e, outline_pattern, fill_pattern,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
                     rys = shape.get("ry", shape["rx"])
-                    return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}"
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}{extra}"
                 elif stype == "line":
                     pts = shape.get("points")
                     if pts is not None and len(pts) > 2:
@@ -302,24 +537,41 @@ def create_tools(mcp):
                 elif  stype == "arc":
                     pts = compute_arc(shape["cx"], shape["cy"], shape["r"],
                         start_angle=shape.get("start_angle", 0.0), end_angle=shape.get("end_angle", 180.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.5, closed=False),
                         style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     return f"Arc created: id={r.id}, ({shape['cx']:.4f},{shape['cy']:.4f}) r={shape['r']:.4f}"
                 elif  stype == "polygon":
                     pts = compute_polygon(shape["cx"], shape["cy"], shape["r"],
-                        sides=shape.get("sides", 6), rotate=shape.get("rotate", 0.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
+                        sides=shape.get("sides", 6), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
+                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
-                    return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, fill_pattern,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides{extra}"
                 elif  stype == "star":
+                    inner_radius = shape.get("r_inner")
+                    if inner_radius is None:
+                        inner_radius = shape["r"] * 0.5
                     pts = compute_star(shape["cx"], shape["cy"], shape["r"],
-                        r_inner=shape.get("r_inner"), points=shape.get("points", 5), rotate=shape.get("rotate", 0.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
+                        inner_radius, points=shape.get("points", 5), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
+                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
-                    return f"Star created: id={r.id}, {shape.get('points',5)} points"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, fill_pattern,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Star created: id={r.id}, {shape.get('points',5)} points{extra}"
                 else:
                     return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, arc, polygon, star"
             except (ValueError, RuntimeError, KeyError) as e:
@@ -375,6 +627,13 @@ def create_tools(mcp):
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
 
+        pattern_ids = _apply_primitive_patterns(
+            scene, doc_id, region, outline_pattern, fill_pattern,
+            pattern_density, pattern_amplitude, pattern_jitter,
+            pattern_seed, stroke, pattern_width, pattern_opacity,
+            layer, resolved_z,
+        )
+
         bounds = compute_bounds(region.outline)
         bounds_str = (
             f"x={bounds['x']:.4f} y={bounds['y']:.4f} "
@@ -393,6 +652,7 @@ def create_tools(mcp):
         return (
             f"Region created: id={region.id}, layer={region.layer}, "
             f"bounds=({bounds_str}), points={len(outline)}"
+            f"{', pattern_regions=' + str(len(pattern_ids)) if pattern_ids else ''}"
             f"{advisory}"
         )
 
@@ -435,6 +695,14 @@ def create_tools(mcp):
         blend_mode: BLEND_MODES | None = None,
         tags: dict | None = None,
         groups: list[str] | None = None,
+        outline_pattern: str | None = None,
+        fill_pattern: str | None = None,
+        pattern_density: int = 12,
+        pattern_amplitude: float = 0.02,
+        pattern_jitter: float = 0.0,
+        pattern_seed: int = 1,
+        pattern_stroke_width: StrokeWidthInput = None,
+        pattern_opacity: float | None = None,
     ) -> str:
         """Create an annular ellipse/arc band as a closed vector region.
 
@@ -460,6 +728,7 @@ def create_tools(mcp):
             return "Error: No active document. Call create_document first."
 
         stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
+        pattern_width = stroke_width_to_norm(doc_id, pattern_stroke_width) or stroke_width
 
         resolved_z = z_index
         try:
@@ -521,6 +790,12 @@ def create_tools(mcp):
             if groups:
                 for g in groups:
                     scene.add_to_group(g, [region.id], doc_id)
+            pattern_ids = _apply_primitive_patterns(
+                scene, doc_id, region, outline_pattern, fill_pattern,
+                pattern_density, pattern_amplitude, pattern_jitter,
+                pattern_seed, stroke, pattern_width, pattern_opacity,
+                layer, resolved_z,
+            )
         except (ValueError, RuntimeError, KeyError) as e:
             return f"Error: {e}"
 
@@ -535,6 +810,7 @@ def create_tools(mcp):
             f"Ellipse band created: id={region.id}, "
             f"bounds=({bounds_str}), points={len(region.outline)}, "
             f"angles={start_angle:g}→{end_angle:g}"
+            f"{', pattern_regions=' + str(len(pattern_ids)) if pattern_ids else ''}"
         )
 
     @mcp.tool(
@@ -572,6 +848,7 @@ def create_tools(mcp):
         "Only provided fields are changed; omitted fields keep their values. "
         "💡 Single-point editing: use ``point_index`` + ``point_coords`` "
         "to nudge one vertex without resending the whole outline. "
+        "Use transform_objects for whole-region move/scale/rotate/mirror/align. "
         "💡 Batch z-index: pass ids=[...] with z_index=N to reorder "
         "multiple regions at once.",
     )
@@ -582,8 +859,8 @@ def create_tools(mcp):
         outline: list[list[float]] | None = None,
         point_index: int | None = None,
         point_coords: list[float] | None = None,
-        dx: float | None = None,
-        dy: float | None = None,
+        point_dx: float | None = None,
+        point_dy: float | None = None,
         smoothness: float | None = None,
         smoothness_per_point: list[float] | None = None,
         fill: str | None = None,
@@ -610,12 +887,12 @@ def create_tools(mcp):
                 💡 Apply the same color/outline change to multiple regions at once.
             outline: New outline coordinates (omit to keep current).
             point_index: Index of a single outline point to move (requires
-                ``point_coords`` or ``dx``/``dy``). Avoids resending the
+                ``point_coords`` or ``point_dx``/``point_dy``). Avoids resending the
                 entire outline array when adjusting one vertex.
             point_coords: New ``[x, y]`` for the point at ``point_index``.
-                Mutually exclusive with ``dx``/``dy``.
-            dx: Horizontal offset for the point at ``point_index`` (relative).
-            dy: Vertical offset for the point at ``point_index`` (relative).
+                Mutually exclusive with ``point_dx``/``point_dy``.
+            point_dx: Horizontal offset for the point at ``point_index`` (relative).
+            point_dy: Vertical offset for the point at ``point_index`` (relative).
             smoothness: New smoothness value (omit to keep current).
             smoothness_per_point: JSON array of per-vertex tensions.
             fill: New fill hex color or gradient (omit to keep current).
@@ -661,7 +938,7 @@ def create_tools(mcp):
                     return f"Error: point_index {point_index} out of range (0-{len(_pts)-1})"
                 _pts[point_index] = (float(point_coords[0]), float(point_coords[1]))
                 outline = _pts
-            elif dx is not None or dy is not None:
+            elif point_dx is not None or point_dy is not None:
                 # Relative offset
                 _r = scene.get_region(target_ids[0], doc_id)
                 if _r is None:
@@ -669,8 +946,8 @@ def create_tools(mcp):
                 _pts = list(_r.outline)
                 if point_index < 0 or point_index >= len(_pts):
                     return f"Error: point_index {point_index} out of range (0-{len(_pts)-1})"
-                _off_x = dx if dx is not None else 0.0
-                _off_y = dy if dy is not None else 0.0
+                _off_x = point_dx if point_dx is not None else 0.0
+                _off_y = point_dy if point_dy is not None else 0.0
                 _pts[point_index] = (_pts[point_index][0] + _off_x,
                                      _pts[point_index][1] + _off_y)
                 outline = _pts
@@ -719,28 +996,14 @@ def create_tools(mcp):
         if region is None:
             raise ValueError(f"Region '{rid}' not found")
 
-        dx = upd.get("dx", 0.0)
-        dy = upd.get("dy", 0.0)
-        scale = upd.get("scale", 1.0)
-        rotate = upd.get("rotate", 0.0)
+        unsupported = [k for k in ("dx", "dy", "scale", "rotate") if k in upd]
+        if unsupported:
+            joined = ", ".join(unsupported)
+            raise ValueError(f"{joined} moved to transform_objects; edit_regions only edits content/style")
 
-        # Compute current center for scale/rotate pivot
         outline = list(region.outline)
-        if outline and (scale != 1.0 or rotate != 0.0 or dx != 0.0 or dy != 0.0):
-            xs = [p[0] for p in outline]
-            ys = [p[1] for p in outline]
-            cx = (min(xs) + max(xs)) / 2
-            cy = (min(ys) + max(ys)) / 2
-            rad = math.radians(rotate)
-            new_pts = []
-            for px, py in outline:
-                lx, ly = px - cx, py - cy
-                lx *= scale
-                ly *= scale
-                rx = lx * math.cos(rad) - ly * math.sin(rad)
-                ry = lx * math.sin(rad) + ly * math.cos(rad)
-                new_pts.append((round(rx + cx + dx, 6), round(ry + cy + dy, 6)))
-            outline = new_pts
+        if "outline" in upd:
+            outline = [(float(p[0]), float(p[1])) for p in upd["outline"]]
 
         style_kw = {}
         for key in ("fill", "stroke", "stroke_width", "opacity", "z_index",
@@ -750,10 +1013,10 @@ def create_tools(mcp):
                 style_kw[key] = upd[key]
 
         pi = upd.get("point_index")
-        if pi is not None and not (dx or dy):
+        if pi is not None:
             pc = upd.get("point_coords")
-            pdx = upd.get("pdx", 0.0)
-            pdy = upd.get("pdy", 0.0)
+            pdx = upd.get("point_dx", upd.get("pdx", 0.0))
+            pdy = upd.get("point_dy", upd.get("pdy", 0.0))
             if pi < 0 or pi >= len(outline):
                 raise IndexError(f"point_index {pi} out of range (0-{len(outline)-1})")
             if pc:
@@ -780,26 +1043,24 @@ def create_tools(mcp):
     @mcp.tool(
         name="edit_regions",
         description="Edit multiple regions in a single call, each with its own "
-        "relative transform (dx, dy, scale, rotate) or property override. "
-        "💡 Move a belt + buckle + gadgets together without extra union steps.\n"
-        'Example: [{"id":"belt","dx":-0.03},{"id":"belt_buckle","dx":-0.03}]',
+        "content/style override. Use transform_objects for move/scale/rotate/mirror/align. "
+        "💡 Recolor or relayer many regions without extra calls.\n"
+        'Example: [{"id":"belt","fill":"#222"},{"id":"belt_buckle","z_index":20}]',
     )
     def edit_regions(
         updates: list[dict],
         document_id: str | None = None,
     ) -> str:
-        """Edit multiple regions with per-region transforms.
+        """Edit multiple regions with per-region content/style updates.
 
         Args:
             updates: List of update objects, each with:
                 - ``id`` (required): Region ID.
-                - ``dx`` / ``dy``: Offset all outline points.
-                - ``scale``: Scale factor around region center.
-                - ``rotate``: Rotation in degrees around region center.
+                - ``outline``: Replace outline points.
                 - ``fill`` / ``stroke`` / ``stroke_width`` / ``opacity``: Override style.
                 - ``z_index``: Override paint order.
                 - ``layer``: Move to a different layer.
-                - ``point_index`` / ``point_coords`` / ``dx``: Nudge a single point.
+                - ``point_index`` / ``point_coords`` / ``point_dx`` / ``point_dy``: Edit one point.
                 Other ``edit_region`` fields also work.
             document_id: Document UUID (omit for active doc).
         """
@@ -1052,6 +1313,14 @@ def create_tools(mcp):
         closed: bool | None = None,
         groups: list[str] | None = None,
         relative_to: str | None = None,
+        outline_pattern: str | None = None,
+        fill_pattern: str | None = None,
+        pattern_density: int = 12,
+        pattern_amplitude: float = 0.02,
+        pattern_jitter: float = 0.0,
+        pattern_seed: int = 1,
+        pattern_stroke_width: StrokeWidthInput = None,
+        pattern_opacity: float | None = None,
     ) -> str:
         """Create an SVG primitive shape.
 
@@ -1088,6 +1357,13 @@ def create_tools(mcp):
                 region's bounding box, then mapped to absolute canvas coordinates.
                 💡 Place a bolt at (0.5, 0.5) on a belt panel without measuring.
             groups: Optional list of group names to add this region to.
+            outline_pattern: Optional outline style: dashed, dotted, wavy,
+                zigzag, rough, sketch, tapered, or pressure.
+            fill_pattern: Optional clipped interior texture for closed primitives:
+                hatch, cross_hatch, contour_hatch, scribble, or stipple.
+            pattern_density/amplitude/jitter/seed: Controls for generated pattern overlays.
+            pattern_stroke_width: Pattern overlay stroke width in canvas pixels.
+            pattern_opacity: Pattern overlay opacity.
         """
         scene = get_graph()
         try:
@@ -1096,6 +1372,7 @@ def create_tools(mcp):
             return "Error: No active document. Call create_document first."
 
         stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
+        pattern_width = stroke_width_to_norm(doc_id, pattern_stroke_width) or stroke_width
 
         # Resolve z_index from z_before/z_after
         resolved_z = z_index
@@ -1129,9 +1406,16 @@ def create_tools(mcp):
                 if groups:
                     for g in groups:
                         scene.add_to_group(g, [r.id], doc_id)
+                pattern_ids = _apply_primitive_patterns(
+                    scene, doc_id, r, outline_pattern, fill_pattern,
+                    pattern_density, pattern_amplitude, pattern_jitter,
+                    pattern_seed, stroke, pattern_width, pattern_opacity,
+                    layer, resolved_z,
+                )
                 rxn = f", rx={shape.get('rx',0)}" if shape.get('rx',0) > 0 else ""
                 tpn = f", taper={shape.get('taper',0)}" if shape.get('taper',0) else ""
-                return f"Rect created: id={r.id}, {shape['x']:.4f},{shape['y']:.4f} {shape['width']:.4f}x{shape['height']:.4f}{rxn}{tpn}"
+                extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                return f"Rect created: id={r.id}, {shape['x']:.4f},{shape['y']:.4f} {shape['width']:.4f}x{shape['height']:.4f}{rxn}{tpn}{extra}"
             elif stype == "ellipse":
                 e = scene.create_ellipse(
                     shape["cx"], shape["cy"], shape["rx"],
@@ -1146,8 +1430,15 @@ def create_tools(mcp):
                 if groups:
                     for g in groups:
                         scene.add_to_group(g, [e.id], doc_id)
+                pattern_ids = _apply_primitive_patterns(
+                    scene, doc_id, e, outline_pattern, fill_pattern,
+                    pattern_density, pattern_amplitude, pattern_jitter,
+                    pattern_seed, stroke, pattern_width, pattern_opacity,
+                    layer, resolved_z,
+                )
                 rys = shape.get("ry", shape["rx"])
-                return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}"
+                extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}{extra}"
             elif stype in ("line", "polyline"):
                 pts = shape.get("points")
                 if pts is not None:
@@ -1189,8 +1480,15 @@ def create_tools(mcp):
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [lr.id], doc_id)
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, lr, outline_pattern, fill_pattern if is_closed else None,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
                     closed_note = ", closed" if is_closed else ""
-                    return f"Polyline created: id={lr.id}, {len(pts)} points{closed_note}"
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Polyline created: id={lr.id}, {len(pts)} points{closed_note}{extra}"
                 else:
                     lr = scene.create_line(
                         shape.get("x1", 0.0), shape.get("y1", 0.0),
@@ -1206,7 +1504,14 @@ def create_tools(mcp):
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [lr.id], doc_id)
-                    return f"Line created: id={lr.id}, ({shape.get('x1',0):.4f},{shape.get('y1',0):.4f}) → ({shape.get('x2',0.5):.4f},{shape.get('y2',0.5):.4f})"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, lr, outline_pattern, None,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Line created: id={lr.id}, ({shape.get('x1',0):.4f},{shape.get('y1',0):.4f}) → ({shape.get('x2',0.5):.4f},{shape.get('y2',0.5):.4f}){extra}"
             elif stype in ("compound_path", "path"):
                     subpaths = shape.get("subpaths")
                     if subpaths is None and shape.get("points") is not None:
@@ -1231,28 +1536,59 @@ def create_tools(mcp):
                     if groups:
                         for g in groups:
                             scene.add_to_group(g, [r.id], doc_id)
-                    return f"Compound path created: id={r.id}, {len(subpaths)} subpath(s)"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, fill_pattern if r.constraints.closed else None,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Compound path created: id={r.id}, {len(subpaths)} subpath(s){extra}"
             elif stype == "arc":
                     pts = compute_arc(shape["cx"], shape["cy"], shape["r"],
                         start_angle=shape.get("start_angle", 0.0), end_angle=shape.get("end_angle", 180.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.5, closed=False),
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
-                    return f"Arc created: id={r.id}, ({shape['cx']:.4f},{shape['cy']:.4f}) r={shape['r']:.4f}"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, None,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Arc created: id={r.id}, ({shape['cx']:.4f},{shape['cy']:.4f}) r={shape['r']:.4f}{extra}"
             elif stype == "polygon":
                     pts = compute_polygon(shape["cx"], shape["cy"], shape["r"],
-                        sides=shape.get("sides", 6), rotate=shape.get("rotate", 0.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
+                        sides=shape.get("sides", 6), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
+                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
-                    return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, fill_pattern,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides{extra}"
             elif stype == "star":
+                    inner_radius = shape.get("r_inner")
+                    if inner_radius is None:
+                        inner_radius = shape["r"] * 0.5
                     pts = compute_star(shape["cx"], shape["cy"], shape["r"],
-                        r_inner=shape.get("r_inner"), points=shape.get("points", 5), rotate=shape.get("rotate", 0.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, layer=layer, z_index=resolved_z,
+                        inner_radius, points=shape.get("points", 5), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
+                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
-                    return f"Star created: id={r.id}, {shape.get('points',5)} points"
+                    pattern_ids = _apply_primitive_patterns(
+                        scene, doc_id, r, outline_pattern, fill_pattern,
+                        pattern_density, pattern_amplitude, pattern_jitter,
+                        pattern_seed, stroke, pattern_width, pattern_opacity,
+                        layer, resolved_z,
+                    )
+                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    return f"Star created: id={r.id}, {shape.get('points',5)} points{extra}"
             else:
                 return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, polyline, compound_path, path, arc, polygon, star"
         except (ValueError, RuntimeError, KeyError) as e:
@@ -1285,6 +1621,13 @@ def create_tools(mcp):
         stroke_linecap: str | None = "round",
         stroke_dasharray: str | None = None,
         relative_to: str | None = None,
+        outline_pattern: str | None = None,
+        pattern_density: int = 12,
+        pattern_amplitude: float = 0.02,
+        pattern_jitter: float = 0.0,
+        pattern_seed: int = 1,
+        pattern_stroke_width: StrokeWidthInput = None,
+        pattern_opacity: float | None = None,
     ) -> str:
         """Create a smooth curved line through 3+ control points.
 
@@ -1303,6 +1646,11 @@ def create_tools(mcp):
             stroke_dasharray: Dash pattern for strokes (e.g. "4,2").
             relative_to: Region ID to use as coordinate reference. Points are
                 treated as 0.0-1.0 fractions of the reference region's bounds.
+            outline_pattern: Optional line style overlay: dashed, dotted, wavy,
+                zigzag, rough, sketch, tapered, or pressure.
+            pattern_density/amplitude/jitter/seed: Controls for generated outline pattern.
+            pattern_stroke_width: Pattern overlay stroke width in canvas pixels.
+            pattern_opacity: Pattern overlay opacity.
         """
         scene = get_graph()
         try:
@@ -1311,6 +1659,7 @@ def create_tools(mcp):
             return "Error: No active document. Call create_document first."
 
         stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
+        pattern_width = stroke_width_to_norm(doc_id, pattern_stroke_width) or stroke_width
 
         if not points or len(points) < 2:
             return "Error: Need at least 2 points"
@@ -1345,10 +1694,17 @@ def create_tools(mcp):
                     stroke_dasharray=stroke_dasharray,
                     smoothness=smoothness,
                 )
+            pattern_ids = _apply_primitive_patterns(
+                scene, doc_id, lr, outline_pattern, None,
+                pattern_density, pattern_amplitude, pattern_jitter,
+                pattern_seed, stroke, pattern_width, pattern_opacity,
+                layer, z_index,
+            )
             return (
                 f"Curve created: id={lr.id}, {len(points)} points, "
                 f"smoothness={smoothness}, stroke_width={stroke_width}, "
                 f"stroke_linecap='{stroke_linecap}'"
+                f"{', pattern_regions=' + str(len(pattern_ids)) if pattern_ids else ''}"
             )
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"

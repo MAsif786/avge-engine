@@ -6,7 +6,7 @@
   "type": "object",
   "properties": {
     "outline": {
-      "type": "array",
+      "type": ["array", "null"],
       "description": "Point coordinate pairs in normalized space (0.0–1.0). Keep to 3–30 points for best quality.",
       "items": {
         "type": "array",
@@ -84,6 +84,64 @@
       "minimum": 0.0,
       "maximum": 1.0
     },
+    "shape": {
+      "type": ["object", "null"],
+      "description": "Optional primitive shape. Supported types include rect, ellipse, line, polyline, compound_path, arc, polygon, and star.",
+      "additionalProperties": true,
+      "default": null
+    },
+    "outline_pattern": {
+      "type": ["string", "null"],
+      "description": "Optional generated outline style for primitive shapes.",
+      "enum": ["dashed", "dotted", "wavy", "zigzag", "rough", "sketch", "tapered", "pressure", null],
+      "default": null
+    },
+    "fill_pattern": {
+      "type": ["string", "null"],
+      "description": "Optional generated interior texture clipped to the primitive shape.",
+      "enum": ["hatch", "cross_hatch", "contour_hatch", "scribble", "stipple", null],
+      "default": null
+    },
+    "pattern_density": {
+      "type": "integer",
+      "description": "Density/count for generated outline or fill pattern overlays.",
+      "minimum": 1,
+      "maximum": 600,
+      "default": 12
+    },
+    "pattern_amplitude": {
+      "type": "number",
+      "description": "Wave/zigzag/contour amplitude in normalized units.",
+      "minimum": 0.0,
+      "maximum": 0.5,
+      "default": 0.02
+    },
+    "pattern_jitter": {
+      "type": "number",
+      "description": "Random variation in normalized units for rough/sketch/scribble effects.",
+      "minimum": 0.0,
+      "maximum": 0.25,
+      "default": 0.0
+    },
+    "pattern_seed": {
+      "type": "integer",
+      "description": "Deterministic seed for generated pattern variation.",
+      "default": 1
+    },
+    "pattern_stroke_width": {
+      "type": ["number", "null"],
+      "description": "Pattern overlay stroke width in canvas pixels.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "pattern_opacity": {
+      "type": ["number", "null"],
+      "description": "Pattern overlay opacity.",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": null
+    },
     "metadata_tags": {
       "type": "array",
       "description": "Optional semantic tags (stored as opaque strings — engine never interprets).",
@@ -91,6 +149,9 @@
       "maxItems": 32
     }
   },
-  "required": ["outline"],
+  "anyOf": [
+    { "required": ["outline"] },
+    { "required": ["shape"] }
+  ],
   "additionalProperties": false
 }

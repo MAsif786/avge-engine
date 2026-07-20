@@ -46,7 +46,8 @@ app = FastAPI(
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
-    "color-dodge", "color-burn", "soft-light", "hard-light",
+    "color-dodge", "linear-dodge", "color-burn", "soft-light", "hard-light",
+    "difference", "hue", "saturation", "color", "luminosity", "add",
 ]
 
 BOOLEAN_OPS = Literal["union", "intersect", "subtract", "xor"]
@@ -80,6 +81,12 @@ class DeleteDocumentRequest(BaseModel):
     confirm: bool = False
 
 
+class CloneDocumentRequest(BaseModel):
+    source_document_id: str | None = None
+    name: str | None = Field(default=None, max_length=128)
+    set_active: bool = True
+
+
 # ── Region ─────────────────────────────────────────────────────────
 
 class CreateRegionRequest(BaseModel):
@@ -106,6 +113,7 @@ class CreateRegionRequest(BaseModel):
     tags: dict | None = None
     shape: dict | None = None
     stroke_linecap: str | None = None
+    blur: float = Field(default=0.0, ge=0.0, le=80.0)
 
 
 class EditRegionRequest(BaseModel):
@@ -130,6 +138,7 @@ class EditRegionRequest(BaseModel):
     tags: dict | None = None
     shape: dict | None = None
     stroke_linecap: str | None = None
+    blur: float | None = Field(default=None, ge=0.0, le=80.0)
 
 
 class DeleteRegionRequest(BaseModel):
@@ -304,6 +313,12 @@ class DocIdLimitBody(BaseModel):
     limit: int = 20
 
 
+class CritiqueRequest(BaseModel):
+    document_id: str
+    mode: Literal["rules", "visual", "both"] = "both"
+    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 # ── Health ─────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -371,6 +386,30 @@ async def delete_document(req: DeleteDocumentRequest):
     if errors:
         result["errors"] = errors
     return ToolResponse(data=result)
+
+
+@app.post("/tools/clone_document", response_model=ToolResponse)
+async def clone_document(req: CloneDocumentRequest):
+    graph = get_graph()
+    try:
+        doc = graph.clone_document(
+            source_document_id=req.source_document_id,
+            name=req.name,
+            set_active=req.set_active,
+        )
+        desc = graph.describe_scene(doc.id)
+        return ToolResponse(data={
+            "source_document_id": req.source_document_id,
+            "document_id": doc.id,
+            "name": doc.name or "",
+            "width": doc.width,
+            "height": doc.height,
+            "region_count": desc["region_count"],
+        })
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/load_document", response_model=ToolResponse)
@@ -444,6 +483,7 @@ async def create_region(req: CreateRegionRequest):
             stroke_width=stroke_width,
             opacity=max(0.0, min(1.0, req.opacity)),
             blend_mode=req.blend_mode,
+            blur=req.blur,
         )
         metadata = {}
         if req.tags:
@@ -494,6 +534,7 @@ async def edit_region(req: EditRegionRequest):
             z_index=req.z_index, blend_mode=req.blend_mode,
             clip_to=req.clip_to, layer=req.layer,
             metadata=metadata,
+            blur=req.blur,
         )
         return ToolResponse(data={"region_id": req.region_id})
     except ValueError as e:
@@ -949,13 +990,22 @@ async def find_objects(req: FindObjectsRequest):
     return ToolResponse(data={"results": results, "count": len(results)})
 
 
-@app.post("/tools/critique_composition", response_model=ToolResponse)
-async def critique_composition(req: DocIdBody):
+@app.post("/tools/critique", response_model=ToolResponse)
+async def critique(req: CritiqueRequest):
     graph = get_graph()
     if not graph.has_document(req.document_id):
         raise HTTPException(status_code=404, detail="Document not found")
-    findings = graph.critique_composition(req.document_id)
-    return ToolResponse(data={"findings": findings, "count": len(findings)})
+    rules = graph.critique_composition(req.document_id) if req.mode in ("rules", "both") else []
+    visual = [
+        f for f in graph.critique_preview_quality(req.document_id)
+        if f.get("confidence", 0.0) >= req.min_confidence
+    ] if req.mode in ("visual", "both") else []
+    return ToolResponse(data={
+        "mode": req.mode,
+        "rules": {"findings": rules, "count": len(rules)},
+        "visual": {"findings": visual, "count": len(visual)},
+        "count": len(rules) + len(visual),
+    })
 
 
 @app.post("/tools/list_layers", response_model=ToolResponse)

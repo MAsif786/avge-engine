@@ -1,13 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "edit_region",
-  "description": "Modify an existing region's outline, smoothness, style, or z_index. Only provided fields change.",
+  "description": "Modify an existing region's outline, single points, smoothness, style, layer, clipping, metadata, shape, or z_index. Use transform_objects for whole-region move/scale/rotate/mirror/align.",
   "type": "object",
   "properties": {
-    "region_id": {"type": "string"},
-    "document_id": {"type": "string"},
-    "outline": {"type": "array", "items": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}]}},
+    "region_id": {"type": ["string", "null"]},
+    "ids": {
+      "type": ["array", "null"],
+      "items": {"type": "string"},
+      "minItems": 1
+    },
+    "document_id": {"type": ["string", "null"]},
+    "outline": {
+      "type": ["array", "null"],
+      "items": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "minItems": 2, "maxItems": 2},
+      "minItems": 2
+    },
+    "point_index": {"type": ["integer", "null"], "minimum": 0},
+    "point_coords": {
+      "type": ["array", "null"],
+      "prefixItems": [{"type": "number"}, {"type": "number"}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "point_dx": {"type": ["number", "null"]},
+    "point_dy": {"type": ["number", "null"]},
     "smoothness": {"type": "number", "minimum": 0, "maximum": 1},
+    "smoothness_per_point": {
+      "type": ["array", "null"],
+      "items": {"type": "number", "minimum": 0, "maximum": 1}
+    },
     "fill": {"type": "string"},
     "stroke": {"type": "string"},
     "stroke_width": {
@@ -18,7 +40,28 @@
     },
     "opacity": {"type": "number", "minimum": 0, "maximum": 1},
     "z_index": {"type": "integer"},
-    "layer": {"type": "string"}
+    "blend_mode": {
+      "type": ["string", "null"],
+      "enum": ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "linear-dodge", "color-burn", "soft-light", "hard-light", "difference", "hue", "saturation", "color", "luminosity", "add", null]
+    },
+    "clip_to": {"type": ["string", "null"]},
+    "layer": {"type": "string"},
+    "tags": {"type": ["object", "null"]},
+    "shape": {"type": ["object", "null"]},
+    "stroke_linecap": {"type": ["string", "null"], "enum": ["butt", "round", "square", null]},
+    "stroke_dasharray": {"type": ["string", "null"]},
+    "handle_in": {
+      "type": ["array", "null"],
+      "items": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "minItems": 2, "maxItems": 2}
+    },
+    "handle_out": {
+      "type": ["array", "null"],
+      "items": {"type": "array", "prefixItems": [{"type": "number"}, {"type": "number"}], "minItems": 2, "maxItems": 2}
+    }
   },
-  "required": ["region_id"]
+  "anyOf": [
+    {"required": ["region_id"]},
+    {"required": ["ids"]}
+  ],
+  "additionalProperties": false
 }

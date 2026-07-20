@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/apply_line_hierarchy/v1.json",
+  "title": "apply_line_hierarchy",
+  "description": "Apply consistent stroke-weight hierarchy to all regions or to a shared selector.",
+  "type": "object",
+  "properties": {
+    "document_id": { "type": ["string", "null"] },
+    "selector": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector",
+      "description": "Shared selector. Omit/null to process all regions."
+    },
+    "outer_width": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/stroke_width",
+      "default": 6
+    },
+    "inner_width": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/stroke_width",
+      "default": 3
+    },
+    "basis": {
+      "type": "string",
+      "enum": ["z_index", "layer", "bounding_size"],
+      "default": "z_index"
+    }
+  },
+  "additionalProperties": false
+}

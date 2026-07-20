@@ -149,6 +149,47 @@ class SceneGraph:
         self._persist(doc_id)
         return doc
 
+    def clone_document(
+        self,
+        source_document_id: str | None = None,
+        name: str | None = None,
+        set_active: bool = True,
+    ) -> DocumentNode:
+        """Deep-copy a document and all of its regions into a new document ID."""
+        source_id = self._resolve_doc(source_document_id)
+        if source_id not in self._docs and self._storage:
+            self.load_document(source_id)
+        source = self.get_document(source_id)
+        clone_id = f"doc_{uuid.uuid4().hex[:12]}"
+        import datetime as _dt
+        now = _dt.datetime.now().isoformat()
+        clone = source.model_copy(deep=True)
+        clone.id = clone_id
+        clone.name = name if name is not None else f"{source.name or 'Untitled'} copy"
+        clone.version = 1
+        clone.created_at = now
+        clone.updated_at = now
+        clone.gradients = copy.deepcopy(source.gradients)
+
+        self._docs[clone_id] = clone
+        self._regions_by_doc[clone_id] = {
+            rid: region.model_copy(deep=True)
+            for rid, region in self._regions_by_doc.get(source_id, {}).items()
+        }
+
+        if hasattr(self, "_groups") and self._groups:
+            source_prefix = f"{source_id}::"
+            clone_prefix = f"{clone_id}::"
+            for key, ids in list(self._groups.items()):
+                if key.startswith(source_prefix):
+                    self._groups[f"{clone_prefix}{key[len(source_prefix):]}"] = list(ids)
+
+        if set_active:
+            self._last_doc_id = clone_id
+        self._auto_checkpoint(clone_id, "clone_document", f"from {source_id}")
+        self._persist(clone_id)
+        return clone
+
     def get_document(self, document_id: str) -> DocumentNode:
         """Get a document by ID. Raises ValueError if not found."""
         doc = self._docs.get(document_id)
@@ -769,7 +810,7 @@ class SceneGraph:
                     "high" if flat_ratio > 0.85 else "medium",
                     flat_ratio,
                     f"{len(flat)} of {len(filled)} filled regions are opaque flat colors with little depth treatment.",
-                    "Use restyle(material=...), fill_gradient, add_depth_shadow, or add_shading on major objects.",
+                    "Use restyle(material=...), fill_gradient, create_shadow, or add_shading on major objects.",
                     [r.id for r in flat[:6]],
                 )
 
@@ -811,7 +852,7 @@ class SceneGraph:
                 "high" if len(candidates) >= 3 else "medium",
                 0.82,
                 f"{len(candidates)} sizeable lower-scene object(s) have no visible contact/depth shadow.",
-                "Call add_depth_shadow(region_id, direction=90, distance=0.03, softness=5, sy=0.35) for grounded objects.",
+                "Call create_shadow(region_id, direction=90, distance=0.03, softness=5, sy=0.35) for grounded objects.",
                 candidates[:6],
             )
         elif len(candidates) >= 4 and len(shadows) < len(candidates) // 3:
@@ -1428,7 +1469,11 @@ class SceneGraph:
                         rotate=op.get("rotate", 0.0),
                     )
                     results.append({"status": "ok", "region_id": d.id})
-                elif tool == "add_depth_shadow":
+                elif tool == "create_shadow":
+                    receiver_id = op.get("onto_region_id")
+                    resolved_z_offset = op.get("z_offset")
+                    if resolved_z_offset is None:
+                        resolved_z_offset = 1 if receiver_id else -1
                     shadow = self.add_depth_shadow(
                         op.pop("region_id"),
                         document_id=doc_id,
@@ -1441,32 +1486,15 @@ class SceneGraph:
                         scale=op.get("scale", 1.0),
                         sx=op.get("sx"),
                         sy=op.get("sy"),
-                        z_offset=op.get("z_offset", -1),
+                        z_offset=0 if receiver_id else resolved_z_offset,
+                        clip_to=receiver_id,
+                        layer=self.get_region(receiver_id, doc_id).layer if receiver_id else None,
                     )
-                    results.append({"status": "ok", "region_id": shadow.id})
-                elif tool == "cast_shadow":
-                    from_id = op.pop("from_region_id")
-                    onto_id = op.pop("onto_region_id")
-                    onto = self.get_region(onto_id, doc_id)
-                    shadow = self.add_depth_shadow(
-                        from_id,
-                        document_id=doc_id,
-                        new_region_id=op.get("new_region_id"),
-                        direction=op.get("direction", 45.0),
-                        distance=op.get("distance", 0.04),
-                        softness=op.get("softness", 5.0),
-                        opacity=op.get("opacity", 0.20),
-                        color=op.get("color", "#000000"),
-                        scale=op.get("scale", 1.0),
-                        sx=op.get("sx"),
-                        sy=op.get("sy"),
-                        z_offset=0,
-                        clip_to=onto_id,
-                        layer=onto.layer,
-                    )
-                    shadow.z_index = onto.z_index + op.get("z_offset", 1)
-                    self.get_document(doc_id).version += 1
-                    self._persist(doc_id)
+                    if receiver_id:
+                        onto = self.get_region(receiver_id, doc_id)
+                        shadow.z_index = onto.z_index + resolved_z_offset
+                        self.get_document(doc_id).version += 1
+                        self._persist(doc_id)
                     results.append({"status": "ok", "region_id": shadow.id})
                 elif tool == "create_primitive":
                     # Alias — same logic as create_shape
@@ -1805,6 +1833,7 @@ class SceneGraph:
         shape: dict | None = None,
         stroke_linecap: str | None = None,
         stroke_dasharray: str | None = None,
+        blur: float | None = None,
     ) -> bool:
         """Modify an existing region's properties. Only provided fields are changed."""
         doc_id = self._resolve_doc(document_id)
@@ -1849,7 +1878,7 @@ class SceneGraph:
                 handle_in=handle_in if handle_in is not None else old_c.handle_in,
                 handle_out=handle_out if handle_out is not None else old_c.handle_out,
             )
-        if fill is not None or stroke is not None or stroke_width is not None or opacity is not None or blend_mode is not None or stroke_linecap is not None or stroke_dasharray is not None:
+        if fill is not None or stroke is not None or stroke_width is not None or opacity is not None or blend_mode is not None or stroke_linecap is not None or stroke_dasharray is not None or blur is not None:
             old_s = region.style
             region.style = Style(
                 fill=fill if fill is not None else old_s.fill,
@@ -1859,6 +1888,7 @@ class SceneGraph:
                 blend_mode=blend_mode if blend_mode is not None else old_s.blend_mode,
                 stroke_linecap=stroke_linecap if stroke_linecap is not None else old_s.stroke_linecap,
                 stroke_dasharray=stroke_dasharray if stroke_dasharray is not None else old_s.stroke_dasharray,
+                blur=blur if blur is not None else old_s.blur,
             )
         if z_index is not None:
             region.z_index = z_index
@@ -2514,6 +2544,7 @@ class SceneGraph:
         clip_to: str | None = None,
         stroke_linecap: str | None = None,
         stroke_dasharray: str | None = None,
+        blur: float | None = None,
         fill_hsl_offset: dict | None = None,
         stroke_hsl_offset: dict | None = None,
     ) -> list[str]:
@@ -2566,6 +2597,7 @@ class SceneGraph:
                 blend_mode=blend_mode if blend_mode is not None else old.blend_mode,
                 stroke_linecap=stroke_linecap if stroke_linecap is not None else old.stroke_linecap,
                 stroke_dasharray=stroke_dasharray if stroke_dasharray is not None else old.stroke_dasharray,
+                blur=blur if blur is not None else old.blur,
             )
             region.style = new_style
             if clip_to is not None:

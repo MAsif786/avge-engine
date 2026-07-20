@@ -173,10 +173,10 @@ def load_tool_reference() -> str:
 
 # ── Centralized tool map — single source of truth ────────────────
 
-TOOL_MAP = """📋 TOOL MAP (53 tools — all available in batch):
+TOOL_MAP = """📋 TOOL MAP (56 tools — all available in batch):
 
 🗂 Document:   create_document · list_documents · load_document ·
-               delete_document · set_background
+               clone_document · delete_document · set_background
 ✏️  Create:     create_region · create_primitive · create_curve ·
                create_ellipse_band · generate_cloud · create_text ·
                insert_image · import_svg_path
@@ -185,15 +185,16 @@ TOOL_MAP = """📋 TOOL MAP (53 tools — all available in batch):
 🔄 Transform:  transform_objects · project_quad · create_perspective_grid ·
                create_facade_grid · create_surface_stripes · duplicate ·
                boolean_operation
-🕶 Depth:      add_depth_shadow · cast_shadow · add_shading
-🎨 Style:      restyle · apply_depth_haze · add_bumps ·
+🕶 Depth:      create_shadow · add_shading
+🎨 Style:      restyle · apply_brush_style · set_layer_role ·
+               apply_texture_effect · apply_depth_haze · add_bumps ·
                generate_palette · define_gradient ·
                apply_line_hierarchy · compare_style_consistency
                (restyle supports material presets: glass, brushed_metal,
                concrete, wood, tile, foliage)
 👥 Groups:     edit_group · list_groups · list_layers · shift_layer_z
-🔷 Procedural: generate_shape (19 patterns — see tool description)
-👁 View:       describe_scene · critique_preview · render_preview ·
+🔷 Procedural: create_line_pattern · generate_shape (19 patterns — see tool description)
+👁 View:       describe_scene · critique · render_preview ·
                render_diff · checkpoint_diff · export_svg
 📜 History:    checkpoint · restore · get_history
 ⚡ Batch:      batch (wraps ALL tools above)

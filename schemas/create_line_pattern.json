@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_line_pattern/v1.json",
+  "title": "create_line_pattern",
+  "description": "Create procedural artistic linework: wavy, zigzag, spiral, hatch, cross-hatch, contour hatch, scribble, stipple, and true tapered/pressure-width strokes.",
+  "type": "object",
+  "properties": {
+    "pattern": {
+      "type": "string",
+      "enum": ["straight", "curve", "wavy", "zigzag", "spiral", "hatch", "cross_hatch", "contour_hatch", "scribble", "stipple"]
+    },
+    "document_id": { "type": ["string", "null"], "default": null },
+    "region_id": {
+      "type": ["string", "null"],
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$",
+      "default": null
+    },
+    "points": {
+      "type": ["array", "null"],
+      "description": "Control points for straight, curve, wavy, and zigzag patterns.",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      },
+      "default": null
+    },
+    "bounds": {
+      "type": ["array", "null"],
+      "description": "[x, y, width, height] for hatch, cross_hatch, contour_hatch, scribble, and stipple fields.",
+      "prefixItems": [
+        { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0 },
+        { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0 }
+      ],
+      "minItems": 4,
+      "maxItems": 4,
+      "default": null
+    },
+    "center": {
+      "type": ["array", "null"],
+      "description": "Spiral center point.",
+      "prefixItems": [
+        { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+      ],
+      "minItems": 2,
+      "maxItems": 2,
+      "default": null
+    },
+    "radius": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 1.0, "default": 0.15 },
+    "turns": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 16.0, "default": 2.0 },
+    "count": { "type": "integer", "minimum": 1, "maximum": 240, "default": 12 },
+    "amplitude": { "type": "number", "minimum": 0.0, "maximum": 0.5, "default": 0.025 },
+    "frequency": { "type": "number", "exclusiveMinimum": 0.0, "maximum": 64.0, "default": 6.0 },
+    "angle": { "type": "number", "minimum": -360.0, "maximum": 360.0, "default": 0.0 },
+    "jitter": { "type": "number", "minimum": 0.0, "maximum": 0.25, "default": 0.0 },
+    "density": { "type": "integer", "minimum": 1, "maximum": 600, "default": 16 },
+    "seed": { "type": "integer", "default": 1 },
+    "stroke": { "type": ["string", "null"], "default": "#333333" },
+    "stroke_width": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "opacity": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0, "default": null },
+    "linecap": { "type": "string", "enum": ["butt", "round", "square"], "default": "round" },
+    "dash": { "type": ["string", "null"], "default": null },
+    "width_profile": { "type": "string", "enum": ["uniform", "tapered", "pressure"], "default": "uniform" },
+    "start_width": {
+      "type": ["number", "null"],
+      "description": "Start width in canvas pixels for tapered/pressure profiles.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "end_width": {
+      "type": ["number", "null"],
+      "description": "End width in canvas pixels for tapered/pressure profiles.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "layer": { "type": "string", "default": "linework", "maxLength": 64 },
+    "z_index": { "type": "integer", "default": 0 },
+    "smoothness": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.45 },
+    "role": {
+      "type": "string",
+      "enum": ["art", "construction", "center", "contour", "cross_contour", "gesture", "decorative", "implied"],
+      "default": "art"
+    }
+  },
+  "required": ["pattern"],
+  "additionalProperties": false
+}

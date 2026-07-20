@@ -63,6 +63,53 @@
       "type": ["array", "null"],
       "items": { "type": "string" },
       "default": null
+    },
+    "outline_pattern": {
+      "type": ["string", "null"],
+      "description": "Optional generated outline style.",
+      "enum": ["dashed", "dotted", "wavy", "zigzag", "rough", "sketch", "tapered", "pressure", null],
+      "default": null
+    },
+    "fill_pattern": {
+      "type": ["string", "null"],
+      "description": "Optional generated interior texture clipped to the ellipse band.",
+      "enum": ["hatch", "cross_hatch", "contour_hatch", "scribble", "stipple", null],
+      "default": null
+    },
+    "pattern_density": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 600,
+      "default": 12
+    },
+    "pattern_amplitude": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 0.5,
+      "default": 0.02
+    },
+    "pattern_jitter": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 0.25,
+      "default": 0.0
+    },
+    "pattern_seed": {
+      "type": "integer",
+      "default": 1
+    },
+    "pattern_stroke_width": {
+      "type": ["number", "null"],
+      "description": "Pattern overlay stroke width in canvas pixels.",
+      "minimum": 0.0,
+      "maximum": 512,
+      "default": null
+    },
+    "pattern_opacity": {
+      "type": ["number", "null"],
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": null
     }
   },
   "required": ["cx", "cy", "rx"],

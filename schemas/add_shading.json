@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/add_shading/v1.json",
+  "title": "add_shading",
+  "description": "Add directional shading to one region or a shared selector of regions.",
+  "type": "object",
+  "properties": {
+    "region_id": {
+      "type": ["string", "null"],
+      "description": "Legacy single region ID to shade."
+    },
+    "selector": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector",
+      "description": "Shared selector. Use for batch shading by ids, group_name, layer, fill, tags, bounds, z_min, z_max, or has_stroke."
+    },
+    "light_direction": {
+      "type": "number",
+      "description": "Angle in degrees, where 0 points right and 90 points down in canvas coordinates.",
+      "default": 135
+    },
+    "document_id": { "type": ["string", "null"] },
+    "intensity": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["two_tone", "gradient"],
+      "default": "two_tone"
+    },
+    "highlight_color": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color"
+    },
+    "mid_color": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color"
+    },
+    "shadow_color": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color"
+    }
+  },
+  "anyOf": [
+    { "required": ["region_id"] },
+    { "required": ["selector"] }
+  ],
+  "additionalProperties": false
+}

@@ -1,10 +1,11 @@
-"""Query controller — find_objects, critique_composition, list_layers, reorder_layer."""
+"""Query controller — find_objects, critique, list_layers, reorder_layer."""
 from __future__ import annotations
 
 import json as _json
-from typing import Any
+from typing import Any, Literal
 
 from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.controllers.selectors import select_region_ids
 
 
 def create_tools(mcp):
@@ -12,7 +13,7 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="find_objects",
-        description="Query regions by visual properties and bounds. "
+        description="Query regions with the shared selector schema or legacy top-level filters. "
         "Lets you target e.g. 'all regions with fill #E8D4B0' for a "
         "palette-wide recolor without tracking every ID manually. "
         "Filters are AND-ed together; omit a filter to skip it. "
@@ -21,6 +22,7 @@ def create_tools(mcp):
     )
     def find_objects(
         document_id: str | None = None,
+        selector: dict[str, Any] | None = None,
         fill: str | None = None,
         min_x: float | None = None,
         max_x: float | None = None,
@@ -40,6 +42,8 @@ def create_tools(mcp):
 
         Args:
             document_id: Document UUID (omit to use active document).
+            selector: Shared selector. Keys: ids, group_name, layer, fill,
+                tags, bounds, z_min, z_max, has_stroke.
             fill: Filter by fill color (exact match).
             min_x: Minimum X bound.
             max_x: Maximum X bound.
@@ -61,19 +65,25 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document — call create_document first"
 
-        parsed_tags = dict(tags) if tags else None
-        results = scene.find_objects(
-            document_id=doc_id,
-            fill=fill,
-            min_x=min_x, max_x=max_x,
-            min_y=min_y, max_y=max_y,
-            min_w=min_w, max_w=max_w,
-            min_h=min_h, max_h=max_h,
-            z_min=z_min, z_max=z_max,
-            has_stroke=has_stroke,
-            layer=layer,
-            tags=parsed_tags,
-        )
+        if selector is not None:
+            target_ids = select_region_ids(scene, doc_id, selector)
+            all_results = scene.find_objects(document_id=doc_id)
+            target_set = set(target_ids)
+            results = [r for r in all_results if r["id"] in target_set]
+        else:
+            parsed_tags = dict(tags) if tags else None
+            results = scene.find_objects(
+                document_id=doc_id,
+                fill=fill,
+                min_x=min_x, max_x=max_x,
+                min_y=min_y, max_y=max_y,
+                min_w=min_w, max_w=max_w,
+                min_h=min_h, max_h=max_h,
+                z_min=z_min, z_max=z_max,
+                has_stroke=has_stroke,
+                layer=layer,
+                tags=parsed_tags,
+            )
 
         if not results:
             return "No matching regions found"
@@ -97,54 +107,25 @@ def create_tools(mcp):
         return "\n".join(lines)
 
     @mcp.tool(
-        name="critique_composition",
-        description="Auto-check the scene against design skill rules. "
-        "Returns structured findings about stroke-width uniformity, "
-        "palette size, depth shading, and off-canvas objects. "
-        "The mechanical version of the Design Skill checklist. "
-        "💡 Call after completing each major object, not only once "
-        "before finishing — catches perspective/grounding mismatches "
-        "while they're still cheap to fix.",
+        name="critique",
+        description="Run scene critique checks. mode='rules' runs mechanical design-rule checks "
+        "for stroke hierarchy, palette size, depth shading, overlap, and off-canvas objects. "
+        "mode='visual' runs preview-quality checks for too_flat, over_rounded, "
+        "missing_contact_shadows, bad_perspective, and dominant_blob_shape. "
+        "mode='both' returns both sections.",
     )
-    def critique_composition(document_id: str | None = None) -> str:
-        """Auto-check scene composition against design skill rules.
-
-        Args:
-            document_id: Document UUID (omit to use active document).
-        """
-        scene = get_graph()
-        try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document — call create_document first"
-
-        findings = scene.critique_composition(document_id=doc_id)
-
-        if not findings:
-            return "No issues found — scene looks good."
-
-        lines = [f"Composition critique ({len(findings)} finding(s)):"]
-        for i, f in enumerate(findings, 1):
-            lines.append(f"  {i}. {f}")
-        return "\n".join(lines)
-
-    @mcp.tool(
-        name="critique_preview",
-        description="Preview-quality visual critique. Flags likely visual issues "
-        "such as too_flat, over_rounded, missing_contact_shadows, "
-        "bad_perspective, and dominant_blob_shape. Returns actionable "
-        "suggestions with affected region IDs.",
-    )
-    def critique_preview(
+    def critique(
         document_id: str | None = None,
+        mode: Literal["rules", "visual", "both"] = "both",
         min_confidence: float = 0.0,
         as_json: bool = False,
     ) -> str:
-        """Critique preview-quality issues using scene geometry/style signals.
+        """Critique a scene using rule-based checks, visual-quality checks, or both.
 
         Args:
             document_id: Document UUID (omit to use active document).
-            min_confidence: Hide findings below this confidence threshold.
+            mode: "rules", "visual", or "both".
+            min_confidence: Hide visual findings below this confidence threshold.
             as_json: Return JSON for automated consumers.
         """
         scene = get_graph()
@@ -153,27 +134,47 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document — call create_document first"
 
-        findings = [
+        include_rules = mode in ("rules", "both")
+        include_visual = mode in ("visual", "both")
+        rule_findings = scene.critique_composition(document_id=doc_id) if include_rules else []
+        visual_findings = [
             f for f in scene.critique_preview_quality(document_id=doc_id)
             if f.get("confidence", 0.0) >= min_confidence
-        ]
+        ] if include_visual else []
 
         if as_json:
-            return _json.dumps({"findings": findings, "count": len(findings)}, indent=2)
+            return _json.dumps({
+                "mode": mode,
+                "rules": {"findings": rule_findings, "count": len(rule_findings)},
+                "visual": {"findings": visual_findings, "count": len(visual_findings)},
+                "count": len(rule_findings) + len(visual_findings),
+            }, indent=2)
 
-        if not findings:
-            return "No preview-quality issues found."
+        if not rule_findings and not visual_findings:
+            return f"No {mode} critique issues found."
 
-        lines = [f"Preview critique ({len(findings)} finding(s)):"]
-        for i, f in enumerate(findings, 1):
-            ids = f.get("region_ids") or []
-            id_note = f" regions={', '.join(ids)}" if ids else ""
-            lines.append(
-                f"  {i}. [{f['severity']}] {f['code']} "
-                f"(confidence={f['confidence']:.2f}){id_note}"
-            )
-            lines.append(f"     {f['message']}")
-            lines.append(f"     Suggestion: {f['suggestion']}")
+        lines = [f"Critique ({mode}, {len(rule_findings) + len(visual_findings)} finding(s)):"]
+        if include_rules:
+            lines.append(f"Rules ({len(rule_findings)} finding(s)):")
+            if rule_findings:
+                for i, f in enumerate(rule_findings, 1):
+                    lines.append(f"  {i}. {f}")
+            else:
+                lines.append("  No rule-based issues found.")
+        if include_visual:
+            lines.append(f"Visual ({len(visual_findings)} finding(s)):")
+            if visual_findings:
+                for i, f in enumerate(visual_findings, 1):
+                    ids = f.get("region_ids") or []
+                    id_note = f" regions={', '.join(ids)}" if ids else ""
+                    lines.append(
+                        f"  {i}. [{f['severity']}] {f['code']} "
+                        f"(confidence={f['confidence']:.2f}){id_note}"
+                    )
+                    lines.append(f"     {f['message']}")
+                    lines.append(f"     Suggestion: {f['suggestion']}")
+            else:
+                lines.append("  No visual-quality issues found.")
         return "\n".join(lines)
 
     @mcp.tool(

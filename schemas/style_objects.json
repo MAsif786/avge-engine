@@ -6,31 +6,25 @@
   "type": "object",
   "properties": {
     "ids": {
-      "type": "array",
+      "type": ["array", "null"],
       "description": "Region IDs to restyle.",
       "items": { "type": "string" },
       "minItems": 1,
       "maxItems": 200
     },
+    "selector": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector"
+    },
     "fill": {
-      "oneOf": [
-        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        { "type": "null" }
-      ],
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color",
       "description": "Fill color as hex string, or null for no fill."
     },
     "stroke": {
-      "oneOf": [
-        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        { "type": "null" }
-      ],
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color",
       "description": "Stroke color as hex string, or null for no stroke."
     },
     "stroke_width": {
-      "type": ["number", "null"],
-      "description": "Stroke width in canvas pixels.",
-      "minimum": 0.0,
-      "maximum": 512
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/stroke_width"
     },
     "opacity": {
       "type": "number",
@@ -56,8 +50,11 @@
       "default": 0.65
     }
   },
-  "required": ["ids"],
   "additionalProperties": false,
+  "oneOf": [
+    { "required": ["ids"] },
+    { "required": ["selector"] }
+  ],
   "anyOf": [
     { "required": ["fill"] },
     { "required": ["stroke"] },

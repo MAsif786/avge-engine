@@ -7,6 +7,7 @@ from typing import Literal
 PIVOT_MODES = Literal["center", "base", "fixed"]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.controllers.selectors import select_region_ids, selector_from_legacy
 
 
 def _clamp01(value: float) -> float:
@@ -174,6 +175,7 @@ def create_tools(mcp):
     )
     def transform_objects(
         ids: list[str] | None = None,
+        selector: dict[str, object] | None = None,
         document_id: str | None = None,
         mode: str = "transform",
         alignment: str | None = None,
@@ -195,12 +197,15 @@ def create_tools(mcp):
     ) -> str:
         """Move, scale, rotate, mirror, or align existing regions.
 
-        When ``group_name`` is set, resolves the group's members as IDs.
+        Prefer ``selector`` for targeting. Legacy ``ids``, ``group_name``,
+        and ``layer`` are converted into the same selector path.
         When ``mirror_x`` or ``mirror_y`` is True, the outline is flipped
         around the center point (group center in group_mode).
 
         Args:
-            ids: Region IDs to transform.
+            selector: Shared selector. Keys: ids, group_name, layer, fill,
+                tags, bounds, z_min, z_max, has_stroke.
+            ids: Legacy region IDs to transform.
             document_id: Document UUID (omit to use active document).
             mode: "transform" (default) or "align". In align mode,
                 ignores dx/dy/scale/rotate and applies ``alignment`` instead.
@@ -221,18 +226,20 @@ def create_tools(mcp):
                 💡 transform_objects(layer='sky', dy=0.02) shifts whole skyline.
         """
         scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        resolved_selector = selector or selector_from_legacy(ids=ids, group_name=group_name, layer=layer)
+        target_ids = select_region_ids(scene, doc_id, resolved_selector)
 
         # ── Align mode ──
         if mode == "align":
             from avge_engine.geometry import compute_bounds
-            try:
-                doc_id = resolve_doc(document_id)
-            except RuntimeError:
-                return "Error: No active document"
-            if not ids:
+            if not target_ids:
                 return "Error: No region IDs provided"
             bounds_list = []
-            for rid in ids:
+            for rid in target_ids:
                 try:
                     r = scene.get_region(rid, doc_id)
                     b = compute_bounds(r.outline)
@@ -294,27 +301,12 @@ def create_tools(mcp):
             return f"Aligned {len(bounds_list)} region(s): '{a}'"
 
         # ── Transform mode ──
-        try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document — call create_document first"
-
-        if group_name is not None:
-            members = scene.get_group(group_name, doc_id)
-            if not members:
-                return f"Error: Group '{group_name}' not found"
-            ids = [m["id"] for m in members]
-        elif layer is not None:
-            all_regions = scene._regions_for(doc_id)
-            ids = [rid for rid, r in all_regions.items() if r.layer == layer]
-            if not ids:
-                return f"Error: No regions found in layer '{layer}'"
-        elif not ids:
+        if not target_ids:
             return "Error: No region IDs provided"
 
         try:
             affected = scene.transform_objects(
-                ids=ids,
+                ids=target_ids,
                 document_id=doc_id,
                 dx=dx,
                 dy=dy,
@@ -1043,12 +1035,14 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="add_shading",
-        description="Add directional shading to a region. "
+        description="Add directional shading to one region or a shared selector of regions. "
         "mode='two_tone' creates highlight + shadow copies; mode='gradient' "
-        "applies a soft gradient fill across the existing region for architecture.",
+        "applies a soft gradient fill across existing regions for architecture. "
+        "Selector keys: ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke.",
     )
     def add_shading(
-        region_id: str,
+        region_id: str | None = None,
+        selector: dict[str, object] | None = None,
         light_direction: float = 135,
         document_id: str | None = None,
         intensity: float = 0.5,
@@ -1060,7 +1054,9 @@ def create_tools(mcp):
         """Add directional shading to a region.
 
         Args:
-            region_id: Region to shade.
+            region_id: Legacy single region to shade.
+            selector: Shared selector. Keys: ids, group_name, layer, fill,
+                tags, bounds, z_min, z_max, has_stroke.
             light_direction: Angle in degrees (0=right, 90=top).
             document_id: Document UUID.
             intensity: 0.0–1.0 contrast strength.
@@ -1076,58 +1072,70 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
-        try:
-            r = scene.get_region(region_id, doc_id)
-        except ValueError:
-            return f"Error: Region '{region_id}' not found"
+        if selector:
+            target_ids = select_region_ids(scene, doc_id, selector)
+        elif region_id:
+            target_ids = [region_id]
+        else:
+            return "Error: region_id or selector required"
+        if not target_ids:
+            return "Error: No matching regions found via selector"
         import math
         angle = math.radians(light_direction)
         offset = intensity * 0.015
         dx = math.cos(angle) * offset
         dy = math.sin(angle) * offset
-        cur_fill = r.style.fill
-        if not isinstance(cur_fill, str) or not cur_fill.startswith("#"):
-            return "Error: add_shading requires a hex fill color"
-        highlight = highlight_color or apply_hsl_offset(cur_fill, l_offset=intensity * 25, s_offset=-10)
-        middle = mid_color or cur_fill
-        shadow = shadow_color or apply_hsl_offset(cur_fill, l_offset=-intensity * 30, s_offset=15)
-        if mode == "gradient":
-            grad = {
-                "type": "linear",
-                "angle": light_direction,
-                "stops": [
-                    {"offset": 0.0, "color": highlight},
-                    {"offset": 0.52, "color": middle},
-                    {"offset": 1.0, "color": shadow},
-                ],
-            }
-            # Normalize angle the same way restyle does.
-            grad_angle = grad.pop("angle")
-            grad["x1"] = round(0.5 - 0.5 * math.cos(angle), 2)
-            grad["y1"] = round(0.5 - 0.5 * math.sin(angle), 2)
-            grad["x2"] = round(0.5 + 0.5 * math.cos(angle), 2)
-            grad["y2"] = round(0.5 + 0.5 * math.sin(angle), 2)
-            scene.edit_region(region_id=region_id, document_id=doc_id, fill=grad)
-            return f"Gradient shading applied to '{region_id}', light={grad_angle:.0f}deg"
-        if mode != "two_tone":
+        if mode not in ("two_tone", "gradient"):
             return "Error: mode must be 'two_tone' or 'gradient'"
-        import uuid as _uuid, time as _time
+        targets = []
+        for rid in target_ids:
+            try:
+                r = scene.get_region(rid, doc_id)
+            except ValueError:
+                return f"Error: Region '{rid}' not found"
+            cur_fill = r.style.fill
+            if not isinstance(cur_fill, str) or not cur_fill.startswith("#"):
+                return f"Error: add_shading requires a hex fill color on '{rid}'"
+            highlight = highlight_color or apply_hsl_offset(cur_fill, l_offset=intensity * 25, s_offset=-10)
+            middle = mid_color or cur_fill
+            shadow = shadow_color or apply_hsl_offset(cur_fill, l_offset=-intensity * 30, s_offset=15)
+            targets.append((r, highlight, middle, shadow))
+        if mode == "gradient":
+            for r, highlight, middle, shadow in targets:
+                grad = {
+                    "type": "linear",
+                    "stops": [
+                        {"offset": 0.0, "color": highlight},
+                        {"offset": 0.52, "color": middle},
+                        {"offset": 1.0, "color": shadow},
+                    ],
+                    "x1": round(0.5 - 0.5 * math.cos(angle), 2),
+                    "y1": round(0.5 - 0.5 * math.sin(angle), 2),
+                    "x2": round(0.5 + 0.5 * math.cos(angle), 2),
+                    "y2": round(0.5 + 0.5 * math.sin(angle), 2),
+                }
+                scene.edit_region(region_id=r.id, document_id=doc_id, fill=grad)
+            return f"Gradient shading applied to {len(targets)} region(s), light={light_direction:.0f}deg"
+        import time as _time
         _seq = int(_time.time() * 1000) % 100000
-        h_dup = scene.duplicate_region(
-            region_id, document_id=doc_id,
-            new_region_id=f"{region_id}_highlight_{_seq}",
-            offset_x=-dx, offset_y=-dy,
-            fill=highlight, stroke=None,
-            z_index=r.z_index + 1,
-        )
-        s_dup = scene.duplicate_region(
-            region_id, document_id=doc_id,
-            new_region_id=f"{region_id}_shadow_{_seq}",
-            offset_x=dx, offset_y=dy,
-            fill=shadow, stroke=None,
-            z_index=r.z_index - 1,
-        )
-        return f"Shading added: highlight='{h_dup.id}' shadow='{s_dup.id}', light={light_direction:.0f}deg"
+        created = []
+        for r, highlight, _middle, shadow in targets:
+            h_dup = scene.duplicate_region(
+                r.id, document_id=doc_id,
+                new_region_id=f"{r.id}_highlight_{_seq}",
+                offset_x=-dx, offset_y=-dy,
+                fill=highlight, stroke=None,
+                z_index=r.z_index + 1,
+            )
+            s_dup = scene.duplicate_region(
+                r.id, document_id=doc_id,
+                new_region_id=f"{r.id}_shadow_{_seq}",
+                offset_x=dx, offset_y=dy,
+                fill=shadow, stroke=None,
+                z_index=r.z_index - 1,
+            )
+            created.extend([h_dup.id, s_dup.id])
+        return f"Shading added to {len(targets)} region(s), overlays={len(created)}, light={light_direction:.0f}deg"
 
     @mcp.tool(
         name="generate_cloud",
@@ -1329,14 +1337,16 @@ def create_tools(mcp):
         return f"Surface stripes created: {len(created)} stripe(s), ids={', '.join(created[:5])}{'...' if len(created) > 5 else ''}"
 
     @mcp.tool(
-        name="add_depth_shadow",
-        description="Create a soft offset shadow from a region outline. "
-        "Use to ground objects quickly without manually drawing shadow blobs. "
+        name="create_shadow",
+        description="Create a soft shadow from a region outline. "
+        "Omit onto_region_id for a grounding/depth shadow, or pass onto_region_id "
+        "to clip the shadow onto another region for a cast shadow. "
         "direction is degrees (0=right, 90=down); distance is normalized canvas units; "
         "softness is blur radius in pixels.",
     )
-    def add_depth_shadow(
+    def create_shadow(
         region_id: str,
+        onto_region_id: str | None = None,
         document_id: str | None = None,
         direction: float = 45.0,
         distance: float = 0.03,
@@ -1346,13 +1356,15 @@ def create_tools(mcp):
         scale: float = 1.0,
         sx: float | None = None,
         sy: float | None = None,
-        z_offset: int = -1,
+        z_offset: int | None = None,
         new_region_id: str | None = None,
     ) -> str:
         """Create a blurred, low-opacity shadow derived from a region.
 
         Args:
             region_id: Source region.
+            onto_region_id: Optional receiver region. When provided, the shadow
+                is clipped to this region and layered relative to the receiver.
             document_id: Document UUID.
             direction: Offset angle in degrees. 0=right, 90=down.
             distance: Offset distance in normalized canvas units.
@@ -1367,6 +1379,8 @@ def create_tools(mcp):
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
+            receiver = scene.get_region(onto_region_id, doc_id) if onto_region_id else None
+            resolved_z_offset = z_offset if z_offset is not None else (1 if receiver else -1)
             shadow = scene.add_depth_shadow(
                 region_id,
                 document_id=doc_id,
@@ -1379,64 +1393,24 @@ def create_tools(mcp):
                 scale=max(0.01, min(10.0, scale)),
                 sx=sx,
                 sy=sy,
-                z_offset=z_offset,
-            )
-        except (ValueError, RuntimeError) as e:
-            return f"Error: {e}"
-        return (
-            f"Depth shadow added: id='{shadow.id}', source='{region_id}', "
-            f"direction={direction:g}, distance={distance:g}, softness={softness:g}"
-        )
-
-    @mcp.tool(
-        name="cast_shadow",
-        description="Create a soft shadow from one region clipped onto another region. "
-        "Use for objects casting onto floors, walls, tables, platforms, or panels.",
-    )
-    def cast_shadow(
-        from_region_id: str,
-        onto_region_id: str,
-        document_id: str | None = None,
-        direction: float = 45.0,
-        distance: float = 0.04,
-        softness: float = 5.0,
-        opacity: float = 0.20,
-        color: str = "#000000",
-        scale: float = 1.0,
-        sx: float | None = None,
-        sy: float | None = None,
-        z_offset: int = 1,
-        new_region_id: str | None = None,
-    ) -> str:
-        """Create a clipped cast shadow from one region onto another."""
-        scene = get_graph()
-        try:
-            doc_id = resolve_doc(document_id)
-            onto = scene.get_region(onto_region_id, doc_id)
-            shadow = scene.add_depth_shadow(
-                from_region_id,
-                document_id=doc_id,
-                new_region_id=new_region_id,
-                direction=direction,
-                distance=max(0.0, min(1.0, distance)),
-                softness=max(0.0, min(64.0, softness)),
-                opacity=max(0.0, min(1.0, opacity)),
-                color=color,
-                scale=max(0.01, min(10.0, scale)),
-                sx=sx,
-                sy=sy,
-                z_offset=0,
+                z_offset=0 if receiver else resolved_z_offset,
                 clip_to=onto_region_id,
-                layer=onto.layer,
+                layer=receiver.layer if receiver else None,
             )
-            shadow.z_index = onto.z_index + z_offset
-            scene.get_document(doc_id).version += 1
-            scene._persist(doc_id)
+            if receiver:
+                shadow.z_index = receiver.z_index + resolved_z_offset
+                scene.get_document(doc_id).version += 1
+                scene._persist(doc_id)
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
+        if receiver:
+            return (
+                f"Shadow created: id='{shadow.id}', source='{region_id}', "
+                f"onto='{onto_region_id}', clipped=true, softness={softness:g}"
+            )
         return (
-            f"Cast shadow added: id='{shadow.id}', from='{from_region_id}', "
-            f"onto='{onto_region_id}', clipped=true"
+            f"Shadow created: id='{shadow.id}', source='{region_id}', "
+            f"direction={direction:g}, distance={distance:g}, softness={softness:g}"
         )
 
     # Individual z-ordering: use edit_region(region_id, z_index=N)

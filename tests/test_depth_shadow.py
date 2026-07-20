@@ -51,7 +51,7 @@ def test_scene_graph_add_depth_shadow_creates_blurred_shadow():
     assert shadow_center_y > source_center_y
 
 
-def test_add_depth_shadow_tool_renders_blur_filter():
+def test_create_shadow_tool_renders_blur_filter():
     reset_graph()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
@@ -63,20 +63,21 @@ def test_add_depth_shadow_tool_renders_blur_filter():
         outline=[(0.25, 0.2), (0.55, 0.2), (0.55, 0.45), (0.25, 0.45)],
     )
 
-    result = mcp.tools["add_depth_shadow"](
+    result = mcp.tools["create_shadow"](
         document_id=doc.id,
         region_id="object",
         new_region_id="object_shadow",
         softness=5,
+        z_offset=-1,
     )
     svg = svg_serialize(graph, doc.id)
 
-    assert "Depth shadow added" in result
+    assert "Shadow created" in result
     assert "object_shadow" in result
     assert 'filter="url(#blur_5.00)"' in svg
 
 
-def test_cast_shadow_clips_to_receiver():
+def test_create_shadow_clips_to_receiver():
     reset_graph()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
@@ -95,23 +96,23 @@ def test_cast_shadow_clips_to_receiver():
         outline=[(0.35, 0.25), (0.55, 0.25), (0.55, 0.55), (0.35, 0.55)],
     )
 
-    result = mcp.tools["cast_shadow"](
+    result = mcp.tools["create_shadow"](
         document_id=doc.id,
-        from_region_id="chair",
+        region_id="chair",
         onto_region_id="floor",
         new_region_id="chair_cast_shadow",
         sy=0.35,
     )
     shadow = graph.get_region("chair_cast_shadow", doc.id)
 
-    assert "Cast shadow added" in result
+    assert "Shadow created" in result
     assert shadow.clip_to == "floor"
     assert shadow.z_index == 3
     assert shadow.layer == graph.get_region("floor", doc.id).layer
     assert shadow.metadata["shadow_kind"] == "cast"
 
 
-def test_batch_add_depth_shadow():
+def test_batch_create_shadow():
     scene = SceneGraph()
     doc = scene.create_document()
     scene.create_region(
@@ -122,11 +123,12 @@ def test_batch_add_depth_shadow():
 
     result = scene.batch([
         {
-            "tool": "add_depth_shadow",
+            "tool": "create_shadow",
             "region_id": "vase",
             "new_region_id": "vase_shadow",
             "direction": 90,
             "distance": 0.04,
+            "z_offset": -1,
         }
     ], document_id=doc.id)
 

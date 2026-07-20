@@ -64,6 +64,33 @@ class TestDocument:
         r = await client.post("/tools/create_document", json={"width": 9999})
         assert r.status_code == 422  # validation error
 
+    async def test_clone_document(self, client):
+        created = await client.post("/tools/create_document", json={
+            "width": 800,
+            "height": 600,
+            "name": "source",
+        })
+        source_id = created.json()["data"]["document_id"]
+        region = await client.post("/tools/create_region", json={
+            "document_id": source_id,
+            "region_id": "panel",
+            "outline": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4], [0.1, 0.4]],
+            "fill": "#336699",
+        })
+        assert region.status_code == 200
+
+        cloned = await client.post("/tools/clone_document", json={
+            "source_document_id": source_id,
+            "name": "copy",
+        })
+
+        assert cloned.status_code == 200
+        data = cloned.json()["data"]
+        assert data["document_id"] != source_id
+        assert data["name"] == "copy"
+        assert data["width"] == 800
+        assert data["region_count"] == 1
+
 
 class TestRegion:
     async def test_create_region_no_document(self, client):

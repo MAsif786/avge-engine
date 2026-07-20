@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/transform_objects/v1.json",
+  "title": "transform_objects",
+  "description": "Move, scale, rotate, mirror, align, or distribute existing regions. Use selector for canonical targeting; ids/group_name/layer are legacy aliases.",
+  "type": "object",
+  "properties": {
+    "document_id": { "type": ["string", "null"] },
+    "selector": { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector" },
+    "ids": {
+      "type": ["array", "null"],
+      "items": { "type": "string" },
+      "minItems": 1,
+      "maxItems": 500
+    },
+    "group_name": { "type": ["string", "null"] },
+    "layer": { "type": ["string", "null"] },
+    "mode": { "type": "string", "enum": ["transform", "align"], "default": "transform" },
+    "alignment": {
+      "type": ["string", "null"],
+      "enum": ["top", "bottom", "left", "right", "center_h", "center_v", "distribute_h", "distribute_v", null]
+    },
+    "dx": { "type": "number", "default": 0 },
+    "dy": { "type": "number", "default": 0 },
+    "scale": { "type": "number", "minimum": 0.01, "maximum": 10, "default": 1 },
+    "sx": { "type": ["number", "null"], "minimum": 0.01, "maximum": 10 },
+    "sy": { "type": ["number", "null"], "minimum": 0.01, "maximum": 10 },
+    "rotate": { "type": "number", "default": 0 },
+    "group_mode": { "type": "boolean", "default": false },
+    "pivot_x": { "type": ["number", "null"] },
+    "pivot_y": { "type": ["number", "null"] },
+    "pivot_mode": { "type": ["string", "null"], "enum": ["center", "base", "fixed", null] },
+    "z_index": { "type": ["integer", "null"] },
+    "mirror_x": { "type": "boolean", "default": false },
+    "mirror_y": { "type": "boolean", "default": false }
+  },
+  "additionalProperties": false,
+  "anyOf": [
+    { "required": ["selector"] },
+    { "required": ["ids"] },
+    { "required": ["group_name"] },
+    { "required": ["layer"] }
+  ]
+}

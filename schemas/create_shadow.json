@@ -1,17 +1,17 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avge.dev/schemas/cast_shadow/v1.json",
-  "title": "cast_shadow",
-  "description": "Create a soft shadow from one region clipped onto another region.",
+  "$id": "https://avge.dev/schemas/create_shadow/v1.json",
+  "title": "create_shadow",
+  "description": "Create a soft offset shadow from a region outline. Omit onto_region_id for a grounding/depth shadow, or provide onto_region_id to clip the shadow onto a receiver region.",
   "type": "object",
   "properties": {
-    "from_region_id": {
+    "region_id": {
       "type": "string",
-      "description": "Source region casting the shadow."
+      "description": "Source region ID."
     },
     "onto_region_id": {
-      "type": "string",
-      "description": "Receiver region that clips the shadow."
+      "type": ["string", "null"],
+      "description": "Optional receiver region. When set, the shadow is clipped to this region and layered relative to it."
     },
     "document_id": {
       "type": ["string", "null"],
@@ -24,21 +24,24 @@
     },
     "distance": {
       "type": "number",
+      "description": "Shadow offset distance in normalized canvas units.",
       "minimum": 0.0,
       "maximum": 1.0,
-      "default": 0.04
+      "default": 0.03
     },
     "softness": {
       "type": "number",
+      "description": "Gaussian blur radius in pixels.",
       "minimum": 0.0,
       "maximum": 64.0,
-      "default": 5.0
+      "default": 4.0
     },
     "opacity": {
       "type": "number",
+      "description": "Shadow opacity.",
       "minimum": 0.0,
       "maximum": 1.0,
-      "default": 0.2
+      "default": 0.22
     },
     "color": {
       "type": "string",
@@ -62,14 +65,14 @@
       "maximum": 10.0
     },
     "z_offset": {
-      "type": "integer",
-      "default": 1
+      "type": ["integer", "null"],
+      "description": "Relative z-index. Defaults to -1 for grounding shadows and +1 for clipped shadows."
     },
     "new_region_id": {
       "type": ["string", "null"],
       "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"
     }
   },
-  "required": ["from_region_id", "onto_region_id"],
+  "required": ["region_id"],
   "additionalProperties": false
 }

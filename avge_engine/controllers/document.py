@@ -134,6 +134,42 @@ def create_tools(mcp):
         return "\n".join(lines)
 
     @mcp.tool(
+        name="clone_document",
+        description="Clone an existing document into a new document ID, including canvas metadata, "
+        "named gradients, regions, styles, layers, groups, and editable geometry. "
+        "Omit source_document_id to clone the active document.",
+    )
+    def clone_document(
+        source_document_id: str | None = None,
+        name: str | None = None,
+        set_active: bool = True,
+    ) -> str:
+        """Clone a document and optionally make the clone active.
+
+        Args:
+            source_document_id: Source document UUID. Omit to clone active document.
+            name: Optional name for the cloned document.
+            set_active: If True, make the clone the active document.
+        """
+        scene = get_graph()
+        try:
+            source_id = resolve_doc(source_document_id)
+        except RuntimeError:
+            return "Error: No active document. Call create_document first."
+        try:
+            clone = scene.clone_document(source_id, name=name, set_active=set_active)
+            if set_active:
+                set_active_doc(clone.id)
+            desc = scene.describe_scene(clone.id)
+            return (
+                f"Document cloned: source={source_id} clone={clone.id} "
+                f"name='{clone.name}' {clone.width}x{clone.height} "
+                f"regions={desc['region_count']}"
+            )
+        except ValueError as e:
+            return f"Error: {e}"
+
+    @mcp.tool(
         name="load_document",
         description="Load a previously saved document from disk into the editor. "
         "Use list_documents to see available documents.",

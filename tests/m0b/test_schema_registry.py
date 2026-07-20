@@ -41,6 +41,10 @@ class TestSchemaRegistry:
             assert "$schema" in content
             assert content["$schema"] == "https://json-schema.org/draft/2020-12/schema"
 
+    def test_defs_schema_is_not_public_tool(self):
+        names = list_tool_names()
+        assert "_defs" not in names
+
     def test_create_document_valid(self):
         errs = validate_input("create_document", {
             "width": 800, "height": 600, "background": "#FFFFFF",
@@ -57,6 +61,18 @@ class TestSchemaRegistry:
 
     def test_create_document_invalid_bg(self):
         errs = validate_input("create_document", {"background": "white"})
+        assert len(errs) > 0
+
+    def test_clone_document_valid(self):
+        errs = validate_input("clone_document", {
+            "source_document_id": "doc_source",
+            "name": "copy",
+            "set_active": True,
+        })
+        assert errs == []
+
+    def test_clone_document_rejects_unknown_param(self):
+        errs = validate_input("clone_document", {"document_id": "doc_source"})
         assert len(errs) > 0
 
     def test_create_region_valid(self):
@@ -87,6 +103,17 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
+    def test_create_region_primitive_pattern_options_valid(self):
+        errs = validate_input("create_region", {
+            "shape": {"type": "rect", "x": 0.2, "y": 0.2, "width": 0.3, "height": 0.2},
+            "outline_pattern": "wavy",
+            "fill_pattern": "hatch",
+            "pattern_density": 8,
+            "pattern_amplitude": 0.015,
+            "pattern_stroke_width": 2,
+        })
+        assert errs == []
+
     def test_create_region_stroke_width_valid(self):
         errs = validate_input("create_region", {
             "outline": [[0.1, 0.1], [0.9, 0.9]],
@@ -107,6 +134,37 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
+    def test_edit_region_point_nudge_valid(self):
+        errs = validate_input("edit_region", {
+            "region_id": "shape",
+            "point_index": 0,
+            "point_dx": 0.02,
+            "point_dy": -0.01,
+        })
+        assert errs == []
+
+    def test_edit_region_rejects_transform_params(self):
+        errs = validate_input("edit_region", {
+            "region_id": "shape",
+            "dx": 0.1,
+        })
+        assert len(errs) > 0
+
+    def test_edit_regions_style_update_valid(self):
+        errs = validate_input("edit_regions", {
+            "updates": [
+                {"id": "shape", "fill": "#FF0000", "z_index": 5},
+                {"id": "line", "point_index": 1, "point_dx": 0.02},
+            ],
+        })
+        assert errs == []
+
+    def test_edit_regions_rejects_transform_params(self):
+        errs = validate_input("edit_regions", {
+            "updates": [{"id": "shape", "rotate": 15}],
+        })
+        assert len(errs) > 0
+
     def test_create_ellipse_band_valid(self):
         errs = validate_input("create_ellipse_band", {
             "cx": 0.5,
@@ -117,6 +175,18 @@ class TestSchemaRegistry:
             "start_angle": 190,
             "end_angle": 350,
             "perspective": 0.25,
+        })
+        assert errs == []
+
+    def test_create_ellipse_band_pattern_options_valid(self):
+        errs = validate_input("create_ellipse_band", {
+            "cx": 0.5,
+            "cy": 0.42,
+            "rx": 0.36,
+            "outline_pattern": "dotted",
+            "fill_pattern": "hatch",
+            "pattern_density": 8,
+            "pattern_stroke_width": 2,
         })
         assert errs == []
 
@@ -177,8 +247,90 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_add_depth_shadow_valid(self):
-        errs = validate_input("add_depth_shadow", {
+    def test_create_line_pattern_valid(self):
+        errs = validate_input("create_line_pattern", {
+            "pattern": "wavy",
+            "points": [[0.1, 0.5], [0.9, 0.5]],
+            "amplitude": 0.03,
+            "frequency": 4,
+            "stroke_width": 3,
+            "width_profile": "pressure",
+        })
+        assert errs == []
+
+    def test_apply_brush_style_valid(self):
+        errs = validate_input("apply_brush_style", {
+            "selector": {"ids": ["line"], "bounds": {"min_y": 0.2}},
+            "brush": "g_pen",
+            "color": "#111111",
+            "size": 4,
+            "texture_strength": 0.4,
+        })
+        assert errs == []
+
+    def test_apply_brush_style_rejects_bad_selector_key(self):
+        errs = validate_input("apply_brush_style", {
+            "selector": {"unknown": "x"},
+            "brush": "ink",
+        })
+        assert len(errs) > 0
+
+    def test_set_layer_role_valid(self):
+        errs = validate_input("set_layer_role", {
+            "layer": "shadow",
+            "role": "shadow",
+            "blend_mode": "multiply",
+        })
+        assert errs == []
+
+    def test_apply_texture_effect_valid(self):
+        errs = validate_input("apply_texture_effect", {
+            "effect": "halftone",
+            "selector": {"layer": "panels", "z_min": 2},
+            "color": "#000000",
+            "density": 12,
+            "blend_mode": "multiply",
+        })
+        assert errs == []
+
+    def test_find_objects_shared_selector_valid(self):
+        errs = validate_input("find_objects", {
+            "selector": {
+                "tags": {"kind": "building"},
+                "bounds": {"min_x": 0.1, "max_y": 0.8},
+                "has_stroke": True,
+            }
+        })
+        assert errs == []
+
+    def test_transform_objects_shared_selector_valid(self):
+        errs = validate_input("transform_objects", {
+            "selector": {"group_name": "building", "fill": "#CC3333"},
+            "dx": 0.1,
+            "dy": -0.05,
+        })
+        assert errs == []
+
+    def test_add_shading_shared_selector_valid(self):
+        errs = validate_input("add_shading", {
+            "selector": {"layer": "facades", "bounds": {"max_y": 0.8}},
+            "mode": "gradient",
+            "light_direction": 135,
+            "intensity": 0.4,
+        })
+        assert errs == []
+
+    def test_apply_line_hierarchy_shared_selector_valid(self):
+        errs = validate_input("apply_line_hierarchy", {
+            "selector": {"tags": {"kind": "building"}, "has_stroke": True},
+            "outer_width": 6,
+            "inner_width": 2,
+            "basis": "bounding_size",
+        })
+        assert errs == []
+
+    def test_create_shadow_valid(self):
+        errs = validate_input("create_shadow", {
             "region_id": "chair",
             "direction": 90,
             "distance": 0.04,
@@ -188,38 +340,45 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_add_depth_shadow_invalid_distance(self):
-        errs = validate_input("add_depth_shadow", {
+    def test_create_shadow_invalid_distance(self):
+        errs = validate_input("create_shadow", {
             "region_id": "chair",
             "distance": 2.0,
         })
         assert len(errs) > 0
 
-    def test_cast_shadow_valid(self):
-        errs = validate_input("cast_shadow", {
-            "from_region_id": "chair",
+    def test_create_shadow_clipped_valid(self):
+        errs = validate_input("create_shadow", {
+            "region_id": "chair",
             "onto_region_id": "floor",
             "direction": 45,
             "distance": 0.05,
         })
         assert errs == []
 
-    def test_cast_shadow_requires_receiver(self):
-        errs = validate_input("cast_shadow", {
-            "from_region_id": "chair",
+    def test_create_shadow_receiver_is_optional(self):
+        errs = validate_input("create_shadow", {
+            "region_id": "chair",
         })
-        assert len(errs) > 0
+        assert errs == []
 
-    def test_critique_preview_valid(self):
-        errs = validate_input("critique_preview", {
+    def test_critique_visual_valid(self):
+        errs = validate_input("critique", {
+            "mode": "visual",
             "min_confidence": 0.5,
             "as_json": True,
         })
         assert errs == []
 
-    def test_critique_preview_invalid_confidence(self):
-        errs = validate_input("critique_preview", {
+    def test_critique_invalid_confidence(self):
+        errs = validate_input("critique", {
             "min_confidence": 1.5,
+        })
+        assert len(errs) > 0
+
+    def test_critique_invalid_mode(self):
+        errs = validate_input("critique", {
+            "mode": "preview",
         })
         assert len(errs) > 0
 

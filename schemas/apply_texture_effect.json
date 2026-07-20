@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/apply_texture_effect/v1.json",
+  "title": "apply_texture_effect",
+  "description": "Create editable vector texture and FX overlays for selected art.",
+  "type": "object",
+  "properties": {
+    "effect": {
+      "type": "string",
+      "enum": ["noise", "paper", "fabric", "halftone", "screen_tone", "bloom", "particles", "gradient_light", "rim_light"]
+    },
+    "selector": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector"
+    },
+    "document_id": { "type": ["string", "null"] },
+    "bounds": {
+      "type": ["array", "null"],
+      "description": "[x, y, width, height] normalized bounds for free texture placement.",
+      "items": { "type": "number" },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "clip_to": { "type": ["string", "null"] },
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "default": "#FFFFFF" },
+    "secondary_color": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color"
+    },
+    "density": { "type": "integer", "minimum": 1, "maximum": 200, "default": 24 },
+    "size": {
+      "type": ["number", "null"],
+      "description": "Texture mark size in canvas pixels.",
+      "minimum": 0,
+      "maximum": 512
+    },
+    "opacity": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.35 },
+    "angle": { "type": "number", "default": 0 },
+    "blend_mode": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/blend_mode"
+    },
+    "layer": { "type": ["string", "null"], "maxLength": 64 },
+    "z_index": { "type": ["integer", "null"] },
+    "seed": { "type": "integer", "default": 1 }
+  },
+  "required": ["effect"],
+  "additionalProperties": false
+}

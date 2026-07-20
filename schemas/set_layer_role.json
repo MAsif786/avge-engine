@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/set_layer_role/v1.json",
+  "title": "set_layer_role",
+  "description": "Assign an art workflow role to an existing layer and optionally normalize z-order/style.",
+  "type": "object",
+  "properties": {
+    "layer": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "role": {
+      "type": "string",
+      "enum": ["sketch", "line_art", "base_color", "shadow", "highlight", "glow", "texture", "fx", "background", "guide", "mask"]
+    },
+    "document_id": { "type": ["string", "null"] },
+    "z_base": { "type": ["integer", "null"] },
+    "opacity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "blend_mode": {
+      "type": ["string", "null"],
+      "enum": ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "linear-dodge", "color-burn", "soft-light", "hard-light", "difference", "hue", "saturation", "color", "luminosity", "add", null]
+    }
+  },
+  "required": ["layer", "role"],
+  "additionalProperties": false
+}

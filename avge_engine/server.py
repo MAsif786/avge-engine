@@ -111,7 +111,7 @@ async def environment_guidelines_resource() -> str:
 @mcp.resource(
     uri="avge://tool-reference",
     name="AVGE Tool Reference",
-    description="Full per-tool reference: all 53 tools, params, modes, examples, "
+    description="Full per-tool reference: all 55 tools, params, modes, examples, "
     "and the complete generate_shape pattern table with 19 patterns.",
     mime_type="text/markdown",
 )

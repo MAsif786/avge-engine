@@ -106,7 +106,7 @@ def test_preview_critique_flags_dominant_blob_shape():
     assert "dominant_blob_shape" in _codes(findings)
 
 
-def test_critique_preview_tool_json_output():
+def test_critique_tool_visual_json_output():
     reset_graph()
     mcp = _FakeMCP()
     query.create_tools(mcp)
@@ -119,9 +119,30 @@ def test_critique_preview_tool_json_output():
             outline=[(0.1 + i * 0.15, 0.55), (0.2 + i * 0.15, 0.55), (0.2 + i * 0.15, 0.75), (0.1 + i * 0.15, 0.75)],
         )
 
-    payload = mcp.tools["critique_preview"](document_id=doc.id, as_json=True)
+    payload = mcp.tools["critique"](document_id=doc.id, mode="visual", as_json=True)
     data = json.loads(payload)
 
     assert data["count"] >= 1
-    assert "findings" in data
-    assert all("code" in f for f in data["findings"])
+    assert "visual" in data
+    assert all("code" in f for f in data["visual"]["findings"])
+
+
+def test_critique_tool_both_json_output_includes_rules_and_visual():
+    reset_graph()
+    mcp = _FakeMCP()
+    query.create_tools(mcp)
+    graph = query.get_graph()
+    doc = graph.create_document()
+    for i in range(6):
+        graph.create_region(
+            document_id=doc.id,
+            region_id=f"obj_{i}",
+            outline=[(0.1 + i * 0.1, 0.55), (0.17 + i * 0.1, 0.55), (0.17 + i * 0.1, 0.7), (0.1 + i * 0.1, 0.7)],
+        )
+
+    payload = mcp.tools["critique"](document_id=doc.id, mode="both", as_json=True)
+    data = json.loads(payload)
+
+    assert data["mode"] == "both"
+    assert "rules" in data
+    assert "visual" in data

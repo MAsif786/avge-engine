@@ -31,6 +31,31 @@ class TestSceneGraph:
         doc2 = scene.create_document()
         assert doc1.id != doc2.id
 
+    def test_clone_document_copies_regions_gradients_and_groups(self):
+        scene = SceneGraph()
+        doc = scene.create_document(width=800, height=600, name="source", background="#101820")
+        doc.gradients["sky"] = {"type": "linear", "stops": [{"offset": 0, "color": "#000000"}]}
+        scene.create_region(
+            outline=[(0.1, 0.1), (0.4, 0.1), (0.4, 0.4), (0.1, 0.4)],
+            region_id="panel",
+            document_id=doc.id,
+            style=Style(fill="#336699"),
+            layer="buildings",
+            metadata={"kind": "facade"},
+        )
+        scene.group_regions("facades", ["panel"], document_id=doc.id)
+
+        clone = scene.clone_document(doc.id, name="copy")
+
+        assert clone.id != doc.id
+        assert clone.name == "copy"
+        assert clone.width == 800
+        assert scene.get_region("panel", clone.id).style.fill == "#336699"
+        assert scene.get_region("panel", clone.id) is not scene.get_region("panel", doc.id)
+        assert scene.get_document(clone.id).gradients == scene.get_document(doc.id).gradients
+        assert scene.get_document(clone.id).gradients is not scene.get_document(doc.id).gradients
+        assert [r["id"] for r in scene.get_group("facades", clone.id)] == ["panel"]
+
     def test_create_region(self):
         scene = SceneGraph()
         scene.create_document()

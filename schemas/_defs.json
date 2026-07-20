@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/_defs/v1.json",
+  "$defs": {
+    "selector": {
+      "type": ["object", "null"],
+      "description": "Shared region selector. Keys are AND-ed except ids/group_name, which establish the initial candidate set. Omit/null where documented to select all regions.",
+      "properties": {
+        "ids": {
+          "type": "array",
+          "description": "Explicit region IDs.",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "maxItems": 500
+        },
+        "group_name": { "type": "string" },
+        "layer": { "type": "string" },
+        "fill": {
+          "oneOf": [
+            { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            { "type": "string", "enum": ["none", "transparent"] },
+            { "type": "null" }
+          ]
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          }
+        },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "min_x": { "type": "number" },
+            "max_x": { "type": "number" },
+            "min_y": { "type": "number" },
+            "max_y": { "type": "number" },
+            "min_w": { "type": "number", "minimum": 0 },
+            "max_w": { "type": "number", "minimum": 0 },
+            "min_h": { "type": "number", "minimum": 0 },
+            "max_h": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "min_x": { "type": "number" },
+        "max_x": { "type": "number" },
+        "min_y": { "type": "number" },
+        "max_y": { "type": "number" },
+        "min_w": { "type": "number", "minimum": 0 },
+        "max_w": { "type": "number", "minimum": 0 },
+        "min_h": { "type": "number", "minimum": 0 },
+        "max_h": { "type": "number", "minimum": 0 },
+        "z_min": { "type": "integer" },
+        "z_max": { "type": "integer" },
+        "has_stroke": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "color": {
+      "oneOf": [
+        { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        { "type": "string", "enum": ["none", "transparent"] },
+        { "type": "null" }
+      ]
+    },
+    "blend_mode": {
+      "type": ["string", "null"],
+      "enum": ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "linear-dodge", "color-burn", "soft-light", "hard-light", "difference", "hue", "saturation", "color", "luminosity", "add", null]
+    },
+    "stroke_width": {
+      "type": ["number", "null"],
+      "description": "Stroke width in canvas pixels.",
+      "minimum": 0,
+      "maximum": 512
+    }
+  }
+}

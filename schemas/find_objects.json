@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/find_objects/v1.json",
+  "title": "find_objects",
+  "description": "Query regions using the shared selector schema. Legacy top-level filters are still accepted for compatibility.",
+  "type": "object",
+  "properties": {
+    "document_id": { "type": ["string", "null"] },
+    "selector": { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector" },
+    "fill": { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+    "min_x": { "type": ["number", "null"] },
+    "max_x": { "type": ["number", "null"] },
+    "min_y": { "type": ["number", "null"] },
+    "max_y": { "type": ["number", "null"] },
+    "min_w": { "type": ["number", "null"], "minimum": 0 },
+    "max_w": { "type": ["number", "null"], "minimum": 0 },
+    "min_h": { "type": ["number", "null"], "minimum": 0 },
+    "max_h": { "type": ["number", "null"], "minimum": 0 },
+    "z_min": { "type": ["integer", "null"] },
+    "z_max": { "type": ["integer", "null"] },
+    "has_stroke": { "type": ["boolean", "null"] },
+    "layer": { "type": ["string", "null"] },
+    "tags": {
+      "type": ["object", "null"],
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+    }
+  },
+  "additionalProperties": false
+}

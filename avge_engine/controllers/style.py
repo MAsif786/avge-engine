@@ -2,24 +2,100 @@
 from __future__ import annotations
 
 import json
+import math
+import random
 from typing import Any, Literal
 
 from avge_engine.effects import Style
+from avge_engine.effects.style import VALID_BLEND_MODES
 from avge_engine.geometry import CurveConstraints, compute_bounds
 from avge_engine.scene.models import RegionNode
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.controllers.selectors import select_region_ids
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
-    "color-dodge", "color-burn", "soft-light", "hard-light",
+    "color-dodge", "linear-dodge", "color-burn", "soft-light", "hard-light",
+    "difference", "hue", "saturation", "color", "luminosity", "add",
 ]
 
 PRESET_NAMES = Literal["warm_shaded", "cool_shaded", "metallic", "glow", "shadow", "wood", "car_paint", "deep_shadow", "chrome", "meme_title", "meme_caption", "label", "label_light", "title", "subtitle", "comic"]
 MATERIAL_NAMES = Literal["glass", "brushed_metal", "concrete", "wood", "tile", "foliage"]
+BRUSH_NAMES = Literal[
+    "pencil", "ink", "g_pen", "mapping_pen", "flat", "round",
+    "airbrush", "soft", "hard", "watercolor", "gouache", "oil",
+    "chalk", "texture", "hair", "grass_leaf", "cloud", "particle_fx",
+]
+LAYER_ROLES = Literal[
+    "sketch", "line_art", "base_color", "shadow", "highlight",
+    "glow", "texture", "fx", "background", "guide", "mask",
+]
+TEXTURE_EFFECTS = Literal[
+    "noise", "paper", "fabric", "halftone", "screen_tone",
+    "bloom", "particles", "gradient_light", "rim_light",
+]
+
+
+BRUSH_PRESETS: dict[str, dict[str, Any]] = {
+    "pencil": {"stroke": "#3E3E3E", "stroke_width": 2.0, "opacity": 0.68, "linecap": "round", "rough": True},
+    "ink": {"stroke": "#171717", "stroke_width": 3.0, "opacity": 1.0, "linecap": "round"},
+    "g_pen": {"stroke": "#101010", "stroke_width": 4.0, "opacity": 1.0, "linecap": "round", "pressure": True},
+    "mapping_pen": {"stroke": "#111111", "stroke_width": 1.25, "opacity": 1.0, "linecap": "round"},
+    "flat": {"stroke": "#2C2C2C", "stroke_width": 6.0, "opacity": 0.95, "linecap": "butt"},
+    "round": {"stroke": "#222222", "stroke_width": 5.0, "opacity": 0.95, "linecap": "round"},
+    "airbrush": {"stroke": "#FFFFFF", "stroke_width": 18.0, "opacity": 0.22, "linecap": "round", "blur": 8.0, "blend_mode": "screen"},
+    "soft": {"stroke": "#FFFFFF", "stroke_width": 10.0, "opacity": 0.35, "linecap": "round", "blur": 4.0},
+    "hard": {"stroke": "#222222", "stroke_width": 4.0, "opacity": 1.0, "linecap": "butt"},
+    "watercolor": {"stroke": "#426B8F", "stroke_width": 7.0, "opacity": 0.42, "linecap": "round", "blur": 1.6},
+    "gouache": {"stroke": "#4F4A43", "stroke_width": 8.0, "opacity": 0.82, "linecap": "round"},
+    "oil": {"stroke": "#564B3F", "stroke_width": 9.0, "opacity": 0.86, "linecap": "round", "rough": True},
+    "chalk": {"stroke": "#F0EEE7", "stroke_width": 6.0, "opacity": 0.62, "linecap": "round", "rough": True},
+    "texture": {"stroke": "#4B4B4B", "stroke_width": 3.0, "opacity": 0.48, "linecap": "round", "rough": True},
+    "hair": {"stroke": "#2B1D18", "stroke_width": 1.15, "opacity": 0.9, "linecap": "round", "pressure": True},
+    "grass_leaf": {"stroke": "#315F34", "stroke_width": 1.8, "opacity": 0.82, "linecap": "round", "pressure": True},
+    "cloud": {"stroke": "#FFFFFF", "stroke_width": 12.0, "opacity": 0.36, "linecap": "round", "blur": 6.0, "blend_mode": "screen"},
+    "particle_fx": {"stroke": "#FFFFFF", "stroke_width": 2.0, "opacity": 0.72, "linecap": "round", "blend_mode": "screen"},
+}
+
+LAYER_ROLE_Z = {
+    "background": -1000,
+    "sketch": -700,
+    "guide": -650,
+    "base_color": -100,
+    "texture": 120,
+    "shadow": 160,
+    "highlight": 220,
+    "glow": 260,
+    "line_art": 320,
+    "fx": 380,
+    "mask": 500,
+}
 
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _scene_bounds_for_ids(scene, doc_id: str, ids: list[str]) -> dict[str, float] | None:
+    boxes = []
+    for rid in ids:
+        try:
+            bounds = compute_bounds(scene.get_region(rid, doc_id).outline)
+        except ValueError:
+            continue
+        if bounds:
+            boxes.append(bounds)
+    if not boxes:
+        return None
+    min_x = min(b["x"] for b in boxes)
+    min_y = min(b["y"] for b in boxes)
+    max_x = max(b["x"] + b["w"] for b in boxes)
+    max_y = max(b["y"] + b["h"] for b in boxes)
+    return {"x": min_x, "y": min_y, "w": max_x - min_x, "h": max_y - min_y}
+
+
+def _append_unique(base: str, suffix: str) -> str:
+    return f"{base}_{suffix}_{random.randint(1000, 9999)}"
 
 
 MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
@@ -280,11 +356,12 @@ def create_tools(mcp):
         "  hsl_offset — shift each region's current color by HSL delta\n"
         "  palette_swap — replace one exact fill color with another\n"
         "Materials: glass, brushed_metal, concrete, wood, tile, foliage\n"
-        "Selector (choose one): ids=[...], group_name='...', fill='#...', layer='...'\n"
+        "Selector keys: ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke\n"
+        "Use material=... for substance/surface presets; use apply_brush_style for medium/linework presets.\n"
         "💡 restyle(selector={'ids':['window']}, material='glass') — apply a material preset",
     )
     def restyle(
-        selector: dict | None = None,
+        selector: dict[str, Any] | None = None,
         mode: str = "exact",
         document_id: str | None = None,
         fill: str | None = None,
@@ -306,9 +383,8 @@ def create_tools(mcp):
         """Change region appearance with flexible selection and mode.
 
         Args:
-            selector: Dict selecting target regions. One of:
-                {"ids": [...]}, {"group_name": "..."}, {"fill": "#..."},
-                {"layer": "..."}, {"tags": {...}}.
+            selector: Shared selector. Keys: ids, group_name, layer, fill,
+                tags, bounds, z_min, z_max, has_stroke.
             mode: "exact" (default), "hsl_offset", or "palette_swap".
             document_id: Document UUID.
             fill: New fill color (exact mode) or target color (palette_swap mode).
@@ -337,24 +413,7 @@ def create_tools(mcp):
 
         stroke_width = stroke_width_to_norm(doc_id, stroke_width)
 
-        # Resolve target region IDs from selector
-        target_ids = None
-        if selector:
-            if "ids" in selector:
-                target_ids = selector["ids"]
-            elif "group_name" in selector:
-                members = scene.get_group(selector["group_name"], doc_id)
-                if members:
-                    target_ids = [m["id"] for m in members]
-            elif "fill" in selector:
-                results = scene.find_objects(document_id=doc_id, fill=selector["fill"])
-                target_ids = [r["id"] for r in results]
-            elif "layer" in selector:
-                results = scene.find_objects(document_id=doc_id, layer=selector["layer"])
-                target_ids = [r["id"] for r in results]
-            elif "tags" in selector:
-                results = scene.find_objects(document_id=doc_id, tags=selector["tags"])
-                target_ids = [r["id"] for r in results]
+        target_ids = select_region_ids(scene, doc_id, selector)
 
         if not target_ids:
             return "Error: No matching regions found via selector"
@@ -489,6 +548,353 @@ def create_tools(mcp):
 
 
     @mcp.tool(
+        name="apply_brush_style",
+        description="Apply a digital art brush preset to existing regions. "
+        "Use for pencil, ink, g_pen, mapping_pen, flat, round, airbrush, soft, hard, "
+        "watercolor, gouache, oil, chalk, texture, hair, grass_leaf, cloud, and particle_fx linework. "
+        "Use restyle(material=...) for substance/surface looks like glass, wood, concrete, tile, or foliage. "
+        "Use apply_texture_effect for separate overlay FX such as paper grain, halftone, bloom, and particles; "
+        "stack brush first, then texture if both are needed. "
+        "This changes editable vector style properties; optional rough/pressure behavior creates "
+        "small overlay strokes rather than raster pixels.",
+    )
+    def apply_brush_style(
+        selector: dict[str, Any] | None = None,
+        brush: BRUSH_NAMES = "ink",
+        document_id: str | None = None,
+        color: str | None = None,
+        size: StrokeWidthInput = None,
+        opacity: float | None = None,
+        apply_to: Literal["stroke", "fill", "both"] = "stroke",
+        blend_mode: BLEND_MODES | None = None,
+        pressure: bool | None = None,
+        texture_strength: float = 0.0,
+    ) -> str:
+        """Apply a brush preset to selected regions.
+
+        Args:
+            selector: Common selector: ids, group_name, fill, layer, or tags.
+            brush: Brush preset name.
+            color: Override preset color.
+            size: Override stroke width in canvas pixels.
+            apply_to: Whether to affect stroke, fill, or both.
+            pressure: Mark linework as pressure-sensitive in metadata.
+            texture_strength: 0.0-1.0 amount of extra rough overlay strokes.
+        """
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if brush not in BRUSH_PRESETS:
+            return f"Error: Unknown brush '{brush}'"
+        target_ids = select_region_ids(scene, doc_id, selector)
+        if not target_ids:
+            return "Error: No matching regions found"
+
+        cfg = BRUSH_PRESETS[brush]
+        stroke_color = color or cfg["stroke"]
+        stroke_width = stroke_width_to_norm(doc_id, size) or stroke_width_to_norm(doc_id, cfg["stroke_width"]) or 0.005
+        resolved_opacity = _clamp01(opacity if opacity is not None else cfg["opacity"])
+        resolved_blend = blend_mode if blend_mode is not None else cfg.get("blend_mode")
+        linecap = cfg.get("linecap", "round")
+        resolved_pressure = cfg.get("pressure", False) if pressure is None else pressure
+        affected = 0
+        overlays: list[str] = []
+        rng = random.Random(abs(hash((brush, len(target_ids)))) & 0xFFFF)
+
+        for rid in target_ids:
+            try:
+                region = scene.get_region(rid, doc_id)
+                kwargs: dict[str, Any] = {
+                    "opacity": resolved_opacity,
+                    "blend_mode": resolved_blend,
+                    "metadata": {"brush": brush, "brush_pressure": resolved_pressure},
+                }
+                if apply_to in ("stroke", "both"):
+                    kwargs.update({
+                        "stroke": stroke_color,
+                        "stroke_width": stroke_width,
+                        "stroke_linecap": linecap,
+                    })
+                if apply_to in ("fill", "both"):
+                    kwargs["fill"] = stroke_color
+                if cfg.get("blur", 0) > 0:
+                    kwargs["blur"] = float(cfg["blur"])
+                scene.edit_region(region_id=rid, document_id=doc_id, **kwargs)
+                affected += 1
+
+                if texture_strength > 0 and len(region.outline) >= 2:
+                    passes = max(1, min(5, round(texture_strength * 5)))
+                    for i in range(passes):
+                        pts = [
+                            (
+                                max(0.0, min(1.0, p[0] + rng.uniform(-0.004, 0.004) * texture_strength)),
+                                max(0.0, min(1.0, p[1] + rng.uniform(-0.004, 0.004) * texture_strength)),
+                            )
+                            for p in region.outline
+                        ]
+                        if region.constraints.closed and len(pts) > 2:
+                            pts.append(pts[0])
+                        overlay = scene.create_line(
+                            points=pts,
+                            document_id=doc_id,
+                            region_id=f"{rid}_{brush}_grain_{i}",
+                            layer=region.layer,
+                            z_index=region.z_index + 1,
+                            stroke=stroke_color,
+                            stroke_width=stroke_width * rng.uniform(0.45, 0.8),
+                            opacity=resolved_opacity * 0.35 * texture_strength,
+                            blend_mode=resolved_blend,
+                            stroke_linecap="round",
+                            smoothness=region.constraints.smoothness,
+                        )
+                        overlay.metadata.update({"brush_overlay_for": rid, "brush": brush})
+                        overlays.append(overlay.id)
+            except (ValueError, RuntimeError):
+                continue
+
+        return f"Brush '{brush}' applied to {affected} region(s), overlays={len(overlays)}"
+
+
+    @mcp.tool(
+        name="set_layer_role",
+        description="Assign an art workflow role to an existing layer and optionally normalize its z-order/style. "
+        "Roles: sketch, line_art, base_color, shadow, highlight, glow, texture, fx, background, guide, mask.",
+    )
+    def set_layer_role(
+        layer: str,
+        role: LAYER_ROLES,
+        document_id: str | None = None,
+        z_base: int | None = None,
+        opacity: float | None = None,
+        blend_mode: BLEND_MODES | None = None,
+    ) -> str:
+        """Tag every region on a layer with a workflow role."""
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        target_ids = select_region_ids(scene, doc_id, {"layer": layer})
+        if not target_ids:
+            return f"Error: No regions found on layer '{layer}'"
+        base = LAYER_ROLE_Z.get(role, 0) if z_base is None else z_base
+        affected = 0
+        for idx, rid in enumerate(target_ids):
+            try:
+                kwargs: dict[str, Any] = {
+                    "z_index": base + idx,
+                    "metadata": {"layer_role": role},
+                }
+                if opacity is not None:
+                    kwargs["opacity"] = opacity
+                elif role == "sketch":
+                    kwargs["opacity"] = 0.35
+                elif role == "guide":
+                    kwargs["opacity"] = 0.25
+                if blend_mode is not None:
+                    kwargs["blend_mode"] = blend_mode
+                elif role == "shadow":
+                    kwargs["blend_mode"] = "multiply"
+                elif role in ("highlight", "glow", "fx"):
+                    kwargs["blend_mode"] = "screen"
+                scene.edit_region(region_id=rid, document_id=doc_id, **kwargs)
+                affected += 1
+            except (ValueError, RuntimeError):
+                continue
+        return f"Layer '{layer}' role set to '{role}' on {affected} region(s)"
+
+
+    @mcp.tool(
+        name="apply_texture_effect",
+        description="Create editable vector texture and FX overlays for selected art. "
+        "Effects: noise, paper, fabric, halftone, screen_tone, bloom, particles, "
+        "gradient_light, rim_light. This is an overlay/FX pass, not a medium preset; "
+        "use apply_brush_style first for pencil/ink/watercolor/chalk stroke quality, then stack texture effects. "
+        "Uses clipping when possible so effects stay inside the target.",
+    )
+    def apply_texture_effect(
+        effect: TEXTURE_EFFECTS,
+        selector: dict[str, Any] | None = None,
+        document_id: str | None = None,
+        bounds: list[float] | None = None,
+        clip_to: str | None = None,
+        color: str = "#FFFFFF",
+        secondary_color: str | None = None,
+        density: int = 24,
+        size: StrokeWidthInput = None,
+        opacity: float = 0.35,
+        angle: float = 0.0,
+        blend_mode: BLEND_MODES | None = None,
+        layer: str | None = None,
+        z_index: int | None = None,
+        seed: int = 1,
+    ) -> str:
+        """Add vector texture/effect overlays."""
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        target_ids = select_region_ids(scene, doc_id, selector)
+        if clip_to and not target_ids:
+            target_ids = [clip_to]
+        box = None
+        if bounds:
+            box = {"x": float(bounds[0]), "y": float(bounds[1]), "w": float(bounds[2]), "h": float(bounds[3])}
+        elif target_ids:
+            box = _scene_bounds_for_ids(scene, doc_id, target_ids)
+        if not box:
+            return "Error: bounds or matching regions required"
+
+        base_clip = clip_to or (target_ids[0] if len(target_ids) == 1 else None)
+        base_layer = layer
+        base_z = z_index
+        if base_clip:
+            try:
+                src = scene.get_region(base_clip, doc_id)
+                base_layer = base_layer or src.layer
+                base_z = base_z if base_z is not None else src.z_index + 4
+            except ValueError:
+                pass
+        base_layer = base_layer or "texture"
+        base_z = 100 if base_z is None else base_z
+        wnorm = stroke_width_to_norm(doc_id, size) or 0.004
+        rng = random.Random(seed)
+        created: list[str] = []
+        x, y, w, h = box["x"], box["y"], max(0.001, box["w"]), max(0.001, box["h"])
+        resolved_blend = blend_mode
+
+        def mark(region):
+            region.clip_to = base_clip
+            region.metadata.update({"tool": "apply_texture_effect", "effect": effect})
+            created.append(region.id)
+
+        try:
+            if effect in ("halftone", "screen_tone"):
+                cols = max(2, min(80, density))
+                rows = max(2, round(cols * h / max(w, 0.001)))
+                dot_r = max(wnorm, min(w / cols, h / rows) * (0.38 if effect == "halftone" else 0.22))
+                for row in range(rows):
+                    for col in range(cols):
+                        if effect == "screen_tone" and (row + col) % 2:
+                            continue
+                        px = x + (col + 0.5) * w / cols
+                        py = y + (row + 0.5) * h / rows
+                        r = scene.create_ellipse(
+                            px, py, dot_r * rng.uniform(0.75, 1.15),
+                            document_id=doc_id,
+                            region_id=f"fx_{effect}_{len(created):03d}",
+                            layer=base_layer,
+                            z_index=base_z,
+                            fill=color,
+                            stroke=None,
+                            opacity=opacity * rng.uniform(0.75, 1.0),
+                            blend_mode=resolved_blend or ("multiply" if color != "#FFFFFF" else "screen"),
+                        )
+                        mark(r)
+            elif effect in ("noise", "paper", "fabric"):
+                count = max(4, min(450, density * (6 if effect == "noise" else 4)))
+                for i in range(count):
+                    px = x + rng.random() * w
+                    py = y + rng.random() * h
+                    length = wnorm * rng.uniform(1.5, 5.0)
+                    theta = math.radians(angle + (rng.uniform(-35, 35) if effect != "fabric" else (0 if i % 2 else 90)))
+                    p2 = (px + math.cos(theta) * length, py + math.sin(theta) * length)
+                    r = scene.create_line(
+                        points=[(px, py), p2],
+                        document_id=doc_id,
+                        region_id=f"fx_{effect}_{i:03d}",
+                        layer=base_layer,
+                        z_index=base_z,
+                        stroke=color if i % 3 else (secondary_color or color),
+                        stroke_width=wnorm * rng.uniform(0.35, 0.95),
+                        opacity=opacity * rng.uniform(0.25, 0.75),
+                        blend_mode=resolved_blend or ("multiply" if effect != "paper" else "overlay"),
+                        stroke_linecap="round",
+                    )
+                    mark(r)
+            elif effect == "bloom":
+                ids = target_ids or ([base_clip] if base_clip else [])
+                for rid in ids:
+                    try:
+                        src = scene.get_region(rid, doc_id)
+                    except ValueError:
+                        continue
+                    r = scene.create_region(
+                        outline=src.outline,
+                        document_id=doc_id,
+                        region_id=_append_unique(rid, "bloom"),
+                        layer=base_layer,
+                        z_index=src.z_index + 3,
+                        constraints=src.constraints,
+                        style=Style(fill=color, stroke=None, opacity=opacity, blend_mode=resolved_blend or "screen", blur=max(3.0, wnorm * 2200)),
+                        metadata={"tool": "apply_texture_effect", "effect": effect, "source": rid},
+                    )
+                    created.append(r.id)
+            elif effect == "particles":
+                count = max(1, min(300, density))
+                for i in range(count):
+                    px = x + rng.random() * w
+                    py = y + rng.random() * h
+                    dot = wnorm * rng.uniform(0.65, 2.8)
+                    r = scene.create_ellipse(
+                        px, py, dot,
+                        document_id=doc_id,
+                        region_id=f"fx_particle_{i:03d}",
+                        layer=base_layer,
+                        z_index=base_z + i % 3,
+                        fill=color if i % 4 else (secondary_color or color),
+                        stroke=None,
+                        opacity=opacity * rng.uniform(0.3, 1.0),
+                        blend_mode=resolved_blend or "screen",
+                    )
+                    mark(r)
+            elif effect in ("gradient_light", "rim_light"):
+                if effect == "gradient_light":
+                    grad = {
+                        "type": "linear",
+                        "x1": round(0.5 - 0.5 * math.cos(math.radians(angle)), 2),
+                        "y1": round(0.5 - 0.5 * math.sin(math.radians(angle)), 2),
+                        "x2": round(0.5 + 0.5 * math.cos(math.radians(angle)), 2),
+                        "y2": round(0.5 + 0.5 * math.sin(math.radians(angle)), 2),
+                        "stops": [
+                            {"offset": 0.0, "color": color, "opacity": opacity},
+                            {"offset": 1.0, "color": secondary_color or color, "opacity": 0.0},
+                        ],
+                    }
+                    fill = grad
+                    outline = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+                    stroke = None
+                    sw = 0.001
+                else:
+                    fill = None
+                    stroke = color
+                    sw = max(wnorm, min(w, h) * 0.035)
+                    outline = [(x + 0.06 * w, y + 0.08 * h), (x + 0.55 * w, y), (x + 0.94 * w, y + 0.20 * h)]
+                r = scene.create_region(
+                    outline=outline,
+                    document_id=doc_id,
+                    region_id=f"fx_{effect}_{seed}",
+                    layer=base_layer,
+                    z_index=base_z,
+                    clip_to=base_clip,
+                    constraints=CurveConstraints(smoothness=0.45, closed=effect == "gradient_light"),
+                    style=Style(fill=fill, stroke=stroke, stroke_width=sw, opacity=opacity, blend_mode=resolved_blend or "screen", stroke_linecap="round"),
+                    metadata={"tool": "apply_texture_effect", "effect": effect},
+                )
+                created.append(r.id)
+            else:
+                return f"Error: Unknown effect '{effect}'"
+        except (ValueError, RuntimeError, TypeError) as exc:
+            return f"Error: {exc}"
+
+        scene._persist(doc_id)
+        return f"Texture effect '{effect}' created {len(created)} region(s)"
+
+
+    @mcp.tool(
         name="apply_depth_haze",
         description="Apply atmospheric perspective to existing regions by blending fills/strokes toward a haze color "
         "based on distance. Use for far buildings, skyline, canals, and background layers so scenes gain depth "
@@ -496,7 +902,7 @@ def create_tools(mcp):
     )
     def apply_depth_haze(
         document_id: str | None = None,
-        selector: dict | None = None,
+        selector: dict[str, Any] | None = None,
         haze_color: str = "#7FB8D6",
         near_y: float = 0.75,
         far_y: float = 0.25,
@@ -508,8 +914,7 @@ def create_tools(mcp):
         """Blend selected regions toward haze_color based on their vertical depth.
 
         Args:
-            selector: Optional selector like restyle: {"ids":[...]}, {"layer":"..."},
-                {"tags":{...}}, or {"fill":"#..."}; omitted means all regions.
+            selector: Shared selector. Omitted means all regions.
             haze_color: Hex color to blend toward, typically sky/horizon color.
             near_y: Regions at or below this center-y get no haze.
             far_y: Regions at or above this center-y get max_strength haze.
@@ -527,23 +932,7 @@ def create_tools(mcp):
         if _hex_to_rgb(haze_color) is None:
             return "Error: haze_color must be a #RRGGBB hex color"
 
-        target_ids: list[str]
-        if selector:
-            if "ids" in selector:
-                target_ids = list(selector["ids"])
-            elif "group_name" in selector:
-                members = scene.get_group(selector["group_name"], doc_id)
-                target_ids = [m["id"] for m in members]
-            elif "fill" in selector:
-                target_ids = [r["id"] for r in scene.find_objects(document_id=doc_id, fill=selector["fill"])]
-            elif "layer" in selector:
-                target_ids = [r["id"] for r in scene.find_objects(document_id=doc_id, layer=selector["layer"])]
-            elif "tags" in selector:
-                target_ids = [r["id"] for r in scene.find_objects(document_id=doc_id, tags=selector["tags"])]
-            else:
-                return "Error: Unsupported selector. Use ids, group_name, fill, layer, or tags."
-        else:
-            target_ids = [r.id for r in scene.get_all_regions(doc_id)]
+        target_ids = select_region_ids(scene, doc_id, selector, default_all=True)
 
         if not target_ids:
             return "Error: No matching regions found"
@@ -713,20 +1102,23 @@ def create_tools(mcp):
         name="apply_line_hierarchy",
         description="Automate stroke-weight by depth: outer silhouette regions "
         "get thicker strokes, internal detail gets thinner. "
+        "Accepts the shared selector shape to limit the pass to ids, group_name, layer, fill, tags, bounds, z_min, z_max, or has_stroke. "
         "💡 Apply after building a scene to enforce consistent line hierarchy.",
     )
     def apply_line_hierarchy(
         document_id: str | None = None,
-        outer_width: float = 0.006,
-        inner_width: float = 0.003,
+        selector: dict[str, Any] | None = None,
+        outer_width: StrokeWidthInput = 6,
+        inner_width: StrokeWidthInput = 3,
         basis: str = "z_index",
     ) -> str:
         """Apply stroke-weight hierarchy.
 
         Args:
             document_id: Document UUID.
-            outer_width: Stroke width for silhouette/outer regions.
-            inner_width: Stroke width for internal detail regions.
+            selector: Shared selector. Omit/null to process all regions.
+            outer_width: Stroke width for silhouette/outer regions in canvas pixels.
+            inner_width: Stroke width for internal detail regions in canvas pixels.
             basis: "z_index", "layer", or "bounding_size".
         """
         scene = get_graph()
@@ -735,7 +1127,11 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
 
-        regions = list(scene.get_all_regions(doc_id))
+        outer_norm = stroke_width_to_norm(doc_id, outer_width)
+        inner_norm = stroke_width_to_norm(doc_id, inner_width)
+
+        target_ids = set(select_region_ids(scene, doc_id, selector, default_all=True))
+        regions = [r for r in scene.get_all_regions(doc_id) if r.id in target_ids]
         if not regions:
             return "Error: No regions found"
 
@@ -759,18 +1155,18 @@ def create_tools(mcp):
         affected = 0
         for r in outer:
             try:
-                scene.edit_region(region_id=r.id, document_id=doc_id, stroke_width=outer_width)
+                scene.edit_region(region_id=r.id, document_id=doc_id, stroke_width=outer_norm)
                 affected += 1
             except (ValueError, RuntimeError):
                 pass
         for r in inner:
             try:
-                scene.edit_region(region_id=r.id, document_id=doc_id, stroke_width=inner_width)
+                scene.edit_region(region_id=r.id, document_id=doc_id, stroke_width=inner_norm)
                 affected += 1
             except (ValueError, RuntimeError):
                 pass
 
-        return f"Line hierarchy applied: {len(outer)} outer ({outer_width}), {len(inner)} inner ({inner_width})"
+        return f"Line hierarchy applied: {len(outer)} outer ({outer_width}px), {len(inner)} inner ({inner_width}px)"
 
     @mcp.tool(
         name="compare_style_consistency",
