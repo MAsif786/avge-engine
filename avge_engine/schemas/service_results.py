@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.scene.models import RegionNode
@@ -39,6 +39,28 @@ class CopyElementResult(BaseModel):
     copied_ids: list[str]
     group_name: str | None = None
     source_region_id: str | None = None
+
+
+class CreateRegionResult(BaseModel):
+    region_id: str
+    bounds: dict[str, float] | None
+    outline_point_count: int
+    warnings: list[str] = Field(default_factory=list)
+
+
+class CreatePrimitiveResult(BaseModel):
+    region_id: str
+
+
+class CreateCurveResult(BaseModel):
+    region_id: str
+    points: int
+    smoothness: float
+
+
+class BooleanOperationResult(BaseModel):
+    region_id: str
+    outline_points: int
 
 
 class DepthHazeResult(BaseModel):

@@ -17,13 +17,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 
 from avge_engine import __version__, __tool_set_version__
-from avge_engine.scene import CurveConstraints, Style
-from avge_engine.services.engine import get_graph, reset_graph, stroke_width_to_norm
+from avge_engine.services.engine import get_graph, reset_graph
+from avge_engine.services.creation_service import CreationService
 from avge_engine.services.document_service import DocumentService
 from avge_engine.services.region_service import RegionService
 from avge_engine.schema_registry import list_tool_names
 from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
-from avge_engine.geometry import compute_bounds
 from avge_engine.schemas import (
     BatchRequest,
     BooleanOpRequest,
@@ -182,61 +181,34 @@ async def get_document_info(document_id: str | None = None):
 
 @app.post("/tools/create_region", response_model=ToolResponse)
 async def create_region(req: CreateRegionRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No active document")
-    # resolve for remainder of handler
-
-    import json as _json
-    resolved_fill = req.fill
-    if req.fill_gradient is not None:
-        if isinstance(req.fill_gradient, str):
-            try:
-                resolved_fill = _json.loads(req.fill_gradient)
-            except _json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="invalid fill_gradient JSON")
-        else:
-            resolved_fill = req.fill_gradient
-
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
-        constraints = CurveConstraints(
-            smoothness=max(0.0, min(1.0, req.smoothness)),
+        result = CreationService().create_region(
+            outline=req.outline,
+            document_id=req.document_id,
+            region_id=req.region_id,
+            layer=req.layer,
             closed=req.closed,
-            tensions=req.smoothness_per_point,
-        )
-        style = Style(
-            fill=None if resolved_fill is None or resolved_fill == "none" else resolved_fill,
+            smoothness=req.smoothness,
+            fill=req.fill,
             stroke=req.stroke,
-            stroke_width=stroke_width,
-            opacity=max(0.0, min(1.0, req.opacity)),
+            stroke_width=req.stroke_width,
+            opacity=req.opacity,
+            fill_gradient=req.fill_gradient,
+            smoothness_per_point=req.smoothness_per_point,
+            z_index=req.z_index,
+            clip_to=req.clip_to,
             blend_mode=req.blend_mode,
+            tags=req.tags,
             blur=req.blur,
         )
-        metadata = {}
-        if req.tags:
-            try:
-                metadata = dict(req.tags)
-            except (_json.JSONDecodeError, TypeError):
-                raise HTTPException(status_code=400, detail="tags must be a valid JSON object")
-
-        region = graph.create_region(
-            outline=[(float(p[0]), float(p[1])) for p in req.outline],
-            region_id=req.region_id, document_id=doc_id,
-            layer=req.layer, z_index=req.z_index,
-            clip_to=req.clip_to,
-            constraints=constraints, style=style,
-            metadata=metadata,
+        return ToolResponse(
+            data={
+                "region_id": result.region_id,
+                "bounds": result.bounds,
+                "outline_point_count": result.outline_point_count,
+            },
+            warnings=result.warnings,
         )
-        bounds = compute_bounds(region.outline)
-        warnings = []
-        if len(req.outline) > 30:
-            warnings.append(f"Advisory: {len(req.outline)} points is high")
-        return ToolResponse(data={
-            "region_id": region.id, "bounds": bounds,
-            "outline_point_count": len(req.outline),
-        }, warnings=warnings)
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -300,156 +272,124 @@ async def copy_element(req: CopyElementRequest):
 
 @app.post("/tools/create_rect", response_model=ToolResponse)
 async def create_rect(req: CreateRectRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
-        r = graph.create_rect(
-            req.x, req.y, req.width, req.height, rx=req.rx,
-            document_id=req.document_id, region_id=req.region_id,
-            layer=req.layer, z_index=req.z_index,
-            fill=req.fill, stroke=req.stroke,
-            stroke_width=stroke_width, opacity=req.opacity,
+        result = CreationService().create_rect(
+            x=req.x,
+            y=req.y,
+            width=req.width,
+            height=req.height,
+            rx=req.rx,
+            document_id=req.document_id,
+            region_id=req.region_id,
+            layer=req.layer,
+            z_index=req.z_index,
+            fill=req.fill,
+            stroke=req.stroke,
+            stroke_width=req.stroke_width,
+            opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
-        return ToolResponse(data={"region_id": r.id})
-    except (ValueError, RuntimeError) as e:
+        return ToolResponse(data={"region_id": result.region_id})
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/tools/create_ellipse", response_model=ToolResponse)
 async def create_ellipse(req: CreateEllipseRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
-        e = graph.create_ellipse(
-            req.cx, req.cy, req.rx, ry=req.ry,
-            document_id=req.document_id, region_id=req.region_id,
-            layer=req.layer, z_index=req.z_index,
-            fill=req.fill, stroke=req.stroke,
-            stroke_width=stroke_width, opacity=req.opacity,
+        result = CreationService().create_ellipse(
+            cx=req.cx,
+            cy=req.cy,
+            rx=req.rx,
+            ry=req.ry,
+            document_id=req.document_id,
+            region_id=req.region_id,
+            layer=req.layer,
+            z_index=req.z_index,
+            fill=req.fill,
+            stroke=req.stroke,
+            stroke_width=req.stroke_width,
+            opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
-        return ToolResponse(data={"region_id": e.id})
-    except (ValueError, RuntimeError) as e:
+        return ToolResponse(data={"region_id": result.region_id})
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/tools/create_line", response_model=ToolResponse)
 async def create_line(req: CreateLineRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
-        lr = graph.create_line(
-            req.x1, req.y1, req.x2, req.y2,
-            document_id=req.document_id, region_id=req.region_id,
-            layer=req.layer, z_index=req.z_index,
-            stroke=req.stroke, stroke_width=stroke_width,
-            opacity=req.opacity, blend_mode=req.blend_mode,
+        result = CreationService().create_line(
+            x1=req.x1,
+            y1=req.y1,
+            x2=req.x2,
+            y2=req.y2,
+            document_id=req.document_id,
+            region_id=req.region_id,
+            layer=req.layer,
+            z_index=req.z_index,
+            stroke=req.stroke,
+            stroke_width=req.stroke_width,
+            opacity=req.opacity,
+            blend_mode=req.blend_mode,
         )
-        return ToolResponse(data={"region_id": lr.id})
-    except (ValueError, RuntimeError) as e:
+        return ToolResponse(data={"region_id": result.region_id})
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# ── Style Endpoints ────────────────────────────────────────────────
+# ── Creation Operation Endpoints ───────────────────────────────────
 
 @app.post("/tools/create_curve", response_model=ToolResponse)
 async def create_curve(req: CreateCurveRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No active document")
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width) or 0.005
-        if len(req.points) == 2:
-            x1, y1 = req.points[0]
-            x2, y2 = req.points[1]
-            lr = graph.create_line(
-                x1, y1, x2, y2, document_id=doc_id, region_id=req.region_id,
-                layer=req.layer, z_index=req.z_index,
-                stroke=req.stroke, stroke_width=stroke_width,
-                opacity=req.opacity, blend_mode=req.blend_mode,
-                stroke_linecap=req.stroke_linecap,
-            )
-        else:
-            lr = graph.create_line(
-                points=req.points, document_id=doc_id, region_id=req.region_id,
-                layer=req.layer, z_index=req.z_index,
-                stroke=req.stroke, stroke_width=stroke_width,
-                opacity=req.opacity, blend_mode=req.blend_mode,
-                stroke_linecap=req.stroke_linecap,
-                smoothness=req.smoothness,
-            )
-        return ToolResponse(data={"region_id": lr.id, "points": len(req.points), "smoothness": req.smoothness})
+        result = CreationService().create_curve(
+            points=req.points,
+            document_id=req.document_id,
+            region_id=req.region_id,
+            layer=req.layer,
+            z_index=req.z_index,
+            stroke=req.stroke,
+            stroke_width=req.stroke_width,
+            opacity=req.opacity,
+            smoothness=req.smoothness,
+            blend_mode=req.blend_mode,
+            stroke_linecap=req.stroke_linecap,
+        )
+        return ToolResponse(data={
+            "region_id": result.region_id,
+            "points": result.points,
+            "smoothness": result.smoothness,
+        })
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-    # Resolve fill from gradient
-    import json as _json
-    resolved_fill = None
-    if req.fill_gradient is not None:
-        if isinstance(req.fill_gradient, str):
-            resolved_fill = _json.loads(req.fill_gradient)
-        else:
-            resolved_fill = req.fill_gradient
-    elif req.fill is not None and req.fill != "none":
-        resolved_fill = req.fill
-
-    resolved_stroke = None if req.stroke is None or req.stroke == "none" else req.stroke
-    resolved_sw = stroke_width_to_norm(doc_id, req.stroke_width)
-    resolved_op = max(0.0, min(1.0, req.opacity)) if req.opacity is not None else None
-
-    # Route through edit_region if blend_mode or clip_to
-    if req.blend_mode is not None or req.clip_to is not None:
-        affected = []
-        for rid in ids:
-            try:
-                graph.edit_region(
-                    region_id=rid, document_id=doc_id,
-                    fill=resolved_fill, stroke=resolved_stroke,
-                    stroke_width=resolved_sw, opacity=resolved_op,
-                    blend_mode=req.blend_mode, clip_to=req.clip_to,
-                )
-                affected.append(rid)
-            except (ValueError, RuntimeError) as e:
-                raise HTTPException(status_code=400, detail=f"Error updating '{rid}': {e}")
-        return ToolResponse(data={"affected": affected, "count": len(affected)})
-
-    affected = graph.style_objects(
-        ids=ids, document_id=doc_id,
-        fill=resolved_fill, stroke=resolved_stroke,
-        stroke_width=resolved_sw, opacity=resolved_op,
-    )
-    return ToolResponse(data={"affected": affected, "count": len(affected)})
 
 
 @app.post("/tools/boolean_operation", response_model=ToolResponse)
 async def boolean_operation(req: BooleanOpRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        stroke_width = stroke_width_to_norm(doc_id, req.stroke_width)
-        result = graph.boolean_operation(
-            operation=req.operation, region_ids=req.region_ids,
-            new_region_id=req.new_region_id, document_id=req.document_id,
-            keep_originals=req.keep_originals, fill=req.fill,
-            stroke=req.stroke, stroke_width=stroke_width,
+        result = CreationService().boolean_operation(
+            operation=req.operation,
+            region_ids=req.region_ids,
+            new_region_id=req.new_region_id,
+            document_id=req.document_id,
+            keep_originals=req.keep_originals,
+            fill=req.fill,
+            stroke=req.stroke,
+            stroke_width=req.stroke_width,
             opacity=req.opacity,
         )
-        return ToolResponse(data={"region_id": result.id, "outline_points": len(result.outline)})
-    except (ValueError, RuntimeError) as e:
+        return ToolResponse(data={"region_id": result.region_id, "outline_points": result.outline_points})
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
