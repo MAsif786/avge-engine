@@ -156,6 +156,22 @@ def test_svg_text():
     assert 'font-size=' in svg
 
 
+def test_svg_text_combines_primitive_and_style_opacity_once():
+    import xml.etree.ElementTree as ET
+
+    scene = SceneGraph()
+    did = _doc(scene)
+    r = scene.create_text(0.5, 0.5, "Hello", document_id=did, opacity=0.9)
+    scene.edit_region(r.id, document_id=did, opacity=0.5)
+
+    svg = svg_serialize(scene, did)
+
+    text_line = next(line for line in svg.splitlines() if "<text" in line)
+    assert text_line.count("opacity=") == 1
+    assert 'opacity="0.45"' in text_line
+    ET.fromstring(svg)
+
+
 def test_svg_empty_scene():
     scene = SceneGraph()
     svg = svg_serialize(scene, None)

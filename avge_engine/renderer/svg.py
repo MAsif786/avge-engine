@@ -137,9 +137,9 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
     sw = _fmt(region.style.stroke_width * canvas_min)
     fill = resolve_fill(region.style.fill)
 
-    def _append_style(parts: list[str]) -> None:
+    def _append_style(parts: list[str], *, include_opacity: bool = True) -> None:
         parts.append(f' fill="{fill}" stroke="{stroke}" stroke-width="{sw}"')
-        if region.style.opacity < 1.0:
+        if include_opacity and region.style.opacity < 1.0:
             parts.append(f' opacity="{_fmt(region.style.opacity)}"')
         if region.style.blend_mode:
             parts.append(f' style="mix-blend-mode:{region.style.blend_mode}"')
@@ -252,10 +252,13 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
             ls = region.primitive.get("letter_spacing")
             if ls:
                 parts.append(f' letter-spacing="{_fmt(ls)}"')
-            top = region.primitive.get("opacity")
-            if top:
-                parts.append(f' opacity="{_fmt(top)}"')
-            _append_style(parts)
+            primitive_opacity = region.primitive.get("opacity")
+            effective_opacity = region.style.opacity
+            if primitive_opacity is not None:
+                effective_opacity *= float(primitive_opacity)
+            if effective_opacity < 1.0:
+                parts.append(f' opacity="{_fmt(effective_opacity)}"')
+            _append_style(parts, include_opacity=False)
             _append_transform(parts, region.primitive["x"], region.primitive["y"])
             parts.append(f">{_escape_xml(text)}</text>")
             return "".join(parts)
