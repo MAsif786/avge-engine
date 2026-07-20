@@ -12,21 +12,47 @@ Mirrors the MCP tool set at avge_engine/controllers/ — keep in sync.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from enum import Enum
-from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
 
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.services.engine import get_graph, reset_graph, stroke_width_to_norm
 from avge_engine.services.document_service import DocumentService
 from avge_engine.services.region_service import RegionService
-from avge_engine.schema_registry import validate_input, list_tool_names
+from avge_engine.schema_registry import list_tool_names
 from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
 from avge_engine.geometry import compute_bounds
+from avge_engine.schemas import (
+    BatchRequest,
+    BooleanOpRequest,
+    CheckpointRequest,
+    CloneDocumentRequest,
+    CopyElementRequest,
+    CreateCurveRequest,
+    CreateDocumentRequest,
+    CreateEllipseRequest,
+    CreateLineRequest,
+    CreateRectRequest,
+    CreateRegionRequest,
+    CritiqueRequest,
+    DeleteDocumentRequest,
+    DeleteRegionRequest,
+    DescribeSceneRequest,
+    DocIdBody,
+    DocIdLimitBody,
+    DuplicateGroupRequest,
+    EditRegionRequest,
+    ExportSvgRequest,
+    ExtrudeOutlineRequest,
+    FindObjectsRequest,
+    ManageGroupRequest,
+    PreviewRequest,
+    ReorderLayerRequest,
+    ToolResponse,
+    TransformObjectsRequest,
+)
 
 
 # ── Lifespan ───────────────────────────────────────────────────────
@@ -42,283 +68,6 @@ app = FastAPI(
     description="AI-Native Vector Graphics Engine — M0b Production Build",
     lifespan=lifespan,
 )
-
-
-# ── Shared Literal types ───────────────────────────────────────────
-
-BLEND_MODES = Literal[
-    "normal", "multiply", "screen", "overlay", "darken", "lighten",
-    "color-dodge", "linear-dodge", "color-burn", "soft-light", "hard-light",
-    "difference", "hue", "saturation", "color", "luminosity", "add",
-]
-
-BOOLEAN_OPS = Literal["union", "intersect", "subtract", "xor"]
-DETAIL_LEVEL = Literal["summary", "full"]
-GROUP_ACTION = Literal["create", "add", "remove", "delete"]
-PRESET_NAMES = Literal["warm_shaded", "cool_shaded", "metallic", "glow", "shadow", "wood", "car_paint", "deep_shadow", "chrome"]
-PIVOT_MODES = Literal["center", "base", "fixed"]
-
-
-# ── Request / Response Models ──────────────────────────────────────
-
-class ToolResponse(BaseModel):
-    status: str = "ok"
-    data: Any = None
-    warnings: list[str] = []
-    version: int | None = None
-
-
-# ── Document ───────────────────────────────────────────────────────
-
-class CreateDocumentRequest(BaseModel):
-    width: int = Field(default=1000, ge=100, le=4000)
-    height: int = Field(default=1000, ge=100, le=4000)
-    unit: str = Field(default="px", pattern=r"^(px|in|mm|cm)$")
-    background: str = Field(default="#FFFFFF", pattern=r"^#[0-9A-Fa-f]{6}$")
-    name: str = ""
-
-
-class DeleteDocumentRequest(BaseModel):
-    ids: list[str] = Field(min_length=1)
-    confirm: bool = False
-
-
-class CloneDocumentRequest(BaseModel):
-    source_document_id: str | None = None
-    name: str | None = Field(default=None, max_length=128)
-    set_active: bool = True
-
-
-# ── Region ─────────────────────────────────────────────────────────
-
-class CreateRegionRequest(BaseModel):
-    outline: list[list[float]]
-    document_id: str | None = None
-    region_id: str | None = None
-    layer: str = "default"
-    closed: bool = True
-    smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
-    fill: str | None = "#CCCCCC"
-    stroke: str | None = "#333333"
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
-    fill_gradient: Any = None
-    smoothness_per_point: list[float] | None = None
-    z_index: int = 0
-    clip_to: str | None = None
-    blend_mode: BLEND_MODES | None = None
-    tags: dict | None = None
-    shape: dict | None = None
-    stroke_linecap: str | None = None
-    blur: float = Field(default=0.0, ge=0.0, le=80.0)
-
-
-class EditRegionRequest(BaseModel):
-    region_id: str
-    document_id: str
-    outline: list[list[float]] | None = None
-    smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
-    smoothness_per_point: list[float] | None = None
-    fill: str | None = None
-    stroke: str | None = None
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float | None = Field(default=None, ge=0.0, le=1.0)
-    z_index: int | None = None
-    blend_mode: BLEND_MODES | None = None
-    clip_to: str | None = None
-    layer: str | None = None
-    tags: dict | None = None
-    shape: dict | None = None
-    stroke_linecap: str | None = None
-    blur: float | None = Field(default=None, ge=0.0, le=80.0)
-
-
-class DeleteRegionRequest(BaseModel):
-    ids: list[str] = Field(min_length=1)
-    document_id: str
-    confirm: bool = False
-
-
-class CopyElementRequest(BaseModel):
-    source_document_id: str | None = None
-    target_document_id: str
-    region_id: str | None = None
-    group: str | None = None
-    new_region_id: str | None = None
-    offset_x: float = 0.0
-    offset_y: float = 0.0
-
-
-class BooleanOpRequest(BaseModel):
-    operation: BOOLEAN_OPS = "union"
-    region_ids: list[str] = Field(min_length=2)
-    new_region_id: str | None = None
-    document_id: str
-    keep_originals: bool = False
-    fill: str | None = None
-    stroke: str | None = None
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float | None = None
-
-
-class TransformObjectsRequest(BaseModel):
-    ids: list[str] | None = None
-    document_id: str
-    dx: float = 0.0
-    dy: float = 0.0
-    scale: float = 1.0
-    sx: float | None = None
-    sy: float | None = None
-    rotate: float = 0.0
-    group_mode: bool = False
-    pivot_x: float | None = None
-    pivot_y: float | None = None
-    pivot_mode: PIVOT_MODES | None = None
-    z_index: int | None = None
-    group_name: str | None = None
-    mirror_x: bool = False
-    mirror_y: bool = False
-
-
-class ManageGroupRequest(BaseModel):
-    action: GROUP_ACTION = "create"
-    group_name: str
-    region_ids: list[str] | None = None
-    document_id: str
-
-
-class DuplicateGroupRequest(BaseModel):
-    group_name: str
-    document_id: str
-    new_prefix: str | None = None
-    dx: float = 0.0
-    dy: float = 0.0
-    scale: float = 1.0
-    sx: float | None = None
-    sy: float | None = None
-    rotate: float = 0.0
-    mirror_x: bool = False
-    mirror_y: bool = False
-
-
-class ExtrudeOutlineRequest(BaseModel):
-    region_id: str
-    document_id: str
-    segment_indices: list[int] | None = None
-    extrusion_length: float = 0.03
-    extrusion_width: float = 0.02
-    angle_offset: float = 0.0
-    direction: Literal["outward", "inward", "extrude"] = "outward"
-    shape: Literal["round", "sharp", "bevel"] = "round"
-
-
-# ── Query / View ───────────────────────────────────────────────────
-
-class DescribeSceneRequest(BaseModel):
-    detail: DETAIL_LEVEL = "summary"
-    filter_layer: str | None = None
-    document_id: str
-
-
-class FindObjectsRequest(BaseModel):
-    document_id: str
-    fill: str | None = None
-    min_x: float | None = None
-    max_x: float | None = None
-    min_y: float | None = None
-    max_y: float | None = None
-    min_w: float | None = None
-    max_w: float | None = None
-    min_h: float | None = None
-    max_h: float | None = None
-    has_stroke: bool | None = None
-    layer: str | None = None
-    tags: dict | None = None
-
-
-class PreviewRequest(BaseModel):
-    scale: float = Field(default=1.0, ge=0.25, le=2.0)
-    document_id: str | None = None
-    exclude_layers: list[str] | None = None
-    exclude_region_ids: list[str] | None = None
-    exclude_prefixes: list[str] | None = None
-
-
-class ExportSvgRequest(BaseModel):
-    filepath: str = "output/scene.svg"
-    document_id: str
-    exclude_layers: list[str] | None = None
-    exclude_region_ids: list[str] | None = None
-    exclude_prefixes: list[str] | None = None
-
-
-class ReorderLayerRequest(BaseModel):
-    layer: str
-    z_offset: int
-    document_id: str
-
-
-# ── History ────────────────────────────────────────────────────────
-
-class CheckpointRequest(BaseModel):
-    name: str = "default"
-    document_id: str
-
-
-class BatchRequest(BaseModel):
-    ops: list[dict] = Field(min_length=1, max_length=200)
-    document_id: str
-
-
-class CreateCurveRequest(BaseModel):
-    points: list[list[float]] = Field(min_length=2, max_length=100)
-    document_id: str
-    region_id: str | None = None
-    layer: str = "default"
-    z_index: int = 0
-    stroke: str | None = "#333333"
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float = Field(default=1.0, ge=0.0, le=1.0)
-    smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
-    blend_mode: BLEND_MODES | None = None
-    stroke_linecap: str | None = "round"
-
-
-class DocIdBody(BaseModel):
-    """Body for endpoints needing only a document_id."""
-    document_id: str
-
-
-class DocIdLimitBody(BaseModel):
-    """Body for endpoints needing document_id + limit."""
-    document_id: str
-    limit: int = 20
-
-
-class CritiqueRequest(BaseModel):
-    document_id: str
-    mode: Literal["rules", "visual", "both"] = "both"
-    min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 # ── Health ─────────────────────────────────────────────────────────
@@ -549,71 +298,6 @@ async def copy_element(req: CopyElementRequest):
     return ToolResponse(data={"region_id": result.copied_ids[0] if result.copied_ids else None, "source": req.region_id})
 
 
-# ── Primitive Endpoints ────────────────────────────────────────────
-
-class CreateRectRequest(BaseModel):
-    x: float
-    y: float
-    width: float
-    height: float
-    rx: float = 0.0
-    document_id: str
-    region_id: str | None = None
-    layer: str = "default"
-    z_index: int = 0
-    fill: str | None = "#CCCCCC"
-    stroke: str | None = "#333333"
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float = 1.0
-    blend_mode: str | None = None
-
-
-class CreateEllipseRequest(BaseModel):
-    cx: float
-    cy: float
-    rx: float
-    ry: float | None = None
-    document_id: str
-    region_id: str | None = None
-    layer: str = "default"
-    z_index: int = 0
-    fill: str | None = "#CCCCCC"
-    stroke: str | None = "#333333"
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float = 1.0
-    blend_mode: str | None = None
-
-
-class CreateLineRequest(BaseModel):
-    x1: float
-    y1: float
-    x2: float
-    y2: float
-    document_id: str
-    region_id: str | None = None
-    layer: str = "default"
-    z_index: int = 0
-    stroke: str | None = "#333333"
-    stroke_width: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=512,
-        description="Stroke width in canvas pixels.",
-    )
-    opacity: float = 1.0
-    blend_mode: str | None = None
-
-
 @app.post("/tools/create_rect", response_model=ToolResponse)
 async def create_rect(req: CreateRectRequest):
     graph = get_graph()
@@ -680,7 +364,7 @@ async def create_line(req: CreateLineRequest):
 
 @app.post("/tools/create_curve", response_model=ToolResponse)
 async def create_curve(req: CreateCurveRequest):
-    graph = _get_graph()
+    graph = get_graph()
     doc_id = req.document_id or graph._last_doc_id
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=400, detail="No active document")

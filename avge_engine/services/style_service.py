@@ -1,27 +1,13 @@
 """Style application service."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from avge_engine.geometry import compute_bounds
-from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.schemas.common import StrokeWidthInput
+from avge_engine.schemas.service_results import DepthHazeResult, LineHierarchyResult
+from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids
-
-
-@dataclass(frozen=True)
-class DepthHazeResult:
-    affected: int
-    haze_color: str
-    max_strength: float
-
-
-@dataclass(frozen=True)
-class LineHierarchyResult:
-    outer_count: int
-    inner_count: int
-    outer_width: StrokeWidthInput
-    inner_width: StrokeWidthInput
 
 
 class StyleService:

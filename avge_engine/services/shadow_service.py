@@ -1,32 +1,12 @@
 """Shadow and directional shading service."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Literal
 
 from avge_engine.effects.color import apply_hsl_offset
-from avge_engine.scene.models import RegionNode
+from avge_engine.schemas.service_results import ShadowResult, ShadingResult
 from avge_engine.services.engine import get_graph, resolve_doc
 from avge_engine.services.selector_service import select_region_ids
-
-
-@dataclass(frozen=True)
-class ShadowResult:
-    shadow: RegionNode
-    source_id: str
-    onto_region_id: str | None
-    clipped: bool
-    softness: float
-    direction: float
-    distance: float
-
-
-@dataclass(frozen=True)
-class ShadingResult:
-    mode: Literal["two_tone", "gradient"]
-    target_count: int
-    overlay_count: int
-    light_direction: float
 
 
 class ShadowService:

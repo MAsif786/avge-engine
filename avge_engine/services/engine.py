@@ -6,9 +6,8 @@ The storage adapter is attached at startup so every mutation auto-persists to di
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
 
-from pydantic import Field
+from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.scene import SceneGraph
 from avge_engine.schema_registry import validate_input as _validate
 from avge_engine.storage import FileStorageAdapter
@@ -19,17 +18,6 @@ _active_doc: str | None = None
 
 # Storage directory (relative to project root)
 STORAGE_DIR: str = ".avge_data"
-
-StrokeWidthInput = Annotated[
-    float | None,
-    Field(
-        description="Stroke width in canvas pixels.",
-        ge=0.0,
-        le=512,
-    ),
-]
-
-
 
 def get_graph() -> SceneGraph:
     """Return the singleton SceneGraph instance (lazily created).

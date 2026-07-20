@@ -5,9 +5,9 @@ directly into ``SceneGraph`` internals for document operations.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
+from avge_engine.schemas.service_results import DeleteDocumentsResult, DocumentSummary
 from avge_engine.scene.models import DocumentNode
 from avge_engine.services.engine import (
     get_graph,
@@ -16,22 +16,6 @@ from avge_engine.services.engine import (
     resolve_doc,
     set_active_doc,
 )
-
-
-@dataclass(frozen=True)
-class DocumentSummary:
-    document: dict[str, Any]
-    region_count: int
-    regions: list[dict[str, Any]] | None = None
-
-
-@dataclass(frozen=True)
-class DeleteDocumentsResult:
-    preview: bool
-    found: list[dict[str, Any]]
-    missing: list[str]
-    deleted: list[str]
-    errors: list[str]
 
 
 class DocumentService:

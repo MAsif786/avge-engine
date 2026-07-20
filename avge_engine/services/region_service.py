@@ -1,31 +1,11 @@
 """Region edit/copy/delete service."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
-from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
-
-
-@dataclass(frozen=True)
-class EditRegionResult:
-    affected: list[str]
-
-
-@dataclass(frozen=True)
-class EditRegionsResult:
-    ok: int
-    total: int
-    lines: list[str]
-
-
-@dataclass(frozen=True)
-class CopyElementResult:
-    source_document_id: str
-    target_document_id: str
-    copied_ids: list[str]
-    group_name: str | None = None
-    source_region_id: str | None = None
+from avge_engine.schemas.common import StrokeWidthInput
+from avge_engine.schemas.service_results import CopyElementResult, EditRegionResult, EditRegionsResult
+from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
 
 
 class RegionService:
