@@ -340,9 +340,140 @@ def viewer_html() -> str:
       }
     }
 
-    function download(fmt) {
+    function selectedDoc() {
+      return state.docs.find((d) => d.id === state.selected) || { id: state.selected, name: state.selected };
+    }
+
+    function fileBaseName() {
+      const doc = selectedDoc();
+      return String(doc.name || doc.id || "avge-document")
+        .trim()
+        .replace(/[^A-Za-z0-9._-]+/g, "-")
+        .replace(/^[.-]+|[.-]+$/g, "")
+        .slice(0, 80) || "avge-document";
+    }
+
+    function saveBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    async function fetchSvgText() {
+      if (!state.selected) throw new Error("No document selected");
+      const res = await fetch(`/preview/${state.selected}.svg?t=${Date.now()}`);
+      if (!res.ok) throw new Error(await res.text());
+      return await res.text();
+    }
+
+    function svgSize(svgText) {
+      const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+      const svg = doc.documentElement;
+      const viewBox = (svg.getAttribute("viewBox") || "").trim().split(/[ ,]+/).map(Number);
+      if (viewBox.length === 4 && viewBox.every(Number.isFinite)) {
+        return { width: Math.max(1, Math.round(viewBox[2])), height: Math.max(1, Math.round(viewBox[3])) };
+      }
+      const width = parseFloat(svg.getAttribute("width")) || 1000;
+      const height = parseFloat(svg.getAttribute("height")) || 1000;
+      return { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) };
+    }
+
+    async function rasterizeSvg(svgText, background = "#ffffff") {
+      const { width, height } = svgSize(svgText);
+      const blob = new Blob([svgText], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      try {
+        const img = new Image();
+        img.decoding = "async";
+        const loaded = new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = () => reject(new Error("Browser could not rasterize SVG"));
+        });
+        img.src = url;
+        await loaded;
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = background;
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        return canvas;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+
+    function canvasToBlob(canvas, type, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Canvas export failed")), type, quality);
+      });
+    }
+
+    async function download(fmt) {
       if (!state.selected) return;
-      window.location.href = `/download/${state.selected}.${fmt}`;
+      try {
+        const svgText = await fetchSvgText();
+        const name = fileBaseName();
+        if (fmt === "svg") {
+          saveBlob(new Blob([svgText], { type: "image/svg+xml" }), `${name}.svg`);
+          return;
+        }
+        const canvas = await rasterizeSvg(svgText);
+        if (fmt === "png") {
+          saveBlob(await canvasToBlob(canvas, "image/png"), `${name}.png`);
+        } else if (fmt === "jpg") {
+          saveBlob(await canvasToBlob(canvas, "image/jpeg", 0.92), `${name}.jpg`);
+        } else if (fmt === "pdf") {
+          const jpg = await canvasToBlob(canvas, "image/jpeg", 0.92);
+          const pdf = await imageBlobToPdf(jpg, canvas.width, canvas.height);
+          saveBlob(pdf, `${name}.pdf`);
+        }
+      } catch (err) {
+        $("frame").innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    async function imageBlobToPdf(imageBlob, width, height) {
+      const imageBytes = new Uint8Array(await imageBlob.arrayBuffer());
+      const encoder = new TextEncoder();
+      const content = `q ${width} 0 0 ${height} 0 0 cm /Im0 Do Q`;
+      const objects = [
+        [`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`],
+        [`2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`],
+        [`3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${width} ${height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\nendobj\n`],
+        [
+          `4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${width} /Height ${height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBytes.length} >>\nstream\n`,
+          imageBytes,
+          `\nendstream\nendobj\n`
+        ],
+        [`5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`]
+      ];
+      const parts = [encoder.encode("%PDF-1.4\n")];
+      const offsets = [0];
+      let length = parts[0].length;
+      for (const obj of objects) {
+        offsets.push(length);
+        for (const part of obj) {
+          const bytes = typeof part === "string" ? encoder.encode(part) : part;
+          parts.push(bytes);
+          length += bytes.length;
+        }
+      }
+      const xrefOffset = length;
+      let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+      for (const offset of offsets.slice(1)) {
+        xref += `${String(offset).padStart(10, "0")} 00000 n \n`;
+      }
+      xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+      parts.push(encoder.encode(xref));
+      return new Blob(parts, { type: "application/pdf" });
     }
 
     function configureLive() {

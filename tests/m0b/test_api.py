@@ -3,6 +3,7 @@ M0b test suite — FastAPI HTTP server integration tests.
 """
 
 import pytest
+from uuid import uuid4
 from httpx import ASGITransport, AsyncClient
 
 from avge_engine.api import app
@@ -36,7 +37,9 @@ class TestHealth:
         assert "text/html" in r.headers["content-type"]
         assert "AVGE Documents" in r.text
         assert "/viewer/documents" in r.text
-        assert "/download/" in r.text
+        assert "fetchSvgText" in r.text
+        assert "rasterizeSvg" in r.text
+        assert "imageBlobToPdf" in r.text
 
     async def test_schemas(self, client):
         r = await client.get("/schemas")
@@ -100,7 +103,7 @@ class TestDocument:
         assert data["region_count"] == 1
 
     async def test_viewer_documents_search_and_sort(self, client):
-        unique_name = "ViewerSearchUniqueApiDoc"
+        unique_name = f"ViewerSearchUniqueApiDoc-{uuid4().hex}"
         await client.post("/tools/create_document", json={"name": unique_name})
         await client.post("/tools/create_document", json={"name": "Beta"})
 
@@ -125,6 +128,15 @@ class TestDocument:
         assert "image/svg+xml" in r.headers["content-type"]
         assert "attachment" in r.headers["content-disposition"]
         assert "<svg" in r.text
+
+    async def test_download_png_is_browser_side_only(self, client):
+        created = await client.post("/tools/create_document", json={"name": "Browser Raster Doc"})
+        document_id = created.json()["data"]["document_id"]
+
+        r = await client.get(f"/download/{document_id}.png")
+
+        assert r.status_code == 400
+        assert "browser-side PNG" in r.text
 
 
 class TestRegion:

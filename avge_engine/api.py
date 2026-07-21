@@ -27,8 +27,6 @@ from avge_engine.schema_registry import list_tool_names
 from avge_engine.renderer import (
     svg_serialize,
     render_preview_base64,
-    render_preview_jpeg,
-    render_preview_pdf,
     render_preview_png,
 )
 from avge_engine.schemas import (
@@ -714,7 +712,11 @@ async def preview_doc_svg(document_id: str | None = None):
 
 @app.get("/download/{document_id}.{fmt}")
 async def download_document(document_id: str, fmt: str):
-    """Download a document as SVG, PNG, JPG, or PDF."""
+    """Download a document as SVG.
+
+    The browser viewer rasterizes PNG/JPG/PDF client-side from SVG so it does
+    not depend on the server PNG renderer.
+    """
     graph = get_graph()
     if not graph.load_document(document_id):
         return Response(f"Document '{document_id}' not found", status_code=404)
@@ -725,21 +727,13 @@ async def download_document(document_id: str, fmt: str):
 
     try:
         svg = svg_serialize(graph, document_id)
-        if fmt == "svg":
-            content = svg.encode("utf-8")
-            media_type = "image/svg+xml"
-        elif fmt == "png":
-            content = render_preview_png(svg, scale=1.0)
-            media_type = "image/png"
-        elif fmt in {"jpg", "jpeg"}:
-            fmt = "jpg"
-            content = render_preview_jpeg(svg, scale=1.0)
-            media_type = "image/jpeg"
-        elif fmt == "pdf":
-            content = render_preview_pdf(svg)
-            media_type = "application/pdf"
-        else:
-            return Response("Unsupported format. Use svg, png, jpg, or pdf.", status_code=400)
+        if fmt != "svg":
+            return Response(
+                "Unsupported server download format. Use /viewer for browser-side PNG, JPG, and PDF export.",
+                status_code=400,
+            )
+        content = svg.encode("utf-8")
+        media_type = "image/svg+xml"
     except Exception as e:
         return Response(f"Error: {e}", status_code=500)
 
