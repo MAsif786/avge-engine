@@ -40,6 +40,8 @@ class TestHealth:
         assert "fetchSvgText" in r.text
         assert "rasterizeSvg" in r.text
         assert "imageBlobToPdf" in r.text
+        assert 'encoder.encode("%PDF-1.4' not in r.text
+        assert "encoder.encode(`%PDF-1.4" in r.text
 
     async def test_schemas(self, client):
         r = await client.get("/schemas")
