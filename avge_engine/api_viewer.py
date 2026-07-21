@@ -364,9 +364,11 @@ def viewer_html() -> str:
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    async function fetchSvgText() {
+    async function fetchSvgText(inlineImages = false) {
       if (!state.selected) throw new Error("No document selected");
-      const res = await fetch(`/preview/${state.selected}.svg?t=${Date.now()}`);
+      const params = new URLSearchParams({ t: Date.now() });
+      if (inlineImages) params.set("inline_images", "1");
+      const res = await fetch(`/preview/${state.selected}.svg?${params}`);
       if (!res.ok) throw new Error(await res.text());
       return await res.text();
     }
@@ -419,7 +421,7 @@ def viewer_html() -> str:
     async function download(fmt) {
       if (!state.selected) return;
       try {
-        const svgText = await fetchSvgText();
+        const svgText = await fetchSvgText(fmt !== "svg");
         const name = fileBaseName();
         if (fmt === "svg") {
           saveBlob(new Blob([svgText], { type: "image/svg+xml" }), `${name}.svg`);

@@ -11,8 +11,13 @@ Mirrors the MCP tool set at avge_engine/controllers/ — keep in sync.
 
 from __future__ import annotations
 
+import base64
 from contextlib import asynccontextmanager
+import mimetypes
+from pathlib import Path
 import re
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
@@ -58,6 +63,8 @@ from avge_engine.schemas import (
     ToolResponse,
     TransformObjectsRequest,
 )
+
+MAX_INLINE_IMAGE_BYTES = 2_000_000
 
 
 # ── Lifespan ───────────────────────────────────────────────────────
@@ -694,12 +701,14 @@ async def preview_doc_png(document_id: str | None = None):
 
 
 @app.get("/preview/{document_id}.svg")
-async def preview_doc_svg(document_id: str | None = None):
+async def preview_doc_svg(document_id: str | None = None, inline_images: bool = False):
     """Render an SVG preview of a specific document by ID."""
     graph = get_graph()
     if not graph.load_document(document_id):
         return Response(f"Document '{document_id}' not found", status_code=404)
     try:
+        if inline_images:
+            _inline_external_image_hrefs(graph, document_id)
         svg = svg_serialize(graph, document_id)
         return Response(
             content=svg,
@@ -750,6 +759,42 @@ async def download_document(document_id: str, fmt: str):
 def _download_name(name: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).strip(".-")
     return safe[:80] or "avge-document"
+
+
+def _inline_external_image_hrefs(graph, document_id: str) -> None:
+    """Replace external image hrefs with data URIs for browser Canvas export."""
+    for region in graph.get_all_regions(document_id):
+        primitive = region.primitive or {}
+        if primitive.get("type") != "image":
+            continue
+        href = primitive.get("href", "")
+        if not href or href.startswith("data:"):
+            continue
+        raw, mime = _read_image_href_bytes(href)
+        primitive["href"] = f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
+
+
+def _read_image_href_bytes(href: str) -> tuple[bytes, str]:
+    parsed = urlparse(href)
+    if parsed.scheme in ("http", "https"):
+        req = Request(href, headers={"User-Agent": "AVGE/0.5"})
+        with urlopen(req, timeout=10) as response:
+            mime = response.headers.get_content_type() or "application/octet-stream"
+            raw = response.read(MAX_INLINE_IMAGE_BYTES + 1)
+    elif parsed.scheme == "file":
+        path = Path(parsed.path).expanduser()
+        raw = path.read_bytes()
+        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    elif parsed.scheme:
+        raise ValueError(f"Cannot inline unsupported image URL scheme: {parsed.scheme}")
+    else:
+        path = Path(href).expanduser()
+        raw = path.read_bytes()
+        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+
+    if len(raw) > MAX_INLINE_IMAGE_BYTES:
+        raise ValueError(f"Image too large to inline (max {MAX_INLINE_IMAGE_BYTES} bytes): {href}")
+    return raw, mime
 
 
 # ── History Endpoints ──────────────────────────────────────────────
