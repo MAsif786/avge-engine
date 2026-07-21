@@ -106,17 +106,9 @@ def svg_serialize(
         if region.clip_to and region.clip_to not in seen_clips:
             seen_clips.add(region.clip_to)
             clip_r = next((r for r in regions if r.id == region.clip_to), None)
-            if clip_r and clip_r.outline:
-                segs = fit_curves(clip_r.outline, closed=clip_r.constraints.closed,
-                    smoothness=clip_r.constraints.smoothness,
-                    tensions=list(clip_r.constraints.tensions) if clip_r.constraints.tensions else None,
-                    handle_in=list(clip_r.constraints.handle_in) if clip_r.constraints.handle_in else None,
-                    handle_out=list(clip_r.constraints.handle_out) if clip_r.constraints.handle_out else None)
-                if segs:
-                    pd = _build_path_data(segs, doc.width, doc.height, clip_r.constraints.closed)
-                    lines.append(f'  <clipPath id="clip_{region.clip_to}">')
-                    lines.append(f'    <path d="{pd}"/>')
-                    lines.append(f'  </clipPath>')
+            clip_def = _clip_path_definition(clip_r, region.clip_to, doc.width, doc.height) if clip_r else None
+            if clip_def:
+                lines.extend(clip_def)
 
     # Path elements (sorted by z_index for proper layering)
     for region in sorted(regions, key=lambda r: r.z_index):
@@ -126,6 +118,54 @@ def svg_serialize(
 
     lines.append("</svg>")
     return "\n".join(lines) + "\n"
+
+
+def _clip_path_definition(region, clip_id: str, canvas_w: int, canvas_h: int) -> list[str] | None:
+    """Build a clipPath definition, preserving primitive clip geometry."""
+    if region.primitive:
+        ptype = region.primitive.get("type")
+        if ptype == "rect":
+            canvas_min = min(canvas_w, canvas_h)
+            x = region.primitive["x"] * canvas_w
+            y = region.primitive["y"] * canvas_h
+            w = region.primitive["width"] * canvas_w
+            h = region.primitive["height"] * canvas_h
+            rx = region.primitive.get("rx", 0) * canvas_min
+            rx_attr = f' rx="{_fmt(rx)}"' if rx > 0 else ""
+            return [
+                f'  <clipPath id="clip_{clip_id}">',
+                f'    <rect x="{_fmt(x)}" y="{_fmt(y)}" width="{_fmt(w)}" height="{_fmt(h)}"{rx_attr}/>',
+                "  </clipPath>",
+            ]
+        if ptype == "ellipse":
+            cx = region.primitive["cx"] * canvas_w
+            cy = region.primitive["cy"] * canvas_h
+            rxx = region.primitive["rx"] * canvas_w
+            ryy = region.primitive["ry"] * canvas_h
+            return [
+                f'  <clipPath id="clip_{clip_id}">',
+                f'    <ellipse cx="{_fmt(cx)}" cy="{_fmt(cy)}" rx="{_fmt(rxx)}" ry="{_fmt(ryy)}"/>',
+                "  </clipPath>",
+            ]
+
+    if not region.outline:
+        return None
+    segs = fit_curves(
+        region.outline,
+        closed=region.constraints.closed,
+        smoothness=region.constraints.smoothness,
+        tensions=list(region.constraints.tensions) if region.constraints.tensions else None,
+        handle_in=list(region.constraints.handle_in) if region.constraints.handle_in else None,
+        handle_out=list(region.constraints.handle_out) if region.constraints.handle_out else None,
+    )
+    if not segs:
+        return None
+    pd = _build_path_data(segs, canvas_w, canvas_h, region.constraints.closed)
+    return [
+        f'  <clipPath id="clip_{clip_id}">',
+        f'    <path d="{pd}"/>',
+        "  </clipPath>",
+    ]
 
 
 def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:

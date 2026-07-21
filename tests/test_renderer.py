@@ -208,6 +208,7 @@ def test_svg_image_clip_path():
     svg = svg_serialize(scene, did)
 
     assert '<clipPath id="clip_clip">' in svg
+    assert '<ellipse cx="500" cy="500" rx="200" ry="150"/>' in svg
     image_line = next(line for line in svg.splitlines() if "<image" in line)
     assert 'clip-path="url(#clip_clip)"' in image_line
 
