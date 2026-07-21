@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/duplicate/v1.json",
+  "title": "duplicate",
+  "description": "Duplicate a region or group with single, linear, grid, radial, scatter, or group placement.",
+  "type": "object",
+  "properties": {
+    "pattern": {
+      "type": "string",
+      "enum": ["single", "linear", "grid", "radial", "scatter", "group"]
+    },
+    "region_id": { "type": ["string", "null"] },
+    "group_name": { "type": ["string", "null"] },
+    "document_id": { "type": ["string", "null"] },
+    "count": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 1 },
+    "columns": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
+    "rows": { "type": "integer", "minimum": 1, "maximum": 100, "default": 1 },
+    "dx": { "type": "number", "minimum": -2, "maximum": 2, "default": 0 },
+    "dy": { "type": "number", "minimum": -2, "maximum": 2, "default": 0 },
+    "spacing_x": { "type": "number", "minimum": -2, "maximum": 2, "default": 0.02 },
+    "spacing_y": { "type": "number", "minimum": -2, "maximum": 2, "default": 0.02 },
+    "center_x": { "type": "number", "minimum": -2, "maximum": 3, "default": 0.5 },
+    "center_y": { "type": "number", "minimum": -2, "maximum": 3, "default": 0.5 },
+    "radius": { "type": "number", "minimum": 0, "maximum": 4, "default": 0.2 },
+    "start_angle": { "type": "number", "default": 0 },
+    "rotate_copies": { "type": "boolean", "default": true },
+    "mirror_x": { "type": "boolean", "default": false },
+    "mirror_y": { "type": "boolean", "default": false },
+    "mirror_axis_x": { "type": ["number", "null"], "minimum": -2, "maximum": 3 },
+    "mirror_axis_y": { "type": ["number", "null"], "minimum": -2, "maximum": 3 },
+    "scale": { "type": "number", "minimum": 0.01, "maximum": 20, "default": 1 },
+    "rotate": { "type": "number", "default": 0 },
+    "shadow_mode": { "type": "boolean", "default": false },
+    "new_prefix": { "type": ["string", "null"] },
+    "variations": { "type": ["object", "null"] },
+    "jitter": {
+      "type": ["object", "null"],
+      "properties": {
+        "hue": { "type": "number", "minimum": 0, "maximum": 180 },
+        "size": { "type": "number", "minimum": 0, "maximum": 1 },
+        "rotation": { "type": "number", "minimum": 0, "maximum": 360 },
+        "seed": { "type": "integer" }
+      },
+      "additionalProperties": false
+    },
+    "bounds": {
+      "type": ["array", "null"],
+      "description": "Scatter bounds as [x, y, width, height] in normalized coordinates.",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "minimum": -2, "maximum": 3 }
+    },
+    "seed": { "type": "integer", "default": 0 },
+    "z_index": { "type": ["integer", "null"] },
+    "spacing_falloff": { "type": "number", "minimum": 0.05, "maximum": 20, "default": 1 },
+    "scale_falloff": { "type": "number", "minimum": 0.05, "maximum": 20, "default": 1 }
+  },
+  "required": ["pattern"],
+  "additionalProperties": false
+}

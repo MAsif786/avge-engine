@@ -812,6 +812,7 @@ def create_tools(mcp):
         "  linear — N copies in a row. Params: region_id, count, dx, dy, spacing_falloff, scale_falloff\n"
         "  grid — N×M grid. Params: region_id, columns, rows, spacing_x, spacing_y\n"
         "  radial — circular array. Params: region_id, count, center_x, center_y, radius\n"
+        "  scatter — random copies in bounds. Params: region_id, count, bounds, seed, scale\n"
         "  group — duplicate group with transforms. Params: group_name, dx, dy, scale, rotate",
     )
     def duplicate(
@@ -841,6 +842,8 @@ def create_tools(mcp):
         new_prefix: str | None = None,
         variations: dict | None = None,
         jitter: dict | None = None,
+        bounds: list[float] | None = None,
+        seed: int = 0,
         z_index: int | None = None,
         spacing_falloff: float = 1.0,
         scale_falloff: float = 1.0,
@@ -848,8 +851,8 @@ def create_tools(mcp):
         """Make copies of a region or group.
 
         Args:
-            pattern: "single", "linear", "grid", "radial", or "group".
-            region_id: Source region (required for single/linear/grid/radial).
+            pattern: "single", "linear", "grid", "radial", "scatter", or "group".
+            region_id: Source region (required for single/linear/grid/radial/scatter).
             group_name: Source group (required for group pattern).
             document_id: Document UUID.
             count: Number of copies (linear/radial).
@@ -873,6 +876,8 @@ def create_tools(mcp):
                 Keys: hue (max deg shift), size (max fraction), rotation (max deg),
                 seed (int, for reproducibility).
                 💡 jitter={'hue':5,'size':0.02,'rotation':3,'seed':42}
+            bounds: Scatter placement rectangle [x, y, width, height] in normalized coordinates.
+            seed: Scatter random seed.
             z_index: Explicit z-index for copies.
             spacing_falloff: Linear-only multiplier applied to each step's dx/dy
                 so repeated objects recede toward a vanishing point.
@@ -909,9 +914,9 @@ def create_tools(mcp):
             except (ValueError, RuntimeError) as e:
                 return f"Error: {e}"
 
-        # ── Single/Linear/Grid/Radial — require region_id ──
+        # ── Single/Linear/Grid/Radial/Scatter — require region_id ──
         if not region_id:
-            return "Error: region_id required for pattern '{pattern}'"
+            return f"Error: region_id required for pattern '{pattern}'"
         try:
             orig = scene.get_region(region_id, doc_id)
         except ValueError:
@@ -921,6 +926,8 @@ def create_tools(mcp):
         oy = min(p[1] for p in orig.outline)
         ow = max(p[0] for p in orig.outline) - ox
         oh = max(p[1] for p in orig.outline) - oy
+        ocx = ox + ow / 2
+        ocy = oy + oh / 2
 
         created = []
         resolved_z = z_index
@@ -982,6 +989,30 @@ def create_tools(mcp):
                     except (ValueError, RuntimeError) as e:
                         return f"Error at ({row},{col}): {e}"
 
+        elif pattern == "scatter":
+            if bounds is None or len(bounds) != 4:
+                return "Error: bounds=[x,y,width,height] required for pattern 'scatter'"
+            bx, by, bw, bh = [float(v) for v in bounds]
+            if bw <= 0 or bh <= 0:
+                return "Error: scatter bounds width and height must be positive"
+            rng = random.Random(seed)
+            for i in range(count):
+                tx = bx + rng.random() * bw
+                ty = by + rng.random() * bh
+                new_id = f"{new_prefix or region_id}_scatter_{i}"
+                try:
+                    dup = scene.duplicate_region(
+                        region_id=region_id, document_id=doc_id,
+                        new_region_id=new_id,
+                        offset_x=tx - ocx, offset_y=ty - ocy,
+                        scale=scale, rotate=rotate,
+                        mirror_x=mirror_x, mirror_y=mirror_y,
+                        shadow_mode=shadow_mode, z_index=resolved_z,
+                    )
+                    created.append(dup.id)
+                except (ValueError, RuntimeError) as e:
+                    return f"Error at scatter copy {i}: {e}"
+
         elif pattern == "radial":
             for i in range(count):
                 angle = math.radians(start_angle + i * (360.0 / count))
@@ -1004,7 +1035,7 @@ def create_tools(mcp):
                     return f"Error at copy {i}: {e}"
 
         else:
-            return f"Error: Unknown pattern '{pattern}'. Valid: single, linear, grid, radial, group"
+            return f"Error: Unknown pattern '{pattern}'. Valid: single, linear, grid, radial, scatter, group"
 
         # ── Apply controlled jitter to copies ──
         if jitter and created:

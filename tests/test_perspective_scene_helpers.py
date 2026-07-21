@@ -119,6 +119,55 @@ def test_duplicate_linear_supports_spacing_and_scale_falloff():
     assert second.outline[0][0] < 0.3
 
 
+def test_duplicate_scatter_places_copies_inside_bounds_by_center():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+    graph.create_region(
+        document_id=doc.id,
+        region_id="leaf",
+        outline=[(0.1, 0.1), (0.12, 0.1), (0.12, 0.12), (0.1, 0.12)],
+    )
+
+    result = mcp.tools["duplicate"](
+        document_id=doc.id,
+        pattern="scatter",
+        region_id="leaf",
+        count=5,
+        bounds=[0.4, 0.3, 0.2, 0.1],
+        seed=7,
+    )
+
+    assert "Duplicated" in result
+    for i in range(5):
+        copy = graph.get_region(f"leaf_scatter_{i}", doc.id)
+        xs = [p[0] for p in copy.outline]
+        ys = [p[1] for p in copy.outline]
+        cx = (min(xs) + max(xs)) / 2
+        cy = (min(ys) + max(ys)) / 2
+        assert 0.4 <= cx <= 0.6
+        assert 0.3 <= cy <= 0.4
+
+
+def test_duplicate_missing_region_message_includes_pattern():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+
+    result = mcp.tools["duplicate"](
+        document_id=doc.id,
+        pattern="scatter",
+        count=3,
+        bounds=[0.1, 0.1, 0.2, 0.2],
+    )
+
+    assert result == "Error: region_id required for pattern 'scatter'"
+
+
 def test_add_shading_gradient_styles_existing_region():
     reset_graph()
     mcp = _FakeMCP()
