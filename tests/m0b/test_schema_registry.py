@@ -142,6 +142,7 @@ class TestSchemaRegistry:
             "height": 0.4,
             "href": "https://example.com/icon.svg",
             "import_mode": "embed",
+            "clip_to": "portrait_image_clip",
         })
         assert errs == []
 

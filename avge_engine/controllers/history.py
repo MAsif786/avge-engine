@@ -116,7 +116,7 @@ def create_tools(mcp):
         "  create_primitive: shape (rect/ellipse/line/polyline/compound_path), fill, stroke, stroke_width\n"
         "  create_curve: points, stroke, stroke_width, smoothness\n"
         "  create_text: x, y, text, fill, font_size, font_family, text_anchor\n"
-        "  insert_image: x, y, width, height, href, import_mode (image/embed/svg_paths)\n"
+        "  insert_image: x, y, width, height, href, import_mode (image/embed/svg_paths), clip_to\n"
         "  import_svg_path: path_data, fill, smoothness\n"
         "  edit_region: region_id, outline, fill, stroke, z_index, shape\n"
         "  duplicate: region_id, pattern, count, dx, dy, bounds, seed, columns, rows, spacing_falloff, scale_falloff\n"

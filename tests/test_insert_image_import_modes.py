@@ -26,6 +26,7 @@ def test_insert_image_embed_local_file_as_data_uri(tmp_path):
     graph, doc, mcp = _setup()
     png = tmp_path / "tiny.png"
     png.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+    graph.create_ellipse(0.25, 0.4, 0.1, document_id=doc.id, region_id="clip")
 
     result = mcp.tools["insert_image"](
         document_id=doc.id,
@@ -36,11 +37,13 @@ def test_insert_image_embed_local_file_as_data_uri(tmp_path):
         href=str(png),
         region_id="embedded",
         import_mode="embed",
+        clip_to="clip",
     )
 
     image = graph.get_region("embedded", doc.id)
     assert "mode=embed" in result
     assert image.primitive["href"].startswith("data:image/png;base64,")
+    assert image.clip_to == "clip"
 
 
 def test_insert_image_imports_svg_paths_as_editable_regions(tmp_path):

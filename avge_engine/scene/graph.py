@@ -1735,6 +1735,7 @@ class SceneGraph:
                             z_index=op.get("z_index", 0),
                             preserve_aspect_ratio=op.get("preserve_aspect_ratio", "xMidYMid meet"),
                             rotate=op.get("rotate", 0.0),
+                            clip_to=op.get("clip_to"),
                         )
                         results.append({"status": "ok", "region_id": r.id})
                     except (ValueError, RuntimeError) as e:
@@ -2489,6 +2490,7 @@ class SceneGraph:
         z_index: int = 0,
         preserve_aspect_ratio: str = "xMidYMid meet",
         rotate: float = 0.0,
+        clip_to: str | None = None,
     ) -> RegionNode:
         """Create an image region — renders as SVG <image>.
 
@@ -2502,6 +2504,7 @@ class SceneGraph:
             z_index: Paint order.
             preserve_aspect_ratio: SVG preserveAspectRatio value.
             rotate: Rotation in degrees around image center.
+            clip_to: Optional region ID used as an SVG clip path.
         """
         import uuid
         doc_id = self._resolve_doc(document_id)
@@ -2512,6 +2515,7 @@ class SceneGraph:
             outline=[(x, y), (x + width, y), (x + width, y + height), (x, y + height)],
             constraints=CurveConstraints(smoothness=0.0, closed=True),
             style=Style(fill=None, stroke=None),
+            clip_to=clip_to,
             primitive={
                 "type": "image", "x": x, "y": y,
                 "width": width, "height": height,

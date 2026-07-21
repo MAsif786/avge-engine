@@ -1292,7 +1292,7 @@ def create_tools(mcp):
         description="Add an image to the canvas, embed it as a data URI, or import SVG paths as editable vector regions. "
         "import_mode='image' keeps href as an external SVG <image>; import_mode='embed' fetches local/remote bytes "
         "and stores a data URI so previews do not need network access; import_mode='svg_paths' parses SVG <path> "
-        "elements into editable regions.",
+        "elements into editable regions. Use clip_to to hide overflow outside a mask/clip region.",
     )
     def insert_image(
         x: float,
@@ -1306,6 +1306,7 @@ def create_tools(mcp):
         z_index: int = 0,
         preserve_aspect_ratio: str = "xMidYMid meet",
         rotate: float = 0.0,
+        clip_to: str | None = None,
         import_mode: IMAGE_IMPORT_MODES = "image",
         fill: str | None = None,
         stroke: str | None = None,
@@ -1327,6 +1328,7 @@ def create_tools(mcp):
             preserve_aspect_ratio: SVG preserveAspectRatio value
                 (default "xMidYMid meet").
             rotate: Rotation in degrees around image center.
+            clip_to: Optional region ID used as an SVG clip path.
             import_mode: "image" preserves href, "embed" stores fetched bytes
                 as data URI, "svg_paths" imports SVG path data as vector regions.
         """
@@ -1370,6 +1372,7 @@ def create_tools(mcp):
                             region_id=f"{prefix}_{idx:02d}" if len(path_defs) > 1 else prefix,
                             layer=layer,
                             z_index=z_index + idx,
+                            clip_to=clip_to,
                             constraints=CurveConstraints(smoothness=smoothness, closed=True),
                             style=Style(
                                 fill=path_def["fill"],
@@ -1392,6 +1395,7 @@ def create_tools(mcp):
                 layer=layer, z_index=z_index,
                 preserve_aspect_ratio=preserve_aspect_ratio,
                 rotate=rotate,
+                clip_to=clip_to,
             )
             return (
                 f"Image added: id={r.id}, mode={import_mode}, "

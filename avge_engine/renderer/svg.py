@@ -275,6 +275,14 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
                      f' preserveAspectRatio="{aspect}"',
                      f' href="{_escape_xml(href)}"',
                      f' xlink:href="{_escape_xml(href)}"']
+            if region.style.opacity < 1.0:
+                parts.append(f' opacity="{_fmt(region.style.opacity)}"')
+            if region.style.blend_mode:
+                parts.append(f' style="mix-blend-mode:{region.style.blend_mode}"')
+            if region.style.blur > 0:
+                parts.append(f' filter="url(#blur_{region.style.blur:.2f})"')
+            if region.clip_to:
+                parts.append(f' clip-path="url(#clip_{region.clip_to})"')
             _append_transform(parts, region.primitive["x"] + region.primitive["width"] / 2,
                               region.primitive["y"] + region.primitive["height"] / 2)
             parts.append("/>")

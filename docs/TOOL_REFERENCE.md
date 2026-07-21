@@ -1,6 +1,6 @@
 # AVGE Engine — Tool Reference (63 tools)
 
-_Generated from `__main__` — tool set: m0b-v26_
+_Generated from `__main__` — tool set: m0b-v27_
 
 ## `add_bumps`
 
@@ -199,7 +199,7 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
   create_primitive: shape (rect/ellipse/line/polyline/compound_path), fill, stroke, stroke_width
   create_curve: points, stroke, stroke_width, smoothness
   create_text: x, y, text, fill, font_size, font_family, text_anchor
-  insert_image: x, y, width, height, href
+  insert_image: x, y, width, height, href, import_mode, clip_to
   import_svg_path: path_data, fill, smoothness
   edit_region: region_id, outline, fill, stroke, z_index, shape
   refine_line: region_id, mode, strength, simplify_tolerance, smoothness
@@ -223,6 +223,7 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
+| `clip_to` | `string` |  | Optional region ID used as an SVG clip path. |
 | `document_id` | `any` |  |  |
 | `ops` | `array` | ✓ |  |
 
@@ -1167,7 +1168,7 @@ Import an SVG path data string as a vector region. Parses M, L, C, Q, Z commands
 
 ## `insert_image`
 
-Add an image to the canvas, embed it as a data URI, or import SVG paths as editable vector regions. `import_mode="image"` keeps the href as an external SVG `<image>`. `import_mode="embed"` fetches local/remote bytes and stores a data URI so previews do not need network access. `import_mode="svg_paths"` parses SVG `<path>` elements into editable regions.
+Add an image to the canvas, embed it as a data URI, or import SVG paths as editable vector regions. `import_mode="image"` keeps the href as an external SVG `<image>`. `import_mode="embed"` fetches local/remote bytes and stores a data URI so previews do not need network access. `import_mode="svg_paths"` parses SVG `<path>` elements into editable regions. Use `clip_to` to hide overflow outside a mask/clip region.
 
 ### Parameters
 

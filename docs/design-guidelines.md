@@ -301,7 +301,7 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 | `create_primitive` | `shape` (rect/ellipse/line/polyline/compound_path/etc.) | `fill`, `stroke`, `stroke_width`, `stroke_dasharray`, `smoothness`, `closed`, `z_index`, `layer`, `blend_mode`, `opacity` |
 | `create_curve` | `points` (list of [x,y]) | `stroke`, `stroke_width`, `smoothness`, `z_index`, `layer`, `stroke_linecap`, `blend_mode` |
 | `create_text` | `x`, `y`, `text` | `fill`, `font_size`, `font_family`, `text_anchor`, `font_weight`, `z_index`, `rotate` |
-| `insert_image` | `x`, `y`, `width`, `height`, `href` | `import_mode` (`image`, `embed`, `svg_paths`), `preserve_aspect_ratio`, `rotate`, SVG `fill`/`stroke` overrides |
+| `insert_image` | `x`, `y`, `width`, `height`, `href` | `import_mode` (`image`, `embed`, `svg_paths`), `clip_to`, `preserve_aspect_ratio`, `rotate`, SVG `fill`/`stroke` overrides |
 | `import_svg_path` | `path_data` (SVG path string) | `fill`, `stroke`, `smoothness`, `closed`, `z_index`, `layer`, `samples_per_curve` |
 | `create_line_pattern` | `pattern` | `points`, `bounds`, `center`, `radius`, `count`, `density`, `amplitude`, `frequency`, `stroke`, `stroke_width`, `width_profile`, `role` |
 | `edit_region` | `region_id` or `ids` | `outline`, `point_index`, `point_coords`, `point_dx`, `point_dy`, `fill`, `stroke`, `smoothness`, `z_index`, `shape`, `layer`, `clip_to`, `blend_mode` |

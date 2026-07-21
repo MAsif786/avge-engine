@@ -16,6 +16,10 @@
     "z_index": { "type": "integer", "default": 0 },
     "preserve_aspect_ratio": { "type": "string", "default": "xMidYMid meet" },
     "rotate": { "type": "number", "default": 0 },
+    "clip_to": {
+      "type": ["string", "null"],
+      "description": "Optional region ID used as an SVG clip path."
+    },
     "import_mode": {
       "type": "string",
       "enum": ["image", "embed", "svg_paths"],

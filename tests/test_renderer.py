@@ -190,6 +190,28 @@ def test_svg_image():
     assert 'preserveAspectRatio' in svg
 
 
+def test_svg_image_clip_path():
+    scene = SceneGraph()
+    did = _doc(scene)
+    scene.create_ellipse(0.5, 0.5, 0.2, 0.15, document_id=did, region_id="clip")
+    scene.insert_image(
+        0.2,
+        0.2,
+        0.6,
+        0.5,
+        "data:image/png;base64,abc",
+        document_id=did,
+        region_id="img",
+        clip_to="clip",
+    )
+
+    svg = svg_serialize(scene, did)
+
+    assert '<clipPath id="clip_clip">' in svg
+    image_line = next(line for line in svg.splitlines() if "<image" in line)
+    assert 'clip-path="url(#clip_clip)"' in image_line
+
+
 def test_edit_region_shape_rect():
     scene = SceneGraph()
     did = _doc(scene)
