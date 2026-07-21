@@ -134,6 +134,41 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
+    def test_insert_image_embed_valid(self):
+        errs = validate_input("insert_image", {
+            "x": 0.1,
+            "y": 0.2,
+            "width": 0.3,
+            "height": 0.4,
+            "href": "https://example.com/icon.svg",
+            "import_mode": "embed",
+        })
+        assert errs == []
+
+    def test_insert_image_svg_paths_valid(self):
+        errs = validate_input("insert_image", {
+            "x": 0.1,
+            "y": 0.2,
+            "width": 0.3,
+            "height": 0.4,
+            "href": "https://example.com/icon.svg",
+            "import_mode": "svg_paths",
+            "stroke_width": 2,
+            "max_paths": 20,
+        })
+        assert errs == []
+
+    def test_insert_image_rejects_unknown_import_mode(self):
+        errs = validate_input("insert_image", {
+            "x": 0.1,
+            "y": 0.2,
+            "width": 0.3,
+            "height": 0.4,
+            "href": "https://example.com/icon.svg",
+            "import_mode": "remote",
+        })
+        assert len(errs) > 0
+
     def test_edit_region_point_nudge_valid(self):
         errs = validate_input("edit_region", {
             "region_id": "shape",

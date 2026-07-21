@@ -1,6 +1,6 @@
 # AVGE Engine — Tool Reference (63 tools)
 
-_Generated from `__main__` — tool set: m0b-v25_
+_Generated from `__main__` — tool set: m0b-v26_
 
 ## `add_bumps`
 
@@ -1167,19 +1167,26 @@ Import an SVG path data string as a vector region. Parses M, L, C, Q, Z commands
 
 ## `insert_image`
 
-Add an image (PNG, JPG, SVG, data URI) to the canvas. Renders as SVG <image> at the given position and size. 💡 Use for textures, photos, logos — paste a URL or data URI. The image must be accessible when the SVG is rendered.
+Add an image to the canvas, embed it as a data URI, or import SVG paths as editable vector regions. `import_mode="image"` keeps the href as an external SVG `<image>`. `import_mode="embed"` fetches local/remote bytes and stores a data URI so previews do not need network access. `import_mode="svg_paths"` parses SVG `<path>` elements into editable regions.
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
+| `fill` | `any` |  | Override imported SVG path fill. |
 | `height` | `number` | ✓ |  |
 | `href` | `string` | ✓ |  |
+| `import_mode` | `string` |  | image, embed, or svg_paths |
 | `layer` | `string` |  |  |
+| `max_paths` | `integer` |  | Max SVG paths imported in svg_paths mode. |
 | `preserve_aspect_ratio` | `string` |  |  |
 | `region_id` | `any` |  |  |
 | `rotate` | `number` |  |  |
+| `samples_per_curve` | `integer` |  | SVG curve sampling for svg_paths mode. |
+| `smoothness` | `number` |  | Imported SVG path smoothness. |
+| `stroke` | `any` |  | Override imported SVG path stroke. |
+| `stroke_width` | `any` |  | Imported SVG path stroke width in canvas pixels. |
 | `width` | `number` | ✓ |  |
 | `x` | `number` | ✓ |  |
 | `y` | `number` | ✓ |  |

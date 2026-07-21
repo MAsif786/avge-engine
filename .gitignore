@@ -32,6 +32,8 @@ Thumbs.db
 
 # Generated artifacts
 output/*.png
+output/*.jpg
+output/*.jpeg
 output/*.svg
 output/text_only/
 output/prompts/

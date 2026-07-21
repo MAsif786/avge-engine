@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/insert_image/v1.json",
+  "title": "insert_image",
+  "description": "Insert an external image, embed local/remote bytes as a data URI, or import SVG paths as editable vector regions.",
+  "type": "object",
+  "properties": {
+    "x": { "type": "number", "minimum": -2, "maximum": 3 },
+    "y": { "type": "number", "minimum": -2, "maximum": 3 },
+    "width": { "type": "number", "minimum": 0.0001, "maximum": 4 },
+    "height": { "type": "number", "minimum": 0.0001, "maximum": 4 },
+    "href": { "type": "string", "minLength": 1 },
+    "document_id": { "type": ["string", "null"] },
+    "region_id": { "type": ["string", "null"] },
+    "layer": { "type": "string", "default": "default" },
+    "z_index": { "type": "integer", "default": 0 },
+    "preserve_aspect_ratio": { "type": "string", "default": "xMidYMid meet" },
+    "rotate": { "type": "number", "default": 0 },
+    "import_mode": {
+      "type": "string",
+      "enum": ["image", "embed", "svg_paths"],
+      "default": "image"
+    },
+    "fill": {
+      "anyOf": [
+        { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+        { "type": "null" }
+      ]
+    },
+    "stroke": {
+      "anyOf": [
+        { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+        { "type": "null" }
+      ]
+    },
+    "stroke_width": {
+      "type": ["number", "null"],
+      "description": "Imported SVG path stroke width in canvas pixels.",
+      "minimum": 0,
+      "maximum": 512
+    },
+    "smoothness": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 },
+    "samples_per_curve": { "type": "integer", "minimum": 1, "maximum": 64, "default": 12 },
+    "max_paths": { "type": "integer", "minimum": 1, "maximum": 500, "default": 50 }
+  },
+  "required": ["x", "y", "width", "height", "href"],
+  "additionalProperties": false
+}
