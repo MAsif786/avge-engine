@@ -416,6 +416,23 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
+    def test_warp_region_valid(self):
+        errs = validate_input("warp_region", {
+            "region_id": "cape",
+            "mode": "handle_shift",
+            "handles": [{"x": 0.5, "y": 0.5, "dx": 0.04, "dy": -0.02, "radius": 0.2}],
+            "falloff": 1.5,
+            "smoothness": 0.4,
+        })
+        assert errs == []
+
+    def test_warp_region_rejects_bad_mode(self):
+        errs = validate_input("warp_region", {
+            "region_id": "cape",
+            "mode": "perspective",
+        })
+        assert len(errs) > 0
+
     def test_duplicate_scatter_valid(self):
         errs = validate_input("duplicate", {
             "pattern": "scatter",

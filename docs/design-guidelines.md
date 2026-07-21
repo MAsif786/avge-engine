@@ -318,6 +318,7 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 | `generate_background_asset` | `mode`, `bounds` | `count`, `density`, `seed`, `detail`, `color`, `secondary_color`, `layer`, `clip_to` |
 | `create_comic_panel_layout` | `layout`, `rows`, `columns` | `bounds`, `margin`, `gutter_x`, `gutter_y`, `reading_direction`, `panel_prefix`, `group_name`, `clip_content` |
 | `transform_objects` | `selector` | `dx`, `dy`, `scale`, `rotate`, `group_mode`, `mirror_x`, `mirror_y`, `z_index`, `mode`, `alignment` |
+| `warp_region` | `region_id` | `mode`, `strength`, `axis`, `center`, `radius`, `frequency`, `phase`, `handles`, `falloff`, `preserve_corners`, `smoothness` |
 | `project_quad` | `target_quad` | `source_region_id`, `replace_source`, `columns`, `rows`, `fill`, `stroke`, `stroke_width`, `z_index`, `inherit_style` |
 | `generate_shape` | `pattern`, `params` | Pattern-specific — see `generate_shape` docs |
 | `critique` | — | `mode` (`rules`, `visual`, `both`), `min_confidence`, `as_json` |

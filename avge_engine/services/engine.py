@@ -161,7 +161,7 @@ def load_tool_reference() -> str:
 
 # ── Centralized tool map — single source of truth ────────────────
 
-TOOL_MAP = """📋 TOOL MAP (62 tools — all available in batch):
+TOOL_MAP = """📋 TOOL MAP (63 tools — all available in batch):
 
 🗂 Document:   create_document · list_documents · load_document ·
                clone_document · delete_document · set_background
@@ -170,7 +170,7 @@ TOOL_MAP = """📋 TOOL MAP (62 tools — all available in batch):
                insert_image · import_svg_path
 🔧 Edit:       edit_region · edit_regions · delete_region ·
                refine_line · get_region · copy_element
-🔄 Transform:  transform_objects · project_quad · create_perspective_grid ·
+🔄 Transform:  transform_objects · warp_region · project_quad · create_perspective_grid ·
                create_facade_grid · create_surface_stripes ·
                generate_background_asset · duplicate ·
                boolean_operation

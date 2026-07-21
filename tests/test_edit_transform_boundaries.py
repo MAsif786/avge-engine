@@ -71,3 +71,40 @@ def test_transform_objects_remains_transform_source_of_truth():
 
     assert "Transformed" in result
     assert box.outline[0] == (0.3, 0.25)
+
+
+def test_warp_region_bend_deforms_outline_without_affine_transform():
+    graph, doc, _, scene_mcp = _setup()
+    before = list(graph.get_region("box", doc.id).outline)
+
+    result = scene_mcp.tools["warp_region"](
+        document_id=doc.id,
+        region_id="box",
+        mode="bend",
+        strength=0.1,
+        axis="x",
+    )
+
+    box = graph.get_region("box", doc.id)
+    assert "Warped region 'box': mode=bend" in result
+    assert box.outline != before
+    assert box.outline[0][1] > before[0][1]
+    assert box.metadata["warp_mode"] == "bend"
+
+
+def test_warp_region_handle_shift_moves_points_near_handle():
+    graph, doc, _, scene_mcp = _setup()
+
+    result = scene_mcp.tools["warp_region"](
+        document_id=doc.id,
+        region_id="box",
+        mode="handle_shift",
+        handles=[{"x": 0.4, "y": 0.2, "dx": 0.05, "dy": 0.02, "radius": 0.3}],
+        falloff=1.0,
+        preserve_corners=False,
+    )
+
+    box = graph.get_region("box", doc.id)
+    assert "Warped region 'box': mode=handle_shift" in result
+    assert box.outline[1][0] > 0.4
+    assert box.primitive is None

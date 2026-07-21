@@ -127,6 +127,7 @@ def create_tools(mcp):
         "  apply_fx: type, bounds/selector, center, direction, count, length\n"
         "  delete_region: ids\n"
         "  transform_objects: selector, mode, dx, dy, scale, rotate, alignment\n"
+        "  warp_region: region_id, mode, strength, axis, center, handles, falloff\n"
         "  project_quad: target_quad, source_region_id, fill, stroke, columns, rows\n"
         "  create_perspective_grid: vanishing_points, horizon_y, bounds\n"
         "  create_facade_grid: target_quad, rows, columns, lit_ratio\n"

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/warp_region/v1.json",
+  "title": "warp_region",
+  "description": "Apply non-affine vector outline deformation to one region.",
+  "type": "object",
+  "properties": {
+    "region_id": { "type": "string" },
+    "mode": {
+      "type": "string",
+      "enum": ["bend", "bulge", "pinch", "wave", "handle_shift"],
+      "default": "bend"
+    },
+    "document_id": { "type": ["string", "null"] },
+    "strength": { "type": "number", "minimum": -2, "maximum": 2, "default": 0.15 },
+    "axis": { "type": "string", "enum": ["x", "y"], "default": "x" },
+    "center": {
+      "type": ["array", "null"],
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number", "minimum": -2, "maximum": 3 }
+    },
+    "radius": { "type": "number", "minimum": 0.001, "maximum": 4, "default": 0.5 },
+    "frequency": { "type": "number", "minimum": 0, "maximum": 64, "default": 1 },
+    "phase": { "type": "number", "default": 0 },
+    "handles": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": { "type": "number", "minimum": -2, "maximum": 3 },
+          "y": { "type": "number", "minimum": -2, "maximum": 3 },
+          "dx": { "type": "number", "minimum": -2, "maximum": 2 },
+          "dy": { "type": "number", "minimum": -2, "maximum": 2 },
+          "radius": { "type": "number", "minimum": 0.001, "maximum": 4 }
+        },
+        "required": ["x", "y"],
+        "additionalProperties": false
+      }
+    },
+    "falloff": { "type": "number", "minimum": 0.05, "maximum": 8, "default": 1 },
+    "preserve_corners": { "type": "boolean", "default": false },
+    "smoothness": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+  },
+  "required": ["region_id"],
+  "additionalProperties": false
+}

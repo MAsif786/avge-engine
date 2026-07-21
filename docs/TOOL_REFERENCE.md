@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (62 tools)
+# AVGE Engine — Tool Reference (63 tools)
 
-_Generated from `__main__` — tool set: m0b-v24_
+_Generated from `__main__` — tool set: m0b-v25_
 
 ## `add_bumps`
 
@@ -1411,5 +1411,29 @@ Move, scale, rotate, mirror, or align existing regions. Use to reposition/resize
 | `sx` | `any` |  |  |
 | `sy` | `any` |  |  |
 | `z_index` | `any` |  |  |
+
+---
+
+## `warp_region`
+
+Apply non-affine vector outline deformation to one region. Modes: bend, bulge, pinch, wave, handle_shift. Use transform_objects for move/scale/rotate; use project_quad for rectangular perspective projection; use warp_region for organic or freeform deformation.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `axis` | `string` |  | x or y |
+| `center` | `any` |  |  |
+| `document_id` | `any` |  |  |
+| `falloff` | `number` |  |  |
+| `frequency` | `number` |  |  |
+| `handles` | `any` |  | For handle_shift: objects with x, y, dx, dy, radius. |
+| `mode` | `string` |  | bend, bulge, pinch, wave, or handle_shift |
+| `phase` | `number` |  |  |
+| `preserve_corners` | `boolean` |  |  |
+| `radius` | `number` |  |  |
+| `region_id` | `string` | ✓ |  |
+| `smoothness` | `any` |  |  |
+| `strength` | `number` |  |  |
 
 ---

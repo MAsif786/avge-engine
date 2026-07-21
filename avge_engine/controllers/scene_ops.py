@@ -15,7 +15,9 @@ BACKGROUND_ASSET_MODES = Literal[
 ]
 COMIC_LAYOUT_MODES = Literal["grid", "feature_top", "feature_left", "vertical_stack", "horizontal_strip"]
 READING_DIRECTIONS = Literal["ltr", "rtl", "ttb"]
+WARP_MODES = Literal["bend", "bulge", "pinch", "wave", "handle_shift"]
 
+from avge_engine.geometry import compute_bounds
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
 from avge_engine.services.shadow_service import ShadowService
@@ -366,6 +368,125 @@ def create_tools(mcp):
             f"Transformed {len(affected)} region(s): {', '.join(affected)} "
             f"({', '.join(parts)}){bounds_info}"
             )
+
+    @mcp.tool(
+        name="warp_region",
+        description="Apply non-affine vector outline deformation to one region. "
+        "Modes: bend, bulge, pinch, wave, handle_shift. Use transform_objects for move/scale/rotate; "
+        "use project_quad for rectangular perspective projection; use warp_region for organic or freeform deformation.",
+    )
+    def warp_region(
+        region_id: str,
+        mode: WARP_MODES = "bend",
+        document_id: str | None = None,
+        strength: float = 0.15,
+        axis: Literal["x", "y"] = "x",
+        center: list[float] | None = None,
+        radius: float = 0.5,
+        frequency: float = 1.0,
+        phase: float = 0.0,
+        handles: list[dict[str, float]] | None = None,
+        falloff: float = 1.0,
+        preserve_corners: bool = False,
+        smoothness: float | None = None,
+    ) -> str:
+        """Warp a region outline in normalized coordinates."""
+        import math
+
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        try:
+            region = scene.get_region(region_id, doc_id)
+        except ValueError as exc:
+            return f"Error: {exc}"
+        if len(region.outline) < 2:
+            return "Error: warp_region requires a region with at least 2 points"
+        bounds = compute_bounds(region.outline)
+        if not bounds or bounds["w"] <= 0 or bounds["h"] <= 0:
+            return "Error: Cannot warp degenerate region"
+
+        strength = max(-2.0, min(2.0, float(strength)))
+        falloff = max(0.05, min(8.0, float(falloff)))
+        radius = max(0.001, min(4.0, float(radius)))
+        cx = float(center[0]) if center and len(center) >= 2 else bounds["x"] + bounds["w"] / 2
+        cy = float(center[1]) if center and len(center) >= 2 else bounds["y"] + bounds["h"] / 2
+        corner_indices = {0, len(region.outline) - 1}
+        if len(region.outline) == 4:
+            corner_indices = {0, 1, 2, 3}
+
+        def normalized(x: float, y: float) -> tuple[float, float]:
+            return (
+                (x - bounds["x"]) / max(bounds["w"], 0.001),
+                (y - bounds["y"]) / max(bounds["h"], 0.001),
+            )
+
+        def radial_weight(x: float, y: float) -> float:
+            dist = math.hypot(x - cx, y - cy)
+            return max(0.0, 1.0 - dist / radius) ** falloff
+
+        new_outline: list[tuple[float, float]] = []
+        for idx, (x, y) in enumerate(region.outline):
+            if preserve_corners and idx in corner_indices:
+                new_outline.append((x, y))
+                continue
+            u, v = normalized(x, y)
+            nx, ny = float(x), float(y)
+            if mode == "bend":
+                bend = (u - 0.5) ** 2 * strength
+                if axis == "x":
+                    ny += bend
+                else:
+                    nx += bend
+            elif mode == "wave":
+                wave = math.sin(((u if axis == "x" else v) * frequency + phase) * math.tau) * strength
+                if axis == "x":
+                    ny += wave
+                else:
+                    nx += wave
+            elif mode in ("bulge", "pinch"):
+                weight = radial_weight(x, y)
+                sign = 1.0 if mode == "bulge" else -1.0
+                nx += (x - cx) * strength * sign * weight
+                ny += (y - cy) * strength * sign * weight
+            elif mode == "handle_shift":
+                if not handles:
+                    return "Error: handles required for mode 'handle_shift'"
+                total_dx = 0.0
+                total_dy = 0.0
+                total_w = 0.0
+                for handle in handles:
+                    hx = float(handle.get("x", cx))
+                    hy = float(handle.get("y", cy))
+                    hw = max(0.001, float(handle.get("radius", radius)))
+                    weight = max(0.0, 1.0 - math.hypot(x - hx, y - hy) / hw) ** falloff
+                    total_dx += float(handle.get("dx", 0.0)) * weight
+                    total_dy += float(handle.get("dy", 0.0)) * weight
+                    total_w += weight
+                if total_w > 0:
+                    nx += total_dx
+                    ny += total_dy
+            else:
+                return f"Error: Unknown warp mode '{mode}'"
+            new_outline.append((round(nx, 6), round(ny, 6)))
+
+        region.outline = new_outline
+        region.primitive = None
+        if smoothness is not None:
+            region.constraints.smoothness = max(0.0, min(1.0, float(smoothness)))
+        region.metadata.update({
+            "tool": "warp_region",
+            "warp_mode": mode,
+            "warp_strength": strength,
+            "warp_axis": axis,
+        })
+        region.version += 1
+        scene.get_document(doc_id).version += 1
+        scene._auto_checkpoint(doc_id, "warp_region", region_id)
+        scene._persist(doc_id)
+        return f"Warped region '{region_id}': mode={mode}, points={len(new_outline)}"
 
     @mcp.tool(
         name="project_quad",

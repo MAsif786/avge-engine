@@ -14,7 +14,7 @@ This backlog is implementation-oriented. Usage recipes belong in `docs/design-gu
 | `apply_fx(type="lens_flare"|"motion_blur"|"speed_lines"|"impact_lines"|"particles", ...)` | `create_lens_flare`, `create_motion_effect`, weather/particle helper tools | Implemented in `m0b-v23` for editable vector directional/radiant/action FX. Single-stroke weather remains a brush preset. |
 | `mix_region_colors(source_region_id, target_region_id, mix_ratio, output)` | True `mixer_brush` behavior | Implemented in `m0b-v24` for returning, applying, or duplicating mixed solid region colors. |
 | `smudge_region` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
-| `warp_region(region_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Deforms non-rectangular vector outlines beyond affine transform and `project_quad`. |
+| `warp_region(region_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Implemented in `m0b-v25` for bend, bulge, pinch, wave, and handle-shift outline deformation. |
 | `mesh_warp_region` | Higher-order organic deformation | Deferred. Build only if `warp_region` is insufficient. |
 | `create_comic_panel_layout(layout, rows, columns, gutters, reading_direction, ...)` | Panel creator and page layout tools | Implemented in `m0b-v22` with grouped panel regions, gutters, common page layouts, reading-order metadata, and clip-target metadata. |
 | `create_speech_balloon` | Manual balloon body + tail + text composition | Composite object with body, tail, text, grouping, and z-index defaults. |
@@ -70,7 +70,7 @@ These should not be added as standalone tools.
 
 ## Namespace Assignment
 
-- **Eager core:** `add_shading`, `warp_region`, `export_raster`
+- **Eager core:** `add_shading`, `export_raster`
 - **Style:** `smudge_region`/`smudge_edge`, `pattern_brush_along_path`, brush preset table
 - **Geometry:** `measure_geometry`, `create_measurement_grid`, `symmetry_duplicate`, `mesh_warp_region`, Bézier mode for `create_curve`
 - **Scene:** `create_adjustment_layer`, `create_surface_stripes`, `resize_document`, `set_print_metadata`
@@ -99,7 +99,7 @@ Next work starts in Phase 2.
 
 ### Phase 2 — Art Quality And Deformation
 
-1. `warp_region`
+Phase 2 core tool work complete. Deferred items remain eval-gated or lower priority.
 
 ### Phase 3 — Publishing And Measurement
 
