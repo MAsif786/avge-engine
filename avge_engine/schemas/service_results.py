@@ -33,6 +33,14 @@ class EditRegionsResult(BaseModel):
     lines: list[str]
 
 
+class RefineLineResult(BaseModel):
+    region_id: str
+    before_points: int
+    after_points: int
+    mode: str
+    smoothness: float | None = None
+
+
 class CopyElementResult(BaseModel):
     source_document_id: str
     target_document_id: str

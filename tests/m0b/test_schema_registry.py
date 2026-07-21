@@ -268,10 +268,76 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
+    def test_apply_brush_style_line_art_presets_valid(self):
+        for brush in (
+            "turnip_pen",
+            "technical_pen",
+            "brush_pen",
+            "calligraphy_pen",
+            "vector_pen",
+        ):
+            errs = validate_input("apply_brush_style", {
+                "selector": {"ids": ["line"]},
+                "brush": brush,
+            })
+            assert errs == []
+
+    def test_apply_brush_style_generic_brush_aliases_valid(self):
+        for brush in (
+            "paint_brush",
+            "blend_brush",
+            "fabric_brush",
+            "stone_brush",
+            "wood_grain_brush",
+            "metal_brush",
+            "pattern_brush",
+            "water_brush",
+            "rain_brush",
+            "snow_brush",
+            "fire_brush",
+            "smoke_brush",
+            "spark_brush",
+        ):
+            errs = validate_input("apply_brush_style", {
+                "selector": {"ids": ["line"]},
+                "brush": brush,
+            })
+            assert errs == []
+
+    def test_list_brush_presets_valid(self):
+        errs = validate_input("list_brush_presets", {
+            "group": "texture",
+            "include_details": False,
+        })
+        assert errs == []
+
+    def test_list_brush_presets_rejects_unknown_group(self):
+        errs = validate_input("list_brush_presets", {
+            "group": "characters",
+        })
+        assert len(errs) > 0
+
     def test_apply_brush_style_rejects_bad_selector_key(self):
         errs = validate_input("apply_brush_style", {
             "selector": {"unknown": "x"},
             "brush": "ink",
+        })
+        assert len(errs) > 0
+
+    def test_refine_line_valid(self):
+        errs = validate_input("refine_line", {
+            "region_id": "line",
+            "mode": "stabilize",
+            "strength": 0.6,
+            "simplify_tolerance": 0.01,
+            "smoothness": 0.5,
+        })
+        assert errs == []
+
+    def test_refine_line_rejects_bad_mode(self):
+        errs = validate_input("refine_line", {
+            "region_id": "line",
+            "mode": "warp",
         })
         assert len(errs) > 0
 
@@ -310,6 +376,24 @@ class TestSchemaRegistry:
             "dy": -0.05,
         })
         assert errs == []
+
+    def test_duplicate_scatter_valid(self):
+        errs = validate_input("duplicate", {
+            "pattern": "scatter",
+            "region_id": "leaf",
+            "count": 12,
+            "bounds": [0.2, 0.3, 0.4, 0.2],
+            "seed": 9,
+            "jitter": {"size": 0.2, "rotation": 12, "seed": 4},
+        })
+        assert errs == []
+
+    def test_duplicate_rejects_unknown_pattern(self):
+        errs = validate_input("duplicate", {
+            "pattern": "spray",
+            "region_id": "leaf",
+        })
+        assert len(errs) > 0
 
     def test_add_shading_shared_selector_valid(self):
         errs = validate_input("add_shading", {

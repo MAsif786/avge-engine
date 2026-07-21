@@ -982,6 +982,58 @@ def create_tools(mcp):
         return "\n".join([summary] + result.lines)
 
 
+    @mcp.tool(
+        name="refine_line",
+        description="Correct existing linework without recreating it. "
+        "Modes: stabilize removes small hand jitter, smooth rounds a rough path, "
+        "simplify reduces excess points, and straighten converts a stroke to a clean straight line. "
+        "Use this after create_curve/create_primitive polyline or after rough/sketch linework when the "
+        "geometry is right but the stroke needs cleanup.",
+    )
+    def refine_line(
+        region_id: str,
+        document_id: str | None = None,
+        mode: Literal["stabilize", "smooth", "simplify", "straighten"] = "stabilize",
+        strength: float = 0.5,
+        simplify_tolerance: float = 0.01,
+        smoothness: float | None = None,
+        preserve_corners: bool = True,
+        iterations: int = 1,
+    ) -> str:
+        """Refine line/curve geometry in place.
+
+        Args:
+            region_id: Existing region/line ID.
+            document_id: Document UUID (omit for active doc).
+            mode: stabilize, smooth, simplify, or straighten.
+            strength: 0.0-1.0 correction strength.
+            simplify_tolerance: Normalized tolerance for point reduction.
+            smoothness: Optional replacement curve smoothness 0.0-1.0.
+            preserve_corners: Keep sharp corners during smoothing/stabilization.
+            iterations: Number of smoothing passes for mode='smooth'.
+        """
+        try:
+            result = RegionService().refine_line(
+                region_id=region_id,
+                document_id=document_id,
+                mode=mode,
+                strength=strength,
+                simplify_tolerance=simplify_tolerance,
+                smoothness=smoothness,
+                preserve_corners=preserve_corners,
+                iterations=iterations,
+            )
+            return (
+                f"Line refined: id={result.region_id}, mode={result.mode}, "
+                f"points={result.before_points}->{result.after_points}, "
+                f"smoothness={result.smoothness}"
+            )
+        except RuntimeError:
+            return "Error: No active document"
+        except (ValueError, IndexError) as e:
+            return f"Error: {e}"
+
+
 
     @mcp.tool(
         name="create_text",

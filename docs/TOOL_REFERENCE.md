@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (56 tools)
+# AVGE Engine — Tool Reference (58 tools)
 
-_Generated from `__main__` — tool set: m0b-v18_
+_Generated from `__main__` — tool set: m0b-v20_
 
 ## `add_bumps`
 
@@ -43,7 +43,7 @@ Add directional shading to one region or a shared selector of regions. mode='two
 
 ## `apply_brush_style`
 
-Apply a digital art brush preset to existing regions. Use for pencil, ink, g_pen, mapping_pen, flat, round, airbrush, soft, hard, watercolor, gouache, oil, chalk, texture, hair, grass_leaf, cloud, and particle_fx linework. Use restyle(material=...) for substance/surface looks like glass, wood, concrete, tile, or foliage. Use apply_texture_effect for separate overlay FX such as paper grain, halftone, bloom, and particles; stack brush first, then texture if both are needed. This changes editable vector style properties; optional rough/pressure behavior creates small overlay strokes rather than raster pixels.
+Apply a digital art brush preset to existing regions. Use list_brush_presets to discover supported presets for line art, paint, texture, natural strokes, and FX. Use restyle(material=...) for substance/surface looks like glass, wood, concrete, tile, or foliage. Use apply_texture_effect for separate overlay FX such as paper grain, halftone, bloom, and particles; stack brush first, then texture if both are needed. This changes editable vector style properties; optional rough/pressure behavior creates small overlay strokes rather than raster pixels.
 
 ### Parameters
 
@@ -59,6 +59,19 @@ Apply a digital art brush preset to existing regions. Use for pencil, ink, g_pen
 | `selector` | `any` |  |  |
 | `size` | `any` |  | Stroke width in canvas pixels. |
 | `texture_strength` | `number` |  |  |
+
+---
+
+## `list_brush_presets`
+
+List supported brush presets grouped by purpose. Use this to discover brush names before apply_brush_style. Brush presets control editable stroke medium/linework; use restyle(material=...) for substance/surface looks and apply_texture_effect for overlay grain/FX.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `group` | `string` |  | all, line_art, paint, texture, natural, or fx |
+| `include_details` | `boolean` |  | Return style values instead of names only. |
 
 ---
 
@@ -135,11 +148,12 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
   insert_image: x, y, width, height, href
   import_svg_path: path_data, fill, smoothness
   edit_region: region_id, outline, fill, stroke, z_index, shape
-  duplicate: region_id, pattern, count, dx, dy, columns, rows, spacing_falloff, scale_falloff
+  refine_line: region_id, mode, strength, simplify_tolerance, smoothness
+  duplicate: region_id, pattern, count, dx, dy, bounds, seed, columns, rows, spacing_falloff, scale_falloff
   create_shadow: region_id, optional onto_region_id, direction, distance, softness, sy
   apply_depth_haze: selector, haze_color, near_y, far_y, max_strength
   restyle: selector, mode, fill, stroke, stroke_width, material
-  delete_region: region_id
+  delete_region: ids
   transform_objects: selector, mode, dx, dy, scale, rotate, alignment
   project_quad: target_quad, source_region_id, fill, stroke, columns, rows
   create_perspective_grid: vanishing_points, horizon_y, bounds
@@ -156,6 +170,25 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
 | `ops` | `array` | ✓ |  |
+
+---
+
+## `refine_line`
+
+Correct existing linework without recreating it. Modes: `stabilize` removes small hand jitter, `smooth` rounds a rough path, `simplify` reduces excess points, and `straighten` converts a stroke to a clean straight line. Use after `create_curve`, `create_primitive` polyline, or rough/sketch linework when the geometry is right but the stroke needs cleanup.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `region_id` | `string` | ✓ | Existing region or line ID to refine. |
+| `document_id` | `string|null` |  | Document UUID. |
+| `mode` | `string` |  | `stabilize`, `smooth`, `simplify`, or `straighten`. |
+| `strength` | `number` |  | Correction strength from 0.0 to 1.0. |
+| `simplify_tolerance` | `number` |  | Normalized tolerance for point reduction. |
+| `smoothness` | `number|null` |  | Optional replacement curve smoothness. |
+| `preserve_corners` | `boolean` |  | Keep sharp angle changes during correction. |
+| `iterations` | `integer` |  | Smoothing passes for `mode="smooth"`. |
 
 ---
 
@@ -700,12 +733,14 @@ Patterns:
   linear — N copies in a row. Params: region_id, count, dx, dy, spacing_falloff, scale_falloff
   grid — N×M grid. Params: region_id, columns, rows, spacing_x, spacing_y
   radial — circular array. Params: region_id, count, center_x, center_y, radius
+  scatter — random copies in bounds. Params: region_id, count, bounds, seed, scale
   group — duplicate group with transforms. Params: group_name, dx, dy, scale, rotate
 
 ### Parameters
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
+| `bounds` | `any` |  | Scatter bounds as [x, y, width, height] in normalized coordinates. |
 | `center_x` | `number` |  |  |
 | `center_y` | `number` |  |  |
 | `columns` | `integer` |  |  |
@@ -728,6 +763,7 @@ Patterns:
 | `rows` | `integer` |  |  |
 | `scale` | `number` |  |  |
 | `scale_falloff` | `number` |  |  |
+| `seed` | `integer` |  |  |
 | `shadow_mode` | `boolean` |  |  |
 | `spacing_falloff` | `number` |  |  |
 | `spacing_x` | `number` |  |  |
@@ -1268,4 +1304,3 @@ Move, scale, rotate, mirror, or align existing regions. Use to reposition/resize
 | `z_index` | `any` |  |  |
 
 ---
-

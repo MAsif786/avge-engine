@@ -57,6 +57,71 @@ def test_apply_brush_style_updates_vector_style_and_metadata():
     assert overlays
 
 
+def test_apply_brush_style_supports_line_art_pen_presets():
+    graph, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["apply_brush_style"](
+        document_id=doc.id,
+        selector={"ids": ["line"]},
+        brush="technical_pen",
+    )
+
+    line = graph.get_region("line", doc.id)
+    assert "Brush 'technical_pen' applied" in result
+    assert line.metadata["brush"] == "technical_pen"
+    assert line.style.stroke == "#101010"
+
+
+def test_list_brush_presets_exposes_generic_alias_groups():
+    _, _, style_mcp = _setup()
+
+    result = style_mcp.tools["list_brush_presets"](group="texture", include_details=False)
+
+    assert result == {
+        "texture": [
+            "texture",
+            "fabric_brush",
+            "stone_brush",
+            "wood_grain_brush",
+            "metal_brush",
+            "pattern_brush",
+        ]
+    }
+
+
+def test_apply_brush_style_supports_background_and_fx_aliases():
+    graph, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["apply_brush_style"](
+        document_id=doc.id,
+        selector={"ids": ["line"]},
+        brush="water_brush",
+    )
+
+    line = graph.get_region("line", doc.id)
+    assert "Brush 'water_brush' applied" in result
+    assert line.metadata["brush"] == "water_brush"
+    assert line.style.blend_mode == "screen"
+
+
+def test_refine_line_tool_corrects_existing_linework():
+    graph, doc, _ = _setup()
+    region_mcp = _FakeMCP()
+    region.create_tools(region_mcp)
+
+    result = region_mcp.tools["refine_line"](
+        document_id=doc.id,
+        region_id="line",
+        mode="straighten",
+        smoothness=0.0,
+    )
+
+    line = graph.get_region("line", doc.id)
+    assert "Line refined: id=line" in result
+    assert len(line.outline) == 2
+    assert line.constraints.smoothness == 0.0
+
+
 def test_set_layer_role_normalizes_layer_metadata_and_style():
     graph, doc, style_mcp = _setup()
 

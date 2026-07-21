@@ -1,88 +1,126 @@
-# AVGE Tool Improvement Backlog
+# AVGE Tool Backlog — Generic And De-Duplicated
 
-This backlog captures recurring gaps found while recreating dense anime-style environment scenes. These are implementation candidates, separate from the skill-guide usage rules in `docs/environment-guidelines.md`.
+Rule: add a new tool only for a genuinely new geometry, query, render, or export operation. A named look, material, brush, object type, or domain-specific variant should be a preset, data-table row, `mode`, or documented workflow on an existing tool.
 
-## Environment Compound Helpers
+This backlog is implementation-oriented. Usage recipes belong in `docs/design-guidelines.md` or `docs/environment-guidelines.md`.
 
-### `generate_cloud`
+## Final Tool Candidates
 
-Create a soft, irregular cloud group in one call.
+| Tool / extension | Replaces or absorbs | Why it is a real capability |
+|---|---|---|
+| `duplicate(pattern="scatter", count, bounds, seed, jitter)` | Cloud/rock/grass/prop scatter needs, ad hoc randomized placement | Implemented in `m0b-v20` as a `duplicate` mode with bounded random center placement and existing jitter support. |
+| `add_shading(mode="gradient", stops, light_direction, strength)` | Separate architecture gradient-shading proposal | Continuous per-plane shading cannot be expressed by hard two-tone copies. |
+| `generate_background_asset(mode, bounds, count, style, density, seed, detail, facade_detail)` | `generate_shape(pattern="cornice")`, `generate_shape(pattern="awning")`, `generate_shape(pattern="rooftop_props")`, `create_facade_details`, `create_building_cluster`, tree/water/rock/grass generators | One generator with modes and detail flags avoids many object-specific tools while addressing recurring background quality gaps. |
+| `apply_fx(type="lens_flare"|"motion_blur"|"speed_lines"|"impact_lines"|"particles", ...)` | `create_lens_flare`, `create_motion_effect`, weather/particle helper tools | Directional/radiant/repeated FX share one parameter family. Single-stroke weather remains a brush preset. |
+| `mix_region_colors(source_region_id, target_region_id, mix_ratio, output)` | True `mixer_brush` behavior | Needs two source regions and generated intermediate color overlays, so it is not just a brush preset. |
+| `smudge_region` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
+| `warp_region(region_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Deforms non-rectangular vector outlines beyond affine transform and `project_quad`. |
+| `mesh_warp_region` | Higher-order organic deformation | Deferred. Build only if `warp_region` is insufficient. |
+| `create_comic_panel_layout(layout, rows, columns, gutters, reading_direction, ...)` | Panel creator and page layout tools | Creates panel/page structure with reading-order metadata and optional clipping regions. |
+| `create_speech_balloon` | Manual balloon body + tail + text composition | Composite object with body, tail, text, grouping, and z-index defaults. |
+| `create_sound_effect_text` | Plain text plus manual outline/shadow accents | Composite lettering treatment for comic/manga SFX. |
+| `create_surface_stripes(target_quad, count, orientation, ...)` | Manual crosswalk/lane/floor stripe placement | Repeated projected stripes need shared perspective and spacing falloff. |
+| `measure_geometry(mode, points/region_id, units)` | Ruler, angle tool, distance tool | Query operation returning structured measurements in normalized and pixel units. |
+| `create_measurement_grid` | Flat ruler/grid/guides | Flat construction grid is distinct from vanishing-point perspective grids. |
+| `create_adjustment_layer(type, selector, strength, ...)` | Scene-wide color grading/publishing polish | Non-destructive or overlay-based correction has no existing equivalent. |
+| `symmetry_duplicate(mode="mirror"|"radial"|"rotational"|"kaleidoscope", ...)` | Mirror/radial/rotational/kaleidoscope symmetry requests | Existing duplicate/transform covers part of this; kaleidoscope and a unified symmetric workflow are the gap. |
+| `resize_document(width, height, scale_content)` | Resize publishing workflow | Post-create canvas resizing with optional content scaling is not currently first-class. |
+| `export_raster(format="png"|"jpeg", scale, crop_bounds, background)` | PNG/JPEG export and crop export | Preview PNG exists, but production raster export with crop/format/path settings is a separate publishing operation. |
+| `set_print_metadata(dpi, bleed, trim, safe_area, color_mode)` | DPI settings and print setup | Stores print/layout metadata without pretending to implement full CMYK conversion. |
+| `create_curve(mode="bezier", handle_in, handle_out)` | Create-then-edit Bézier workflow | Extends existing `create_curve`; exact handles at creation avoid a second edit call. |
+| `pattern_brush_along_path` | Repeating decorative brush stamps | Deferred. Build only if `create_line_pattern`, `outline_pattern`, and `fill_pattern` are insufficient. |
 
-Suggested params:
+## Data Tables, Not Tools
 
-| Param | Purpose |
+| Data table | Absorbs | Access pattern |
+|---|---|---|
+| Brush preset table | `paint_brush`, `blend_brush`, `fabric_brush`, `stone_brush`, `wood_grain_brush`, `metal_brush`, `pattern_brush`, `rain_brush`, `snow_brush`, `fire_brush`, `smoke_brush`, `spark_brush`, `water_brush`, plus existing pen/medium aliases | Implemented in `avge_engine.effects.brushes`; discover with `list_brush_presets()`, apply with `apply_brush_style(brush=<key>)`. |
+| Background detail table | Cornice, awning, rooftop props, sills, mullions, pipes, facade clutter | Internal to `generate_background_asset(detail=[...])`, not a separate agent-facing tool family. |
+| Character scaffold templates | Face/head/body/hand/foot proportions by style/view | Use only if the eval spike proves documented primitive workflows are not enough. |
+| FX preset table | Lens flare variants, speed-line styles, impact-line styles, weather particle defaults | Internal to `apply_fx(type=..., preset=...)`. |
+
+## Eval First
+
+These may be useful, but should not be promoted to tools until an eval shows agents cannot produce acceptable results through documented compositions of existing primitives.
+
+| Candidate | Open question |
 |---|---|
-| `cx`, `cy` | Cloud center in normalized canvas coordinates. |
-| `width`, `height` | Overall cloud bounding size. |
-| `puff_count` | Number of overlapping lobes. |
-| `puff_variance` | Size and position irregularity. |
-| `shade_direction` | Light direction for top/bottom shading. |
-| `blur` | Edge softness in pixels. |
-| `opacity` | Overall transparency. |
+| `create_character_guide` | Does it materially improve face/body/hand/foot scaffold quality beyond the design guide plus primitives? |
+| `create_character_template` | Does it improve turnarounds, expression sheets, or pose references enough to justify a tool? |
+| `create_reference_board` | Likely composition-only: regions, text labels, palettes, and layer metadata. Build only if repeated failures show a tool is needed. |
+| Layer grouping metadata | Useful for organization, but not a drawing/rendering gap. Consider metadata support only if complex scenes become hard to manage. |
 
-Expected behavior: generate overlapping soft lobes, optionally union them, add a lighter top and subtle underside shade, then blur the silhouette.
+## Removed Or Not Planned
 
-### `generate_shape(pattern="cornice")`
+These should not be added as standalone tools.
 
-Create a thin decorative band along a facade or roof edge.
+| Request family | Reason |
+|---|---|
+| `generate_cloud` | Use brush/cloud presets, scatter duplication, gradient shading, and blur as a documented composition pattern. |
+| One-point/two-point rulers | Existing `create_perspective_grid` covers them as modes. |
+| Move/scale/rotate/free transform | Existing `transform_objects` covers these. |
+| Rectangle/circle/ellipse/polygon/star/line/basic curve | Existing `create_primitive`, `create_region`, `create_curve`, and primitive API endpoints cover these. |
+| Lasso/rectangle select/ellipse select/object selection UI tools | Use shared selectors; consider only generic `select_by_shape` or `select_similar` if selector failures persist. |
+| Alpha lock | Agents can restyle selected regions without changing geometry. |
+| Separate mask/clipping-mask tools | Existing `clip_to` covers the core behavior unless repeated mistakes justify a wrapper. |
+| Separate glow/bloom tools | Glow is covered by presets/blend modes/soft overlays; bloom by `apply_texture_effect(effect="bloom")`. |
+| PSD/CLIP export | Heavy app-specific publishing formats; out of scope for now. |
+| True CMYK conversion | Out of scope until there is a real print pipeline; store color-mode metadata first. |
+| Color picker | Agents can inspect `get_region`/style data; not worth a separate human-style tool. |
 
-Suggested params: `region_id`, `edge`, `depth`, `style`, `fill`, `stroke`, `stroke_width`, `z_index`.
+## Namespace Assignment
 
-### `generate_shape(pattern="awning")`
+- **Eager core:** `add_shading`, `generate_background_asset`, `apply_fx`, `warp_region`, `create_comic_panel_layout`, `export_raster`
+- **Style:** `mix_region_colors`, `smudge_region`/`smudge_edge`, `pattern_brush_along_path`, brush preset table
+- **Geometry:** `measure_geometry`, `create_measurement_grid`, `symmetry_duplicate`, `mesh_warp_region`, Bézier mode for `create_curve`
+- **Scene:** `create_adjustment_layer`, `create_surface_stripes`, `resize_document`, `set_print_metadata`
+- **Comic:** `create_speech_balloon`, `create_sound_effect_text`
+- **Eval-gated scene helpers:** character guide/template/reference board/layer grouping
 
-Create an angled canopy over a door, storefront, or window.
+## Implementation Plan
 
-Suggested params: `region_id` or `anchor_point`, `edge`, `width`, `height`, `tilt_angle`, `stripe_count`, `colors`, `z_index`.
+### Phase 0 — Foundations
 
-### `generate_shape(pattern="rooftop_props")`
+- Brush preset table and `list_brush_presets()` implemented in `m0b-v20`.
+- Background detail table for facade and urban clutter.
+- Shared validation/clamp helpers for counts, jitter, opacity, density, and falloff.
+- Namespace/discovery strategy for non-core tools before the flat tool list grows much further.
 
-Scatter small rooftop silhouettes such as tanks, vents, antennae, and AC units.
+### Phase 1 — Highest Leverage
 
-Suggested params: `region_id`, `edge`, `count`, `seed`, `prop_types`, `density`, `scale_range`, `z_index`.
+1. `add_shading(mode="gradient")`
+2. `generate_background_asset`
+3. `create_comic_panel_layout`
 
-## Shading Improvements
+Each should ship with a golden-scene regression test.
 
-### `add_shading(mode="gradient")`
+### Phase 2 — Art Quality And Deformation
 
-Current `add_shading` works best for hard two-tone accents. Architecture needs continuous per-plane shading.
+1. `apply_fx`
+2. `mix_region_colors`
+3. `warp_region`
 
-Suggested behavior:
+### Phase 3 — Publishing And Measurement
 
-- `mode="two_tone"`: current behavior.
-- `mode="gradient"`: define/apply a 3-5 stop gradient across the region along `light_direction`.
-- Optional `strength`, `highlight_color`, `shadow_color`, and `mid_color` controls.
+1. `export_raster`
+2. `resize_document`
+3. `set_print_metadata`
+4. `measure_geometry`
+5. `create_measurement_grid`
 
-## Scene-Quality Helpers
+### Phase 4 — Specialized, Independently Shippable
 
-### Guide-layer export safety
+1. `symmetry_duplicate`
+2. `create_speech_balloon`
+3. `create_sound_effect_text`
+4. `create_surface_stripes`
+5. `create_adjustment_layer`
+6. Bézier mode on `create_curve`
+7. `smudge_region` / `smudge_edge`
 
-Final export should warn or optionally exclude guide layers/regions.
+### Phase 5 — Eval-Gated Or Deferred
 
-Suggested behavior:
-
-- `export_svg(exclude_layers=["guides"])`, or
-- `critique(mode="visual")` finding: `construction_guides_visible`.
-
-### Deferred Tool Loading / Namespaces
-
-The flat MCP namespace is now large enough that rare tools should eventually
-move behind a discovery step or namespace grouping. Keep core drawing/editing
-tools eager, then defer lower-frequency tools such as checkpoint diffs,
-style-consistency comparison, and specialized generators behind a search/load
-or namespaced surface (`shadow.*`, `geometry.*`, `scene.*`, `style.*`).
-
-### Road-plane stripe helper
-
-Crosswalks, lane dividers, arrows, and floor tiles are common enough to deserve a helper.
-
-Suggested tool: `create_surface_stripes(target_quad, count, orientation, start_v, end_v, stripe_width, spacing_falloff, fill, opacity)`.
-
-Expected behavior: generate evenly spaced `project_quad` stripes in surface coordinates so road/floor markings converge correctly.
-
-### Facade detail pack
-
-`create_facade_grid` handles windows but not secondary architectural clutter.
-
-Suggested tool: `create_facade_details(target_quad, density, include=["cornice", "sills", "mullions", "awnings", "pipes"], seed)`.
-
-Expected behavior: add trim, sills, small ledges, awnings, and pipes behind signage with correct `z_index` defaults.
+- Run a character/reference scaffold eval before building `create_character_guide`, `create_character_template`, or `create_reference_board`.
+- Build `pattern_brush_along_path` only if current pattern tools fail real decorative-border/stamp cases.
+- Build `mesh_warp_region` only if `warp_region` fails real deformation cases.
+- Add export/critique guardrails for visible guide layers alongside any guide/template feature that ships.

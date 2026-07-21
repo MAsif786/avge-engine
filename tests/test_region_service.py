@@ -58,6 +58,53 @@ def test_region_service_delete_regions():
     assert deleted == ["box"]
 
 
+def test_region_service_refine_line_straightens_existing_curve():
+    service, source, _ = _setup_scene()
+    service.graph.create_line(
+        points=[(0.1, 0.1), (0.2, 0.18), (0.3, 0.12), (0.4, 0.2)],
+        document_id=source.id,
+        region_id="rough_line",
+    )
+
+    result = service.refine_line(
+        document_id=source.id,
+        region_id="rough_line",
+        mode="straighten",
+        smoothness=0.0,
+    )
+
+    line = service.graph.get_region("rough_line", source.id)
+    assert result.before_points == 4
+    assert result.after_points == 2
+    assert line.outline == [(0.1, 0.1), (0.4, 0.2)]
+    assert line.constraints.smoothness == 0.0
+    assert line.metadata["line_refinement"] == "straighten"
+
+
+def test_region_service_refine_line_simplifies_noisy_curve():
+    service, source, _ = _setup_scene()
+    service.graph.create_line(
+        points=[
+            (0.1, 0.1),
+            (0.15, 0.101),
+            (0.2, 0.102),
+            (0.3, 0.2),
+            (0.4, 0.3),
+        ],
+        document_id=source.id,
+        region_id="noisy_line",
+    )
+
+    result = service.refine_line(
+        document_id=source.id,
+        region_id="noisy_line",
+        mode="simplify",
+        simplify_tolerance=0.02,
+    )
+
+    assert result.after_points < result.before_points
+
+
 def test_region_service_copy_element_offsets_primitive_and_outline():
     service, source, target = _setup_scene()
 

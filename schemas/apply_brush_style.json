@@ -10,7 +10,7 @@
     },
     "brush": {
       "type": "string",
-      "enum": ["pencil", "ink", "g_pen", "mapping_pen", "flat", "round", "airbrush", "soft", "hard", "watercolor", "gouache", "oil", "chalk", "texture", "hair", "grass_leaf", "cloud", "particle_fx"],
+      "enum": ["pencil", "ink", "g_pen", "mapping_pen", "turnip_pen", "technical_pen", "brush_pen", "calligraphy_pen", "vector_pen", "flat", "round", "paint_brush", "airbrush", "soft", "hard", "watercolor", "gouache", "oil", "chalk", "blend_brush", "mixer_brush", "texture", "fabric_brush", "stone_brush", "wood_grain_brush", "metal_brush", "pattern_brush", "hair", "grass_leaf", "cloud", "water_brush", "particle_fx", "rain_brush", "snow_brush", "fire_brush", "smoke_brush", "spark_brush"],
       "default": "ink"
     },
     "document_id": { "type": ["string", "null"] },

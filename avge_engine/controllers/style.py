@@ -7,6 +7,7 @@ import random
 from typing import Any, Literal
 
 from avge_engine.effects import Style
+from avge_engine.effects.brushes import BRUSH_PRESETS, BrushName, brush_preset_catalog
 from avge_engine.effects.style import VALID_BLEND_MODES
 from avge_engine.geometry import CurveConstraints, compute_bounds
 from avge_engine.scene.models import RegionNode
@@ -22,11 +23,6 @@ BLEND_MODES = Literal[
 
 PRESET_NAMES = Literal["warm_shaded", "cool_shaded", "metallic", "glow", "shadow", "wood", "car_paint", "deep_shadow", "chrome", "meme_title", "meme_caption", "label", "label_light", "title", "subtitle", "comic"]
 MATERIAL_NAMES = Literal["glass", "brushed_metal", "concrete", "wood", "tile", "foliage"]
-BRUSH_NAMES = Literal[
-    "pencil", "ink", "g_pen", "mapping_pen", "flat", "round",
-    "airbrush", "soft", "hard", "watercolor", "gouache", "oil",
-    "chalk", "texture", "hair", "grass_leaf", "cloud", "particle_fx",
-]
 LAYER_ROLES = Literal[
     "sketch", "line_art", "base_color", "shadow", "highlight",
     "glow", "texture", "fx", "background", "guide", "mask",
@@ -35,28 +31,6 @@ TEXTURE_EFFECTS = Literal[
     "noise", "paper", "fabric", "halftone", "screen_tone",
     "bloom", "particles", "gradient_light", "rim_light",
 ]
-
-
-BRUSH_PRESETS: dict[str, dict[str, Any]] = {
-    "pencil": {"stroke": "#3E3E3E", "stroke_width": 2.0, "opacity": 0.68, "linecap": "round", "rough": True},
-    "ink": {"stroke": "#171717", "stroke_width": 3.0, "opacity": 1.0, "linecap": "round"},
-    "g_pen": {"stroke": "#101010", "stroke_width": 4.0, "opacity": 1.0, "linecap": "round", "pressure": True},
-    "mapping_pen": {"stroke": "#111111", "stroke_width": 1.25, "opacity": 1.0, "linecap": "round"},
-    "flat": {"stroke": "#2C2C2C", "stroke_width": 6.0, "opacity": 0.95, "linecap": "butt"},
-    "round": {"stroke": "#222222", "stroke_width": 5.0, "opacity": 0.95, "linecap": "round"},
-    "airbrush": {"stroke": "#FFFFFF", "stroke_width": 18.0, "opacity": 0.22, "linecap": "round", "blur": 8.0, "blend_mode": "screen"},
-    "soft": {"stroke": "#FFFFFF", "stroke_width": 10.0, "opacity": 0.35, "linecap": "round", "blur": 4.0},
-    "hard": {"stroke": "#222222", "stroke_width": 4.0, "opacity": 1.0, "linecap": "butt"},
-    "watercolor": {"stroke": "#426B8F", "stroke_width": 7.0, "opacity": 0.42, "linecap": "round", "blur": 1.6},
-    "gouache": {"stroke": "#4F4A43", "stroke_width": 8.0, "opacity": 0.82, "linecap": "round"},
-    "oil": {"stroke": "#564B3F", "stroke_width": 9.0, "opacity": 0.86, "linecap": "round", "rough": True},
-    "chalk": {"stroke": "#F0EEE7", "stroke_width": 6.0, "opacity": 0.62, "linecap": "round", "rough": True},
-    "texture": {"stroke": "#4B4B4B", "stroke_width": 3.0, "opacity": 0.48, "linecap": "round", "rough": True},
-    "hair": {"stroke": "#2B1D18", "stroke_width": 1.15, "opacity": 0.9, "linecap": "round", "pressure": True},
-    "grass_leaf": {"stroke": "#315F34", "stroke_width": 1.8, "opacity": 0.82, "linecap": "round", "pressure": True},
-    "cloud": {"stroke": "#FFFFFF", "stroke_width": 12.0, "opacity": 0.36, "linecap": "round", "blur": 6.0, "blend_mode": "screen"},
-    "particle_fx": {"stroke": "#FFFFFF", "stroke_width": 2.0, "opacity": 0.72, "linecap": "round", "blend_mode": "screen"},
-}
 
 LAYER_ROLE_Z = {
     "background": -1000,
@@ -549,10 +523,24 @@ def create_tools(mcp):
 
 
     @mcp.tool(
+        name="list_brush_presets",
+        description="List supported brush presets grouped by purpose. "
+        "Use this to discover brush names before apply_brush_style. "
+        "Brush presets control editable stroke medium/linework; use restyle(material=...) "
+        "for substance/surface looks and apply_texture_effect for overlay grain/FX.",
+    )
+    def list_brush_presets(
+        group: Literal["all", "line_art", "paint", "texture", "natural", "fx"] = "all",
+        include_details: bool = True,
+    ) -> dict[str, Any]:
+        """Return available brush presets grouped by role."""
+        return brush_preset_catalog(group=group, include_details=include_details)
+
+
+    @mcp.tool(
         name="apply_brush_style",
         description="Apply a digital art brush preset to existing regions. "
-        "Use for pencil, ink, g_pen, mapping_pen, flat, round, airbrush, soft, hard, "
-        "watercolor, gouache, oil, chalk, texture, hair, grass_leaf, cloud, and particle_fx linework. "
+        "Use list_brush_presets to discover supported presets for line art, paint, texture, natural strokes, and FX. "
         "Use restyle(material=...) for substance/surface looks like glass, wood, concrete, tile, or foliage. "
         "Use apply_texture_effect for separate overlay FX such as paper grain, halftone, bloom, and particles; "
         "stack brush first, then texture if both are needed. "
@@ -561,7 +549,7 @@ def create_tools(mcp):
     )
     def apply_brush_style(
         selector: dict[str, Any] | None = None,
-        brush: BRUSH_NAMES = "ink",
+        brush: BrushName = "ink",
         document_id: str | None = None,
         color: str | None = None,
         size: StrokeWidthInput = None,
@@ -575,7 +563,7 @@ def create_tools(mcp):
 
         Args:
             selector: Common selector: ids, group_name, fill, layer, or tags.
-            brush: Brush preset name.
+            brush: Brush preset name returned by list_brush_presets.
             color: Override preset color.
             size: Override stroke width in canvas pixels.
             apply_to: Whether to affect stroke, fill, or both.

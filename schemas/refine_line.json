@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/refine_line/v1.json",
+  "title": "refine_line",
+  "description": "Correct existing linework without recreating it. Stabilize removes jitter, smooth rounds rough paths, simplify reduces excess points, and straighten converts a stroke to a clean straight line.",
+  "type": "object",
+  "properties": {
+    "region_id": {
+      "type": "string",
+      "description": "Existing region or line ID to refine."
+    },
+    "document_id": {
+      "type": ["string", "null"]
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["stabilize", "smooth", "simplify", "straighten"],
+      "default": "stabilize"
+    },
+    "strength": {
+      "type": "number",
+      "description": "Correction strength. Higher values move points more aggressively.",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5
+    },
+    "simplify_tolerance": {
+      "type": "number",
+      "description": "Normalized tolerance for simplification and stabilization point reduction.",
+      "minimum": 0,
+      "maximum": 0.25,
+      "default": 0.01
+    },
+    "smoothness": {
+      "type": ["number", "null"],
+      "description": "Optional replacement curve smoothness 0.0-1.0.",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "preserve_corners": {
+      "type": "boolean",
+      "description": "Keep sharp angle changes while correcting line jitter.",
+      "default": true
+    },
+    "iterations": {
+      "type": "integer",
+      "description": "Smoothing passes for mode='smooth'.",
+      "minimum": 1,
+      "maximum": 6,
+      "default": 1
+    }
+  },
+  "required": ["region_id"],
+  "additionalProperties": false
+}

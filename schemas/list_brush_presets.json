@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/list_brush_presets/v1.json",
+  "title": "list_brush_presets",
+  "description": "List supported digital brush presets grouped by purpose for apply_brush_style.",
+  "type": "object",
+  "properties": {
+    "group": {
+      "type": "string",
+      "enum": ["all", "line_art", "paint", "texture", "natural", "fx"],
+      "default": "all"
+    },
+    "include_details": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}
