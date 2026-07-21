@@ -3,7 +3,7 @@
 _Resource: `avge://skill/environment-guidelines`_
 _Sibling to `avge://skill/design-guidelines` (character/object work). This skill governs street scenes, building exteriors, interiors, and any scene where perspective, depth, and repeated architectural elements matter more than a single subject._
 
-_Tool names below are current as of `m0b-v21` (59 tools): `clone_document`, `create_perspective_grid`, `apply_depth_haze`, `create_facade_grid`, `create_surface_stripes`, `generate_background_asset`, `create_shadow`, `critique`, `generate_cloud`, `create_line_pattern`, `refine_line`, `list_brush_presets`, `apply_brush_style`, `set_layer_role`, `apply_texture_effect`, region/primitive/curve `outline_pattern`/`fill_pattern`, `add_shading(mode="gradient")`, and `duplicate`'s `scale_falloff`/`spacing_falloff` params. Existing-region targeting uses the shared selector shape: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds`, `z_min`, `z_max`, `has_stroke`._
+_Tool names below are current as of `m0b-v22` (60 tools): `clone_document`, `create_perspective_grid`, `apply_depth_haze`, `create_facade_grid`, `create_surface_stripes`, `generate_background_asset`, `create_comic_panel_layout`, `create_shadow`, `critique`, `generate_cloud`, `create_line_pattern`, `refine_line`, `list_brush_presets`, `apply_brush_style`, `set_layer_role`, `apply_texture_effect`, region/primitive/curve `outline_pattern`/`fill_pattern`, `add_shading(mode="gradient")`, and `duplicate`'s `scale_falloff`/`spacing_falloff` params. Existing-region targeting uses the shared selector shape: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds`, `z_min`, `z_max`, `has_stroke`._
 
 _Implementation backlog for missing helpers: `docs/tool-improvement-backlog.md`._
 

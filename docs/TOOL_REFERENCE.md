@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (59 tools)
+# AVGE Engine — Tool Reference (60 tools)
 
-_Generated from `__main__` — tool set: m0b-v21_
+_Generated from `__main__` — tool set: m0b-v22_
 
 ## `add_bumps`
 
@@ -311,6 +311,35 @@ Create a smooth curved line through 3+ control points. Unlike create_region (fil
 | `stroke_dasharray` | `any` |  |  |
 | `stroke_linecap` | `any` |  |  |
 | `stroke_width` | `any` |  | Stroke width in canvas pixels. |
+| `z_index` | `integer` |  |  |
+
+---
+
+## `create_comic_panel_layout`
+
+Create grouped editable comic/page panel regions with gutters and reading-order metadata. Layouts: grid, feature_top, feature_left, vertical_stack, horizontal_strip. Use the generated panels as clip_to targets for artwork instead of manually aligning panel rectangles.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `bounds` | `any` |  | Panel layout bounds as [x, y, width, height] in normalized coordinates. |
+| `clip_content` | `boolean` |  | Mark panels as intended clipping targets. |
+| `columns` | `integer` |  |  |
+| `count` | `any` |  | Optional panel count for strip/feature layouts. |
+| `document_id` | `any` |  |  |
+| `fill` | `string` |  |  |
+| `group_name` | `string` |  |  |
+| `gutter_x` | `number` |  |  |
+| `gutter_y` | `number` |  |  |
+| `layer` | `string` |  |  |
+| `layout` | `string` |  |  |
+| `margin` | `number` |  |  |
+| `panel_prefix` | `string` |  |  |
+| `reading_direction` | `string` |  |  |
+| `rows` | `integer` |  |  |
+| `stroke` | `string` |  |  |
+| `stroke_width` | `any` |  | Panel border width in canvas pixels. |
 | `z_index` | `integer` |  |  |
 
 ---

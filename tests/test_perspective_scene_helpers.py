@@ -273,6 +273,54 @@ def test_generate_background_asset_tree_cluster_creates_trunks_and_leaves():
     assert any(r.metadata.get("part") == "leaf" for r in created)
 
 
+def test_create_comic_panel_layout_grid_adds_reading_order_metadata():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document(width=1200, height=1600)
+
+    result = mcp.tools["create_comic_panel_layout"](
+        document_id=doc.id,
+        layout="grid",
+        rows=2,
+        columns=2,
+        bounds=[0.05, 0.05, 0.9, 0.9],
+        panel_prefix="page_panel",
+        group_name="page_one",
+        reading_direction="rtl",
+    )
+
+    panels = [graph.get_region(f"page_panel_{i:02d}", doc.id) for i in range(1, 5)]
+    assert "Comic panel layout created: layout=grid, panels=4" in result
+    assert {p.metadata["reading_index"] for p in panels} == {0, 1, 2, 3}
+    assert panels[1].metadata["reading_index"] == 0
+    assert {"name": "page_one", "count": 4} in graph.list_groups(doc.id)
+
+
+def test_create_comic_panel_layout_feature_top_creates_large_opening_panel():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+
+    mcp.tools["create_comic_panel_layout"](
+        document_id=doc.id,
+        layout="feature_top",
+        count=3,
+        bounds=[0.1, 0.1, 0.8, 0.8],
+        panel_prefix="story",
+    )
+
+    top = graph.get_region("story_01", doc.id)
+    lower = graph.get_region("story_02", doc.id)
+    top_height = top.outline[2][1] - top.outline[0][1]
+    lower_height = lower.outline[2][1] - lower.outline[0][1]
+    assert top_height > lower_height * 0.75
+    assert top.metadata["clip_content"] is True
+
+
 def test_create_surface_stripes_projects_repeated_road_markings():
     reset_graph()
     mcp = _FakeMCP()

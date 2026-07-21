@@ -13,6 +13,8 @@ BACKGROUND_ASSET_MODES = Literal[
     "rock_cluster",
     "grass_patch",
 ]
+COMIC_LAYOUT_MODES = Literal["grid", "feature_top", "feature_left", "vertical_stack", "horizontal_strip"]
+READING_DIRECTIONS = Literal["ltr", "rtl", "ttb"]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
@@ -752,6 +754,129 @@ def create_tools(mcp):
         for g in groups:
             lines.append(f"  {g['name']}: {g['count']} region(s)")
         return "\n".join(lines)
+
+    @mcp.tool(
+        name="create_comic_panel_layout",
+        description="Create grouped editable comic/page panel regions with gutters and reading-order metadata. "
+        "Layouts: grid, feature_top, feature_left, vertical_stack, horizontal_strip. "
+        "Use the generated panels as clip_to targets for artwork instead of manually aligning panel rectangles.",
+    )
+    def create_comic_panel_layout(
+        layout: COMIC_LAYOUT_MODES = "grid",
+        document_id: str | None = None,
+        rows: int = 2,
+        columns: int = 2,
+        count: int | None = None,
+        bounds: list[float] | None = None,
+        margin: float = 0.04,
+        gutter_x: float = 0.018,
+        gutter_y: float = 0.018,
+        reading_direction: READING_DIRECTIONS = "ltr",
+        panel_prefix: str = "panel",
+        group_name: str = "comic_panels",
+        fill: str = "#FFFFFF",
+        stroke: str = "#111111",
+        stroke_width: StrokeWidthInput = None,
+        layer: str = "panels",
+        z_index: int = 0,
+        clip_content: bool = True,
+    ) -> str:
+        """Create page/comic panels as editable regions."""
+        from avge_engine.scene import CurveConstraints, Style
+
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+
+        rows = max(1, min(12, int(rows)))
+        columns = max(1, min(12, int(columns)))
+        gutter_x = max(0.0, min(0.25, float(gutter_x)))
+        gutter_y = max(0.0, min(0.25, float(gutter_y)))
+        if bounds is None:
+            margin = max(0.0, min(0.45, float(margin)))
+            x, y, w, h = margin, margin, 1 - 2 * margin, 1 - 2 * margin
+        else:
+            if len(bounds) != 4:
+                return "Error: bounds must be [x, y, width, height]"
+            x, y, w, h = [float(v) for v in bounds]
+        if w <= 0 or h <= 0:
+            return "Error: layout bounds width and height must be positive"
+
+        def grid_rects(g_rows: int, g_cols: int, gx: float, gy: float, gw: float, gh: float):
+            usable_w = gw - gutter_x * (g_cols - 1)
+            usable_h = gh - gutter_y * (g_rows - 1)
+            if usable_w <= 0 or usable_h <= 0:
+                return []
+            cw = usable_w / g_cols
+            ch = usable_h / g_rows
+            return [
+                (gx + col * (cw + gutter_x), gy + row * (ch + gutter_y), cw, ch)
+                for row in range(g_rows)
+                for col in range(g_cols)
+            ]
+
+        panel_count = max(1, min(36, int(count))) if count is not None else None
+        rects: list[tuple[float, float, float, float]]
+        if layout == "grid":
+            rects = grid_rects(rows, columns, x, y, w, h)
+        elif layout == "vertical_stack":
+            rects = grid_rects(panel_count or rows, 1, x, y, w, h)
+        elif layout == "horizontal_strip":
+            rects = grid_rects(1, panel_count or columns, x, y, w, h)
+        elif layout == "feature_top":
+            top_h = h * 0.46
+            bottom_h = h - top_h - gutter_y
+            rects = [(x, y, w, top_h)]
+            rects.extend(grid_rects(1, max(1, panel_count - 1 if panel_count else columns), x, y + top_h + gutter_y, w, bottom_h))
+        elif layout == "feature_left":
+            left_w = w * 0.48
+            right_w = w - left_w - gutter_x
+            rects = [(x, y, left_w, h)]
+            rects.extend(grid_rects(max(1, panel_count - 1 if panel_count else rows), 1, x + left_w + gutter_x, y, right_w, h))
+        else:
+            return f"Error: Unknown comic panel layout '{layout}'"
+        if panel_count is not None:
+            rects = rects[:panel_count]
+        if not rects:
+            return "Error: gutters are too large for layout bounds"
+
+        if reading_direction == "rtl":
+            reading_order = sorted(range(len(rects)), key=lambda i: (round(rects[i][1], 6), -rects[i][0]))
+        elif reading_direction == "ttb":
+            reading_order = sorted(range(len(rects)), key=lambda i: (round(rects[i][0], 6), rects[i][1]))
+        else:
+            reading_order = sorted(range(len(rects)), key=lambda i: (round(rects[i][1], 6), rects[i][0]))
+        reading_index = {panel_idx: order for order, panel_idx in enumerate(reading_order)}
+
+        sw = stroke_width_to_norm(doc_id, stroke_width) or stroke_width_to_norm(doc_id, 3) or 0.003
+        created: list[str] = []
+        for idx, (px, py, pw, ph) in enumerate(rects):
+            rid = f"{panel_prefix}_{idx + 1:02d}"
+            outline = [(px, py), (px + pw, py), (px + pw, py + ph), (px, py + ph)]
+            region = scene.create_region(
+                outline=outline,
+                document_id=doc_id,
+                region_id=rid,
+                layer=layer,
+                z_index=z_index + idx,
+                constraints=CurveConstraints(smoothness=0.0, closed=True),
+                style=Style(fill=fill, stroke=stroke, stroke_width=sw, opacity=1.0),
+                metadata={
+                    "tool": "create_comic_panel_layout",
+                    "layout": layout,
+                    "panel_index": idx,
+                    "reading_index": reading_index[idx],
+                    "reading_direction": reading_direction,
+                    "clip_content": clip_content,
+                },
+            )
+            created.append(region.id)
+
+        scene.group_regions(group_name, created, doc_id, replace=True)
+        scene._persist(doc_id)
+        return f"Comic panel layout created: layout={layout}, panels={len(created)}, group={group_name}, ids={', '.join(created)}"
 
     @mcp.tool(
         name="add_bumps",

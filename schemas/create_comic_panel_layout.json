@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/create_comic_panel_layout/v1.json",
+  "title": "create_comic_panel_layout",
+  "description": "Create grouped editable comic/page panel regions with gutters and reading-order metadata.",
+  "type": "object",
+  "properties": {
+    "layout": {
+      "type": "string",
+      "enum": ["grid", "feature_top", "feature_left", "vertical_stack", "horizontal_strip"],
+      "default": "grid"
+    },
+    "document_id": { "type": ["string", "null"] },
+    "rows": { "type": "integer", "minimum": 1, "maximum": 12, "default": 2 },
+    "columns": { "type": "integer", "minimum": 1, "maximum": 12, "default": 2 },
+    "count": { "type": ["integer", "null"], "minimum": 1, "maximum": 36 },
+    "bounds": {
+      "type": ["array", "null"],
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "minimum": -2, "maximum": 3 },
+      "description": "Panel layout bounds as [x, y, width, height] in normalized coordinates."
+    },
+    "margin": { "type": "number", "minimum": 0, "maximum": 0.45, "default": 0.04 },
+    "gutter_x": { "type": "number", "minimum": 0, "maximum": 0.25, "default": 0.018 },
+    "gutter_y": { "type": "number", "minimum": 0, "maximum": 0.25, "default": 0.018 },
+    "reading_direction": { "type": "string", "enum": ["ltr", "rtl", "ttb"], "default": "ltr" },
+    "panel_prefix": { "type": "string", "default": "panel" },
+    "group_name": { "type": "string", "default": "comic_panels" },
+    "fill": { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+    "stroke": { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+    "stroke_width": {
+      "type": ["number", "null"],
+      "description": "Panel border width in canvas pixels.",
+      "minimum": 0,
+      "maximum": 512
+    },
+    "layer": { "type": "string", "default": "panels" },
+    "z_index": { "type": "integer", "default": 0 },
+    "clip_content": { "type": "boolean", "default": true }
+  },
+  "additionalProperties": false
+}

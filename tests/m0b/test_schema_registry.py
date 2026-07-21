@@ -421,6 +421,23 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
+    def test_create_comic_panel_layout_valid(self):
+        errs = validate_input("create_comic_panel_layout", {
+            "layout": "feature_top",
+            "rows": 2,
+            "columns": 3,
+            "bounds": [0.05, 0.05, 0.9, 0.9],
+            "reading_direction": "rtl",
+            "stroke_width": 4,
+        })
+        assert errs == []
+
+    def test_create_comic_panel_layout_rejects_unknown_layout(self):
+        errs = validate_input("create_comic_panel_layout", {
+            "layout": "diagonal",
+        })
+        assert len(errs) > 0
+
     def test_add_shading_shared_selector_valid(self):
         errs = validate_input("add_shading", {
             "selector": {"layer": "facades", "bounds": {"max_y": 0.8}},

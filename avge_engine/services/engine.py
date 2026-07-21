@@ -161,7 +161,7 @@ def load_tool_reference() -> str:
 
 # ── Centralized tool map — single source of truth ────────────────
 
-TOOL_MAP = """📋 TOOL MAP (59 tools — all available in batch):
+TOOL_MAP = """📋 TOOL MAP (60 tools — all available in batch):
 
 🗂 Document:   create_document · list_documents · load_document ·
                clone_document · delete_document · set_background
@@ -182,6 +182,7 @@ TOOL_MAP = """📋 TOOL MAP (59 tools — all available in batch):
                (restyle supports material presets: glass, brushed_metal,
                concrete, wood, tile, foliage)
 👥 Groups:     edit_group · list_groups · list_layers · shift_layer_z
+📚 Comic:      create_comic_panel_layout
 🔷 Procedural: create_line_pattern · generate_shape (19 patterns — see tool description)
 👁 View:       describe_scene · critique · render_preview ·
                render_diff · checkpoint_diff · export_svg

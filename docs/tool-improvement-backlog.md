@@ -16,7 +16,7 @@ This backlog is implementation-oriented. Usage recipes belong in `docs/design-gu
 | `smudge_region` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
 | `warp_region(region_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Deforms non-rectangular vector outlines beyond affine transform and `project_quad`. |
 | `mesh_warp_region` | Higher-order organic deformation | Deferred. Build only if `warp_region` is insufficient. |
-| `create_comic_panel_layout(layout, rows, columns, gutters, reading_direction, ...)` | Panel creator and page layout tools | Creates panel/page structure with reading-order metadata and optional clipping regions. |
+| `create_comic_panel_layout(layout, rows, columns, gutters, reading_direction, ...)` | Panel creator and page layout tools | Implemented in `m0b-v22` with grouped panel regions, gutters, common page layouts, reading-order metadata, and clip-target metadata. |
 | `create_speech_balloon` | Manual balloon body + tail + text composition | Composite object with body, tail, text, grouping, and z-index defaults. |
 | `create_sound_effect_text` | Plain text plus manual outline/shadow accents | Composite lettering treatment for comic/manga SFX. |
 | `create_surface_stripes(target_quad, count, orientation, ...)` | Manual crosswalk/lane/floor stripe placement | Repeated projected stripes need shared perspective and spacing falloff. |
@@ -70,7 +70,7 @@ These should not be added as standalone tools.
 
 ## Namespace Assignment
 
-- **Eager core:** `add_shading`, `generate_background_asset`, `apply_fx`, `warp_region`, `create_comic_panel_layout`, `export_raster`
+- **Eager core:** `add_shading`, `apply_fx`, `warp_region`, `export_raster`
 - **Style:** `mix_region_colors`, `smudge_region`/`smudge_edge`, `pattern_brush_along_path`, brush preset table
 - **Geometry:** `measure_geometry`, `create_measurement_grid`, `symmetry_duplicate`, `mesh_warp_region`, Bézier mode for `create_curve`
 - **Scene:** `create_adjustment_layer`, `create_surface_stripes`, `resize_document`, `set_print_metadata`
@@ -88,10 +88,14 @@ These should not be added as standalone tools.
 
 ### Phase 1 — Highest Leverage
 
-1. `add_shading(mode="gradient")`
-2. `create_comic_panel_layout`
+Complete:
 
-Each should ship with a golden-scene regression test.
+- `add_shading(mode="gradient")`
+- `duplicate(pattern="scatter")`
+- `generate_background_asset`
+- `create_comic_panel_layout`
+
+Next work starts in Phase 2.
 
 ### Phase 2 — Art Quality And Deformation
 
