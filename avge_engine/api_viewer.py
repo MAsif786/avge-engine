@@ -80,8 +80,14 @@ def viewer_html() -> str:
       border-color: var(--line);
       color: var(--ink);
     }
+    button.danger {
+      background: #b43d35;
+      border-color: #b43d35;
+      color: #fff;
+    }
     button:hover { background: var(--accent-dark); }
     button.secondary:hover { background: #f7fafc; }
+    button.danger:hover { background: #8f2f29; }
     .docs {
       overflow: auto;
       padding: 8px;
@@ -233,6 +239,7 @@ def viewer_html() -> str:
           <button id="png">PNG</button>
           <button id="jpg">JPG</button>
           <button id="pdf">PDF</button>
+          <button class="danger" id="deleteDoc">Delete</button>
         </div>
       </div>
       <div class="canvas-wrap">
@@ -243,6 +250,12 @@ def viewer_html() -> str:
   <script>
     const state = { docs: [], selected: null, timer: null, version: null };
     const $ = (id) => document.getElementById(id);
+
+    function docIdFromRoute() {
+      const parts = window.location.pathname.split("/").filter(Boolean);
+      if (parts[0] === "viewer" && parts[1]) return decodeURIComponent(parts[1]);
+      return new URLSearchParams(window.location.search).get("doc");
+    }
 
     function fmtDate(value) {
       if (!value) return "unknown";
@@ -308,17 +321,55 @@ def viewer_html() -> str:
       const data = await res.json();
       state.docs = data.documents || [];
       renderList();
-      if (!state.selected && state.docs.length) selectDoc(state.docs[0].id);
+      if (!state.selected && state.docs.length) {
+        const routed = docIdFromRoute();
+        const target = routed && state.docs.some((doc) => doc.id === routed) ? routed : state.docs[0].id;
+        selectDoc(target, false);
+      }
     }
 
-    function selectDoc(id) {
+    function updateRoute(id) {
+      const nextPath = `/viewer/${encodeURIComponent(id)}`;
+      if (window.location.pathname !== nextPath) {
+        history.pushState({ documentId: id }, "", nextPath);
+      }
+    }
+
+    function selectDoc(id, pushRoute = true) {
       state.selected = id;
       const doc = state.docs.find((d) => d.id === id);
       state.version = doc ? doc.version : null;
       $("selectedName").textContent = doc ? (doc.name || "(unnamed)") : "No document selected";
       $("selectedId").textContent = doc ? `${doc.id} - ${doc.region_count} regions - v${doc.version}` : "";
+      if (pushRoute) updateRoute(id);
       renderList();
       refreshPreview(true);
+    }
+
+    async function deleteSelectedDocument() {
+      if (!state.selected) return;
+      const doc = selectedDoc();
+      const label = doc.name ? `${doc.name} (${doc.id})` : doc.id;
+      if (!confirm(`Delete document ${label}? This cannot be undone.`)) return;
+
+      const res = await fetch("/tools/delete_document", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [state.selected], confirm: true })
+      });
+      if (!res.ok) {
+        $("frame").innerHTML = `<div class="status error">${escapeHtml(await res.text())}</div>`;
+        return;
+      }
+
+      const deleted = state.selected;
+      state.selected = null;
+      state.version = null;
+      $("selectedName").textContent = "No document selected";
+      $("selectedId").textContent = "";
+      $("frame").innerHTML = `<div class="empty">Deleted ${escapeHtml(deleted)}.</div>`;
+      history.pushState({}, "", "/viewer");
+      await loadDocs();
     }
 
     async function refreshPreview(force = false) {
@@ -539,6 +590,13 @@ def viewer_html() -> str:
     $("png").onclick = () => download("png");
     $("jpg").onclick = () => download("jpg");
     $("pdf").onclick = () => download("pdf");
+    $("deleteDoc").onclick = deleteSelectedDocument;
+    window.addEventListener("popstate", () => {
+      const routed = docIdFromRoute();
+      if (routed && state.docs.some((doc) => doc.id === routed)) {
+        selectDoc(routed, false);
+      }
+    });
 
     loadDocs();
     configureLive();

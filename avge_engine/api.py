@@ -152,6 +152,15 @@ async def viewer_image_proxy(url: str):
     )
 
 
+@app.get("/viewer/{document_id}")
+async def viewer_document(document_id: str):
+    return Response(
+        content=viewer_html(),
+        media_type="text/html",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
+
+
 # ── Document Endpoints ─────────────────────────────────────────────
 
 @app.post("/tools/create_document", response_model=ToolResponse)

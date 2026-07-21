@@ -37,6 +37,10 @@ class TestHealth:
         assert "text/html" in r.headers["content-type"]
         assert "AVGE Documents" in r.text
         assert "/viewer/documents" in r.text
+        assert "docIdFromRoute" in r.text
+        assert "history.pushState" in r.text
+        assert "deleteSelectedDocument" in r.text
+        assert "/tools/delete_document" in r.text
         assert "fetchSvgText" in r.text
         assert "fetchImageForRasterExport" in r.text
         assert "/viewer/image-proxy" in r.text
@@ -46,6 +50,12 @@ class TestHealth:
         assert "imageBlobToPdf" in r.text
         assert 'encoder.encode("%PDF-1.4' not in r.text
         assert "encoder.encode(`%PDF-1.4" in r.text
+
+    async def test_viewer_document_route(self, client):
+        r = await client.get("/viewer/doc_test_route")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "docIdFromRoute" in r.text
 
     async def test_schemas(self, client):
         r = await client.get("/schemas")
