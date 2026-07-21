@@ -32,6 +32,7 @@ TEXTURE_EFFECTS = Literal[
     "bloom", "particles", "gradient_light", "rim_light",
 ]
 FX_TYPES = Literal["lens_flare", "motion_blur", "speed_lines", "impact_lines", "particles"]
+COLOR_MIX_OUTPUTS = Literal["return_color", "apply_source", "apply_target", "new_region"]
 
 LAYER_ROLE_Z = {
     "background": -1000,
@@ -1056,6 +1057,103 @@ def create_tools(mcp):
 
         scene._persist(doc_id)
         return f"FX '{type}' created {len(created)} region(s)"
+
+
+    @mcp.tool(
+        name="mix_region_colors",
+        description="Mix colors from two existing regions and return, apply, or duplicate the result. "
+        "Use this when a requested color should be derived from existing artwork instead of invented manually. "
+        "Only solid hex fill/stroke colors are mixed; gradients and named paints are rejected.",
+    )
+    def mix_region_colors(
+        source_region_id: str,
+        target_region_id: str,
+        document_id: str | None = None,
+        mix_ratio: float = 0.5,
+        source_channel: Literal["fill", "stroke"] = "fill",
+        target_channel: Literal["fill", "stroke"] = "fill",
+        output: COLOR_MIX_OUTPUTS = "return_color",
+        apply_to: Literal["fill", "stroke", "both"] = "fill",
+        new_region_id: str | None = None,
+        offset_x: float = 0.02,
+        offset_y: float = 0.02,
+        opacity: float | None = None,
+        blend_mode: BLEND_MODES | None = None,
+    ) -> dict[str, Any] | str:
+        """Mix two existing region colors and optionally apply the result."""
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+
+        try:
+            source = scene.get_region(source_region_id, doc_id)
+            target = scene.get_region(target_region_id, doc_id)
+        except ValueError as exc:
+            return f"Error: {exc}"
+
+        source_color = getattr(source.style, source_channel)
+        target_color = getattr(target.style, target_channel)
+        if not isinstance(source_color, str) or _hex_to_rgb(source_color) is None:
+            return f"Error: Source {source_channel} must be a solid #RRGGBB color"
+        if not isinstance(target_color, str) or _hex_to_rgb(target_color) is None:
+            return f"Error: Target {target_channel} must be a solid #RRGGBB color"
+
+        ratio = _clamp01(mix_ratio)
+        mixed = _mix_hex(source_color, target_color, ratio)
+        if mixed is None:
+            return "Error: Could not mix colors"
+        metadata = {
+            "tool": "mix_region_colors",
+            "source_region_id": source_region_id,
+            "target_region_id": target_region_id,
+            "source_color": source_color,
+            "target_color": target_color,
+            "mix_ratio": ratio,
+            "mixed_color": mixed,
+        }
+
+        if output == "return_color":
+            return metadata
+
+        def style_kwargs() -> dict[str, Any]:
+            kwargs: dict[str, Any] = {"metadata": metadata}
+            if apply_to in ("fill", "both"):
+                kwargs["fill"] = mixed
+            if apply_to in ("stroke", "both"):
+                kwargs["stroke"] = mixed
+            if opacity is not None:
+                kwargs["opacity"] = _clamp01(opacity)
+            if blend_mode is not None:
+                kwargs["blend_mode"] = blend_mode
+            return kwargs
+
+        if output == "apply_source":
+            scene.edit_region(region_id=source_region_id, document_id=doc_id, **style_kwargs())
+            return f"Mixed color {mixed} applied to source region '{source_region_id}'"
+        if output == "apply_target":
+            scene.edit_region(region_id=target_region_id, document_id=doc_id, **style_kwargs())
+            return f"Mixed color {mixed} applied to target region '{target_region_id}'"
+        if output == "new_region":
+            rid = new_region_id or f"{source_region_id}_mix_{target_region_id}"
+            duplicate = scene.duplicate_region(
+                region_id=source_region_id,
+                new_region_id=rid,
+                document_id=doc_id,
+                offset_x=offset_x,
+                offset_y=offset_y,
+                fill=mixed if apply_to in ("fill", "both") else None,
+                stroke=mixed if apply_to in ("stroke", "both") else None,
+                opacity=_clamp01(opacity) if opacity is not None else None,
+                blend_mode=blend_mode,
+                z_index=source.z_index + 1,
+            )
+            duplicate.metadata.update(metadata)
+            scene._auto_checkpoint(doc_id, "mix_region_colors", duplicate.id)
+            scene._persist(doc_id)
+            return f"Mixed color {mixed} created new region '{duplicate.id}'"
+        return f"Error: Unknown output '{output}'"
 
 
     @mcp.tool(

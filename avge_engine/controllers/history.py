@@ -123,6 +123,7 @@ def create_tools(mcp):
         "  create_shadow: region_id, optional onto_region_id, direction, distance, softness, sy\n"
         "  apply_depth_haze: selector, haze_color, near_y, far_y, max_strength\n"
         "  restyle: selector, mode, fill, stroke, stroke_width, material\n"
+        "  mix_region_colors: source_region_id, target_region_id, mix_ratio, output\n"
         "  apply_fx: type, bounds/selector, center, direction, count, length\n"
         "  delete_region: ids\n"
         "  transform_objects: selector, mode, dx, dy, scale, rotate, alignment\n"

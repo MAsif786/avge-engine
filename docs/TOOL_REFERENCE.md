@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (61 tools)
+# AVGE Engine — Tool Reference (62 tools)
 
-_Generated from `__main__` — tool set: m0b-v23_
+_Generated from `__main__` — tool set: m0b-v24_
 
 ## `add_bumps`
 
@@ -72,6 +72,30 @@ List supported brush presets grouped by purpose. Use this to discover brush name
 |------|------|----------|-------------|
 | `group` | `string` |  | all, line_art, paint, texture, natural, or fx |
 | `include_details` | `boolean` |  | Return style values instead of names only. |
+
+---
+
+## `mix_region_colors`
+
+Mix colors from two existing regions and return, apply, or duplicate the result. Use this when a requested color should be derived from existing artwork instead of invented manually. Only solid hex fill/stroke colors are mixed; gradients and named paints are rejected.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `apply_to` | `string` |  | fill, stroke, or both |
+| `blend_mode` | `any` |  |  |
+| `document_id` | `any` |  |  |
+| `mix_ratio` | `number` |  | 0.0 keeps source color, 1.0 uses target color. |
+| `new_region_id` | `any` |  |  |
+| `offset_x` | `number` |  |  |
+| `offset_y` | `number` |  |  |
+| `opacity` | `any` |  |  |
+| `output` | `string` |  | return_color, apply_source, apply_target, or new_region |
+| `source_channel` | `string` |  | fill or stroke |
+| `source_region_id` | `string` | ✓ |  |
+| `target_channel` | `string` |  | fill or stroke |
+| `target_region_id` | `string` | ✓ |  |
 
 ---
 

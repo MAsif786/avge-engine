@@ -1,4 +1,5 @@
 from avge_engine.controllers import region, style
+from avge_engine.effects import Style
 from avge_engine.services.engine import reset_graph
 
 
@@ -32,6 +33,20 @@ def _setup():
         document_id=doc.id,
         region_id="line",
         layer="ink",
+    )
+    graph.create_region(
+        document_id=doc.id,
+        region_id="warm",
+        outline=[(0.1, 0.75), (0.25, 0.75), (0.25, 0.9), (0.1, 0.9)],
+        layer="swatches",
+        style=Style(fill="#FF0000"),
+    )
+    graph.create_region(
+        document_id=doc.id,
+        region_id="cool",
+        outline=[(0.3, 0.75), (0.45, 0.75), (0.45, 0.9), (0.3, 0.9)],
+        layer="swatches",
+        style=Style(fill="#0000FF"),
     )
     return graph, doc, style_mcp
 
@@ -219,3 +234,53 @@ def test_apply_fx_motion_blur_uses_selector_source_regions():
     ]
     assert "FX 'motion_blur' created 3 region" in result
     assert all(r.metadata.get("source") == "panel" for r in trails)
+
+
+def test_mix_region_colors_can_return_mixed_color():
+    _, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["mix_region_colors"](
+        document_id=doc.id,
+        source_region_id="warm",
+        target_region_id="cool",
+        mix_ratio=0.5,
+    )
+
+    assert result["mixed_color"] == "#800080"
+    assert result["source_color"] == "#FF0000"
+    assert result["target_color"] == "#0000FF"
+
+
+def test_mix_region_colors_can_apply_to_target():
+    graph, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["mix_region_colors"](
+        document_id=doc.id,
+        source_region_id="warm",
+        target_region_id="cool",
+        mix_ratio=0.25,
+        output="apply_target",
+    )
+
+    cool = graph.get_region("cool", doc.id)
+    assert "applied to target region 'cool'" in result
+    assert cool.style.fill == "#BF0040"
+    assert cool.metadata["mixed_color"] == "#BF0040"
+
+
+def test_mix_region_colors_can_create_new_region():
+    graph, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["mix_region_colors"](
+        document_id=doc.id,
+        source_region_id="warm",
+        target_region_id="cool",
+        mix_ratio=0.75,
+        output="new_region",
+        new_region_id="mixed_swatch",
+    )
+
+    mixed = graph.get_region("mixed_swatch", doc.id)
+    assert "created new region 'mixed_swatch'" in result
+    assert mixed.style.fill == "#4000BF"
+    assert mixed.metadata["tool"] == "mix_region_colors"

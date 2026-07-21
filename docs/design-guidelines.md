@@ -311,6 +311,7 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 | `delete_region` | `ids` (list of region IDs) | — |
 | `style_objects` / `restyle` | `ids` or `selector` | `fill`, `stroke`, `stroke_width`, `opacity`, `blend_mode`, `clip_to`, `fill_gradient`, `material` (`glass`, `brushed_metal`, `concrete`, `wood`, `tile`, `foliage`) |
 | `list_brush_presets` / `apply_brush_style` | `group` or `selector` | discover brush preset names, then apply `brush`, `color`, `size`, `opacity`, `apply_to`, `blend_mode`, `pressure`, `texture_strength` |
+| `mix_region_colors` | `source_region_id`, `target_region_id` | `mix_ratio`, `source_channel`, `target_channel`, `output`, `apply_to`, `new_region_id`, `offset_x`, `offset_y` |
 | `set_layer_role` | `layer`, `role` | `z_base`, `opacity`, `blend_mode` |
 | `apply_texture_effect` | `effect` | `selector`, `bounds`, `clip_to`, `color`, `secondary_color`, `density`, `size`, `opacity`, `angle`, `blend_mode` |
 | `apply_fx` | `type`, `bounds` or `selector` | `center`, `direction`, `count`, `color`, `secondary_color`, `intensity`, `length`, `spread`, `size`, `clip_to` |

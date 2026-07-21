@@ -378,6 +378,26 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
+    def test_mix_region_colors_valid(self):
+        errs = validate_input("mix_region_colors", {
+            "source_region_id": "warm",
+            "target_region_id": "cool",
+            "mix_ratio": 0.35,
+            "source_channel": "fill",
+            "target_channel": "stroke",
+            "output": "new_region",
+            "new_region_id": "mixed",
+        })
+        assert errs == []
+
+    def test_mix_region_colors_rejects_unknown_output(self):
+        errs = validate_input("mix_region_colors", {
+            "source_region_id": "warm",
+            "target_region_id": "cool",
+            "output": "palette",
+        })
+        assert len(errs) > 0
+
     def test_find_objects_shared_selector_valid(self):
         errs = validate_input("find_objects", {
             "selector": {
