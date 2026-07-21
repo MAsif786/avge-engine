@@ -364,13 +364,49 @@ def viewer_html() -> str:
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    async function fetchSvgText(inlineImages = false) {
+    async function fetchSvgText() {
       if (!state.selected) throw new Error("No document selected");
       const params = new URLSearchParams({ t: Date.now() });
-      if (inlineImages) params.set("inline_images", "1");
       const res = await fetch(`/preview/${state.selected}.svg?${params}`);
       if (!res.ok) throw new Error(await res.text());
       return await res.text();
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error("Image read failed"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function inlineSvgImagesInBrowser(svgText) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgText, "image/svg+xml");
+      const parseError = doc.querySelector("parsererror");
+      if (parseError) throw new Error("SVG parse failed before raster export");
+
+      const imageNodes = Array.from(doc.querySelectorAll("image"));
+      for (const image of imageNodes) {
+        const href = image.getAttribute("href") || image.getAttribute("xlink:href");
+        if (!href || href.startsWith("data:") || href.startsWith("blob:")) continue;
+
+        let response;
+        try {
+          response = await fetch(href, { mode: "cors", credentials: "omit" });
+        } catch (err) {
+          throw new Error(`Browser could not fetch image for raster export: ${href}`);
+        }
+        if (!response.ok) {
+          throw new Error(`Image request failed for raster export (${response.status}): ${href}`);
+        }
+        const dataUrl = await blobToDataUrl(await response.blob());
+        image.setAttribute("href", dataUrl);
+        image.setAttribute("xlink:href", dataUrl);
+      }
+
+      return new XMLSerializer().serializeToString(doc);
     }
 
     function svgSize(svgText) {
@@ -421,12 +457,13 @@ def viewer_html() -> str:
     async function download(fmt) {
       if (!state.selected) return;
       try {
-        const svgText = await fetchSvgText(fmt !== "svg");
+        let svgText = await fetchSvgText();
         const name = fileBaseName();
         if (fmt === "svg") {
           saveBlob(new Blob([svgText], { type: "image/svg+xml" }), `${name}.svg`);
           return;
         }
+        svgText = await inlineSvgImagesInBrowser(svgText);
         const canvas = await rasterizeSvg(svgText);
         if (fmt === "png") {
           saveBlob(await canvasToBlob(canvas, "image/png"), `${name}.png`);

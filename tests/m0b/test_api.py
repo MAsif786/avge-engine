@@ -7,7 +7,6 @@ from uuid import uuid4
 from httpx import ASGITransport, AsyncClient
 
 from avge_engine.api import app
-from avge_engine.services.engine import get_graph
 
 
 @pytest.fixture
@@ -39,6 +38,8 @@ class TestHealth:
         assert "AVGE Documents" in r.text
         assert "/viewer/documents" in r.text
         assert "fetchSvgText" in r.text
+        assert "inlineSvgImagesInBrowser" in r.text
+        assert "blobToDataUrl" in r.text
         assert "rasterizeSvg" in r.text
         assert "imageBlobToPdf" in r.text
         assert 'encoder.encode("%PDF-1.4' not in r.text
@@ -140,31 +141,6 @@ class TestDocument:
 
         assert r.status_code == 400
         assert "browser-side PNG" in r.text
-
-    async def test_preview_svg_can_inline_local_image_hrefs(self, client, tmp_path):
-        created = await client.post("/tools/create_document", json={"name": "Inline Image Doc"})
-        document_id = created.json()["data"]["document_id"]
-        image_path = tmp_path / "tiny.png"
-        image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
-
-        graph = get_graph()
-        graph.insert_image(
-            0.1,
-            0.1,
-            0.3,
-            0.2,
-            str(image_path),
-            document_id=document_id,
-            region_id="external_image",
-        )
-
-        plain = await client.get(f"/preview/{document_id}.svg")
-        inline = await client.get(f"/preview/{document_id}.svg", params={"inline_images": "1"})
-
-        assert plain.status_code == 200
-        assert str(image_path) in plain.text
-        assert inline.status_code == 200
-        assert "data:image/png;base64," in inline.text
 
 
 class TestRegion:
