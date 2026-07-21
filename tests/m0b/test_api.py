@@ -30,6 +30,14 @@ class TestHealth:
         data = r.json()
         assert data["status"] == "ok"
 
+    async def test_viewer_html(self, client):
+        r = await client.get("/viewer")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+        assert "AVGE Documents" in r.text
+        assert "/viewer/documents" in r.text
+        assert "/download/" in r.text
+
     async def test_schemas(self, client):
         r = await client.get("/schemas")
         assert r.status_code == 200
@@ -90,6 +98,33 @@ class TestDocument:
         assert data["name"] == "copy"
         assert data["width"] == 800
         assert data["region_count"] == 1
+
+    async def test_viewer_documents_search_and_sort(self, client):
+        unique_name = "ViewerSearchUniqueApiDoc"
+        await client.post("/tools/create_document", json={"name": unique_name})
+        await client.post("/tools/create_document", json={"name": "Beta"})
+
+        r = await client.get("/viewer/documents", params={
+            "search": unique_name,
+            "sort": "name",
+            "order": "asc",
+        })
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["count"] == 1
+        assert data["documents"][0]["name"] == unique_name
+
+    async def test_download_svg(self, client):
+        created = await client.post("/tools/create_document", json={"name": "Download Doc"})
+        document_id = created.json()["data"]["document_id"]
+
+        r = await client.get(f"/download/{document_id}.svg")
+
+        assert r.status_code == 200
+        assert "image/svg+xml" in r.headers["content-type"]
+        assert "attachment" in r.headers["content-disposition"]
+        assert "<svg" in r.text
 
 
 class TestRegion:

@@ -12,17 +12,25 @@ Mirrors the MCP tool set at avge_engine/controllers/ — keep in sync.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import re
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
 
 from avge_engine import __version__, __tool_set_version__
+from avge_engine.api_viewer import viewer_html
 from avge_engine.services.engine import get_graph, reset_graph
 from avge_engine.services.creation_service import CreationService
 from avge_engine.services.document_service import DocumentService
 from avge_engine.services.region_service import RegionService
 from avge_engine.schema_registry import list_tool_names
-from avge_engine.renderer import svg_serialize, render_preview_base64, render_preview_png
+from avge_engine.renderer import (
+    svg_serialize,
+    render_preview_base64,
+    render_preview_jpeg,
+    render_preview_pdf,
+    render_preview_png,
+)
 from avge_engine.schemas import (
     BatchRequest,
     BooleanOpRequest,
@@ -74,6 +82,50 @@ app = FastAPI(
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": __version__, "tool_set": __tool_set_version__}
+
+
+# ── Browser Viewer ─────────────────────────────────────────────────
+
+@app.get("/")
+async def viewer_root():
+    return Response(
+        content=viewer_html(),
+        media_type="text/html",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
+
+
+@app.get("/viewer")
+async def viewer():
+    return Response(
+        content=viewer_html(),
+        media_type="text/html",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
+
+
+@app.get("/viewer/documents")
+async def list_documents_viewer(search: str = "", sort: str = "updated", order: str = "desc"):
+    docs = DocumentService().list_documents()
+    q = search.strip().lower()
+    if q:
+        docs = [
+            d for d in docs
+            if q in f"{d.get('name', '')} {d.get('id', '')}".lower()
+        ]
+
+    reverse = order.lower() != "asc"
+    if sort == "name":
+        key = lambda d: (d.get("name") or "").lower()
+    elif sort in {"regions", "region_count"}:
+        key = lambda d: int(d.get("region_count") or 0)
+    elif sort == "version":
+        key = lambda d: int(d.get("version") or 0)
+    else:
+        key = lambda d: d.get("updated") or ""
+
+    docs = sorted(docs, key=key, reverse=reverse)
+    return {"documents": docs, "count": len(docs)}
 
 
 # ── Document Endpoints ─────────────────────────────────────────────
@@ -658,6 +710,52 @@ async def preview_doc_svg(document_id: str | None = None):
         )
     except Exception as e:
         return Response(f"Error: {e}", status_code=500)
+
+
+@app.get("/download/{document_id}.{fmt}")
+async def download_document(document_id: str, fmt: str):
+    """Download a document as SVG, PNG, JPG, or PDF."""
+    graph = get_graph()
+    if not graph.load_document(document_id):
+        return Response(f"Document '{document_id}' not found", status_code=404)
+
+    doc = graph.get_document(document_id)
+    safe_name = _download_name(doc.name or document_id)
+    fmt = fmt.lower()
+
+    try:
+        svg = svg_serialize(graph, document_id)
+        if fmt == "svg":
+            content = svg.encode("utf-8")
+            media_type = "image/svg+xml"
+        elif fmt == "png":
+            content = render_preview_png(svg, scale=1.0)
+            media_type = "image/png"
+        elif fmt in {"jpg", "jpeg"}:
+            fmt = "jpg"
+            content = render_preview_jpeg(svg, scale=1.0)
+            media_type = "image/jpeg"
+        elif fmt == "pdf":
+            content = render_preview_pdf(svg)
+            media_type = "application/pdf"
+        else:
+            return Response("Unsupported format. Use svg, png, jpg, or pdf.", status_code=400)
+    except Exception as e:
+        return Response(f"Error: {e}", status_code=500)
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store, must-revalidate",
+            "Content-Disposition": f'attachment; filename="{safe_name}.{fmt}"',
+        },
+    )
+
+
+def _download_name(name: str) -> str:
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).strip(".-")
+    return safe[:80] or "avge-document"
 
 
 # ── History Endpoints ──────────────────────────────────────────────

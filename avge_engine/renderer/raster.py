@@ -1,5 +1,5 @@
 """
-Raster preview — SVG → PNG rasterization.
+Raster preview — SVG to PNG/PDF/JPEG rendering.
 
 §12.1: M0b uses rsvg-convert (librsvg) for rasterization. It provides
 proper Unicode symbol rendering via Pango/fontconfig, unlike cairosvg
@@ -10,6 +10,7 @@ is unavailable.
 from __future__ import annotations
 
 import base64
+import io
 import subprocess
 import tempfile
 
@@ -35,32 +36,64 @@ def render_preview_png(svg_string: str, scale: float = 1.0) -> bytes:
 
 def _render_rsvg(svg_string: str, scale: float = 1.0) -> bytes:
     """Render SVG to PNG using rsvg-convert (librsvg)."""
+    return _render_rsvg_format(svg_string, "png", scale=scale, background=True)
+
+
+def render_preview_pdf(svg_string: str) -> bytes:
+    """Render an SVG string to PDF bytes."""
+    try:
+        return _render_rsvg_format(svg_string, "pdf")
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+    try:
+        import cairosvg
+
+        return cairosvg.svg2pdf(bytestring=svg_string.encode("utf-8"))
+    except ImportError:
+        raise RuntimeError("No SVG PDF renderer available (try: brew install librsvg)")
+
+
+def render_preview_jpeg(svg_string: str, scale: float = 1.0, quality: int = 92) -> bytes:
+    """Render an SVG string to JPEG bytes via PNG + Pillow."""
+    from PIL import Image
+
+    png = render_preview_png(svg_string, scale=scale)
+    with Image.open(io.BytesIO(png)) as image:
+        rgb = image.convert("RGB")
+        out = io.BytesIO()
+        rgb.save(out, format="JPEG", quality=max(1, min(quality, 100)), optimize=True)
+        return out.getvalue()
+
+
+def _render_rsvg_format(
+    svg_string: str,
+    output_format: str,
+    *,
+    scale: float = 1.0,
+    background: bool = False,
+) -> bytes:
+    """Render SVG using rsvg-convert in the requested output format."""
     with tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w") as f:
         f.write(svg_string)
         svg_path = f.name
 
-    png_path = svg_path + ".png"
+    out_path = svg_path + f".{output_format}"
     try:
-        subprocess.run(
-            [
-                "rsvg-convert",
-                "--background-color=white",
-                "--format=png",
-                f"--zoom={scale}",
-                "--output=" + png_path,
-                svg_path,
-            ],
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-        with open(png_path, "rb") as f:
+        cmd = ["rsvg-convert", f"--format={output_format}", f"--output={out_path}"]
+        if background:
+            cmd.insert(1, "--background-color=white")
+        if scale != 1.0:
+            cmd.insert(-1, f"--zoom={scale}")
+        cmd.append(svg_path)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=30)
+        with open(out_path, "rb") as f:
             return f.read()
     finally:
         import os
         try:
             os.unlink(svg_path)
-            os.unlink(png_path)
+            os.unlink(out_path)
         except OSError:
             pass
 
