@@ -12,7 +12,11 @@ Mirrors the MCP tool set at avge_engine/controllers/ — keep in sync.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import mimetypes
+from pathlib import Path
 import re
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
@@ -58,6 +62,8 @@ from avge_engine.schemas import (
     ToolResponse,
     TransformObjectsRequest,
 )
+
+MAX_VIEWER_IMAGE_PROXY_BYTES = 20_000_000
 
 
 # ── Lifespan ───────────────────────────────────────────────────────
@@ -124,6 +130,26 @@ async def list_documents_viewer(search: str = "", sort: str = "updated", order: 
 
     docs = sorted(docs, key=key, reverse=reverse)
     return {"documents": docs, "count": len(docs)}
+
+
+@app.get("/viewer/image-proxy")
+async def viewer_image_proxy(url: str):
+    """Fetch an image URL for browser-side raster export when CORS blocks direct fetch."""
+    try:
+        raw, mime = _read_viewer_image_url(url)
+    except ValueError as e:
+        return Response(str(e), status_code=400)
+    except Exception as e:
+        return Response(f"Image proxy error: {e}", status_code=502)
+
+    if not mime.startswith("image/"):
+        return Response(f"URL did not return an image content type: {mime}", status_code=400)
+
+    return Response(
+        content=raw,
+        media_type=mime,
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
 
 
 # ── Document Endpoints ─────────────────────────────────────────────
@@ -750,6 +776,29 @@ async def download_document(document_id: str, fmt: str):
 def _download_name(name: str) -> str:
     safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).strip(".-")
     return safe[:80] or "avge-document"
+
+
+def _read_viewer_image_url(url: str) -> tuple[bytes, str]:
+    parsed = urlparse(url)
+    if parsed.scheme in {"http", "https"}:
+        req = Request(url, headers={"User-Agent": "AVGE/0.5"})
+        with urlopen(req, timeout=20) as response:
+            mime = response.headers.get_content_type() or "application/octet-stream"
+            raw = response.read(MAX_VIEWER_IMAGE_PROXY_BYTES + 1)
+    elif parsed.scheme == "file":
+        path = Path(parsed.path).expanduser()
+        raw = path.read_bytes()
+        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    elif parsed.scheme:
+        raise ValueError(f"Unsupported image URL scheme: {parsed.scheme}")
+    else:
+        path = Path(url).expanduser()
+        raw = path.read_bytes()
+        mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+
+    if len(raw) > MAX_VIEWER_IMAGE_PROXY_BYTES:
+        raise ValueError(f"Image too large for browser raster export proxy (max {MAX_VIEWER_IMAGE_PROXY_BYTES} bytes)")
+    return raw, mime
 
 
 # ── History Endpoints ──────────────────────────────────────────────

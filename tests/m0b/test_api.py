@@ -38,6 +38,8 @@ class TestHealth:
         assert "AVGE Documents" in r.text
         assert "/viewer/documents" in r.text
         assert "fetchSvgText" in r.text
+        assert "fetchImageForRasterExport" in r.text
+        assert "/viewer/image-proxy" in r.text
         assert "inlineSvgImagesInBrowser" in r.text
         assert "blobToDataUrl" in r.text
         assert "rasterizeSvg" in r.text
@@ -141,6 +143,22 @@ class TestDocument:
 
         assert r.status_code == 400
         assert "browser-side PNG" in r.text
+
+    async def test_viewer_image_proxy_rejects_unsupported_scheme(self, client):
+        r = await client.get("/viewer/image-proxy", params={"url": "ftp://example.com/image.png"})
+
+        assert r.status_code == 400
+        assert "Unsupported image URL scheme" in r.text
+
+    async def test_viewer_image_proxy_serves_local_image(self, client, tmp_path):
+        image_path = tmp_path / "tiny.png"
+        image_path.write_bytes(b"\x89PNG\r\n\x1a\nfake")
+
+        r = await client.get("/viewer/image-proxy", params={"url": str(image_path)})
+
+        assert r.status_code == 200
+        assert "image/png" in r.headers["content-type"]
+        assert r.content.startswith(b"\x89PNG")
 
 
 class TestRegion:

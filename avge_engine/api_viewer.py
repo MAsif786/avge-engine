@@ -381,6 +381,21 @@ def viewer_html() -> str:
       });
     }
 
+    async function fetchImageForRasterExport(href) {
+      try {
+        const direct = await fetch(href, { mode: "cors", credentials: "omit" });
+        if (direct.ok) return await direct.blob();
+      } catch (err) {
+        // Fall back to same-origin proxy below for hosts that block CORS.
+      }
+
+      const proxied = await fetch(`/viewer/image-proxy?url=${encodeURIComponent(href)}`);
+      if (!proxied.ok) {
+        throw new Error(await proxied.text());
+      }
+      return await proxied.blob();
+    }
+
     async function inlineSvgImagesInBrowser(svgText) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(svgText, "image/svg+xml");
@@ -392,16 +407,7 @@ def viewer_html() -> str:
         const href = image.getAttribute("href") || image.getAttribute("xlink:href");
         if (!href || href.startsWith("data:") || href.startsWith("blob:")) continue;
 
-        let response;
-        try {
-          response = await fetch(href, { mode: "cors", credentials: "omit" });
-        } catch (err) {
-          throw new Error(`Browser could not fetch image for raster export: ${href}`);
-        }
-        if (!response.ok) {
-          throw new Error(`Image request failed for raster export (${response.status}): ${href}`);
-        }
-        const dataUrl = await blobToDataUrl(await response.blob());
+        const dataUrl = await blobToDataUrl(await fetchImageForRasterExport(href));
         image.setAttribute("href", dataUrl);
         image.setAttribute("xlink:href", dataUrl);
       }
