@@ -31,6 +31,7 @@ TEXTURE_EFFECTS = Literal[
     "noise", "paper", "fabric", "halftone", "screen_tone",
     "bloom", "particles", "gradient_light", "rim_light",
 ]
+FX_TYPES = Literal["lens_flare", "motion_blur", "speed_lines", "impact_lines", "particles"]
 
 LAYER_ROLE_Z = {
     "background": -1000,
@@ -881,6 +882,180 @@ def create_tools(mcp):
 
         scene._persist(doc_id)
         return f"Texture effect '{effect}' created {len(created)} region(s)"
+
+
+    @mcp.tool(
+        name="apply_fx",
+        description="Create editable vector FX overlays for directional and radiant effects. "
+        "Types: lens_flare, motion_blur, speed_lines, impact_lines, particles. "
+        "Use apply_texture_effect for surface overlays like paper, halftone, bloom, or grain; "
+        "use apply_fx for scene/action effects with direction, center, rays, streaks, or particles.",
+    )
+    def apply_fx(
+        type: FX_TYPES,
+        selector: dict[str, Any] | None = None,
+        document_id: str | None = None,
+        bounds: list[float] | None = None,
+        center: list[float] | None = None,
+        direction: float = 0.0,
+        count: int = 24,
+        color: str = "#FFFFFF",
+        secondary_color: str | None = None,
+        intensity: float = 0.65,
+        length: float = 0.18,
+        spread: float = 35.0,
+        size: StrokeWidthInput = None,
+        opacity: float = 0.55,
+        blend_mode: BLEND_MODES | None = None,
+        layer: str = "fx",
+        z_index: int = 380,
+        clip_to: str | None = None,
+        seed: int = 1,
+    ) -> str:
+        """Create vector FX regions and lines."""
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+
+        target_ids = select_region_ids(scene, doc_id, selector)
+        box = None
+        if bounds:
+            if len(bounds) != 4:
+                return "Error: bounds must be [x, y, width, height]"
+            box = {"x": float(bounds[0]), "y": float(bounds[1]), "w": float(bounds[2]), "h": float(bounds[3])}
+        elif target_ids:
+            box = _scene_bounds_for_ids(scene, doc_id, target_ids)
+        if not box:
+            return "Error: bounds or matching selector required"
+        x, y, w, h = box["x"], box["y"], max(0.001, box["w"]), max(0.001, box["h"])
+        if center and len(center) >= 2:
+            cx, cy = float(center[0]), float(center[1])
+        else:
+            cx, cy = x + w / 2, y + h / 2
+
+        rng = random.Random(seed)
+        created: list[str] = []
+        base_width = stroke_width_to_norm(doc_id, size) or 0.003
+        resolved_blend = blend_mode or "screen"
+        resolved_opacity = _clamp01(opacity * intensity)
+        safe_count = max(1, min(500, int(count)))
+
+        def mark(region, part: str):
+            region.clip_to = clip_to
+            region.metadata.update({"tool": "apply_fx", "fx_type": type, "part": part})
+            created.append(region.id)
+            return region
+
+        def add_line(part: str, points, stroke: str, sw: float, op: float, smooth: float = 0.0):
+            r = scene.create_line(
+                points=points,
+                document_id=doc_id,
+                region_id=f"fx_{type}_{part}_{len(created):03d}",
+                layer=layer,
+                z_index=z_index + len(created),
+                stroke=stroke,
+                stroke_width=sw,
+                opacity=_clamp01(op),
+                blend_mode=resolved_blend,
+                stroke_linecap="round",
+                smoothness=smooth,
+            )
+            return mark(r, part)
+
+        def add_dot(part: str, px: float, py: float, radius: float, fill: str, op: float):
+            r = scene.create_ellipse(
+                px,
+                py,
+                radius,
+                radius,
+                document_id=doc_id,
+                region_id=f"fx_{type}_{part}_{len(created):03d}",
+                layer=layer,
+                z_index=z_index + len(created),
+                fill=fill,
+                stroke=None,
+                opacity=_clamp01(op),
+                blend_mode=resolved_blend,
+            )
+            return mark(r, part)
+
+        try:
+            if type == "speed_lines":
+                theta = math.radians(direction)
+                nx = -math.sin(theta)
+                ny = math.cos(theta)
+                for i in range(safe_count):
+                    t = (i + 0.5) / safe_count
+                    base_x = x + w * t + nx * rng.uniform(-0.12, 0.12) * w
+                    base_y = y + h * rng.random()
+                    line_len = length * rng.uniform(0.65, 1.25)
+                    p1 = (base_x, base_y)
+                    p2 = (base_x + math.cos(theta) * line_len, base_y + math.sin(theta) * line_len)
+                    add_line("speed", [p1, p2], color if i % 4 else (secondary_color or color), base_width * rng.uniform(0.5, 1.4), resolved_opacity * rng.uniform(0.35, 0.9))
+            elif type == "impact_lines":
+                for i in range(safe_count):
+                    angle = math.radians(i * 360.0 / safe_count + rng.uniform(-spread, spread) * 0.08)
+                    inner = length * rng.uniform(0.08, 0.22)
+                    outer = length * rng.uniform(0.65, 1.35)
+                    p1 = (cx + math.cos(angle) * inner, cy + math.sin(angle) * inner)
+                    p2 = (cx + math.cos(angle) * outer, cy + math.sin(angle) * outer)
+                    add_line("impact", [p1, p2], color, base_width * rng.uniform(0.6, 1.8), resolved_opacity * rng.uniform(0.45, 1.0))
+            elif type == "particles":
+                for i in range(safe_count):
+                    px = x + rng.random() * w
+                    py = y + rng.random() * h
+                    dot = base_width * rng.uniform(0.6, 3.5)
+                    add_dot("particle", px, py, dot, color if i % 5 else (secondary_color or color), resolved_opacity * rng.uniform(0.25, 1.0))
+            elif type == "lens_flare":
+                theta = math.radians(direction)
+                add_dot("core", cx, cy, max(base_width * 5, min(w, h) * 0.06), color, resolved_opacity)
+                add_dot("halo", cx, cy, max(base_width * 12, min(w, h) * 0.14), secondary_color or color, resolved_opacity * 0.24)
+                for i in range(max(3, min(10, safe_count // 3))):
+                    offset = (i - 2) * length * 0.42
+                    px = cx + math.cos(theta) * offset
+                    py = cy + math.sin(theta) * offset
+                    add_dot("orb", px, py, base_width * rng.uniform(2.0, 7.0), secondary_color or color, resolved_opacity * rng.uniform(0.18, 0.48))
+                for angle in (direction, direction + 90):
+                    theta2 = math.radians(angle)
+                    add_line("ray", [(cx - math.cos(theta2) * length, cy - math.sin(theta2) * length), (cx + math.cos(theta2) * length, cy + math.sin(theta2) * length)], color, base_width * 0.8, resolved_opacity * 0.7)
+            elif type == "motion_blur":
+                theta = math.radians(direction)
+                ids = target_ids
+                if ids:
+                    for rid in ids:
+                        try:
+                            src = scene.get_region(rid, doc_id)
+                        except ValueError:
+                            continue
+                        for i in range(max(2, min(8, safe_count))):
+                            d = length * (i + 1) / max(2, min(8, safe_count))
+                            outline = [(px - math.cos(theta) * d, py - math.sin(theta) * d) for px, py in src.outline]
+                            r = scene.create_region(
+                                outline=outline,
+                                document_id=doc_id,
+                                region_id=f"fx_motion_blur_{rid}_{i}",
+                                layer=layer,
+                                z_index=z_index + len(created),
+                                constraints=src.constraints,
+                                style=Style(fill=color, stroke=None, opacity=resolved_opacity * (0.35 / (i + 1)), blend_mode=resolved_blend, blur=max(1.0, base_width * 650)),
+                                metadata={"tool": "apply_fx", "fx_type": type, "part": "trail", "source": rid},
+                            )
+                            created.append(r.id)
+                else:
+                    for i in range(safe_count):
+                        py = y + rng.random() * h
+                        px = x + rng.random() * w
+                        p2 = (px - math.cos(theta) * length * rng.uniform(0.5, 1.2), py - math.sin(theta) * length * rng.uniform(0.5, 1.2))
+                        add_line("blur", [(px, py), p2], color, base_width * rng.uniform(1.0, 2.5), resolved_opacity * rng.uniform(0.2, 0.55), 0.35)
+            else:
+                return f"Error: Unknown FX type '{type}'"
+        except (ValueError, RuntimeError, TypeError) as exc:
+            return f"Error: {exc}"
+
+        scene._persist(doc_id)
+        return f"FX '{type}' created {len(created)} region(s)"
 
 
     @mcp.tool(

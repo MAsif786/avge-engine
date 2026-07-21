@@ -313,6 +313,7 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 | `list_brush_presets` / `apply_brush_style` | `group` or `selector` | discover brush preset names, then apply `brush`, `color`, `size`, `opacity`, `apply_to`, `blend_mode`, `pressure`, `texture_strength` |
 | `set_layer_role` | `layer`, `role` | `z_base`, `opacity`, `blend_mode` |
 | `apply_texture_effect` | `effect` | `selector`, `bounds`, `clip_to`, `color`, `secondary_color`, `density`, `size`, `opacity`, `angle`, `blend_mode` |
+| `apply_fx` | `type`, `bounds` or `selector` | `center`, `direction`, `count`, `color`, `secondary_color`, `intensity`, `length`, `spread`, `size`, `clip_to` |
 | `generate_background_asset` | `mode`, `bounds` | `count`, `density`, `seed`, `detail`, `color`, `secondary_color`, `layer`, `clip_to` |
 | `create_comic_panel_layout` | `layout`, `rows`, `columns` | `bounds`, `margin`, `gutter_x`, `gutter_y`, `reading_direction`, `panel_prefix`, `group_name`, `clip_content` |
 | `transform_objects` | `selector` | `dx`, `dy`, `scale`, `rotate`, `group_mode`, `mirror_x`, `mirror_y`, `z_index`, `mode`, `alignment` |

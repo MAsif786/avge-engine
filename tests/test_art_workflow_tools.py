@@ -178,3 +178,44 @@ def test_apply_texture_effect_creates_bloom_with_blur():
     assert len(blooms) == 1
     assert blooms[0].style.blur > 0
     assert blooms[0].style.blend_mode == "screen"
+
+
+def test_apply_fx_creates_speed_lines_from_bounds():
+    graph, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["apply_fx"](
+        document_id=doc.id,
+        type="speed_lines",
+        bounds=[0.1, 0.1, 0.6, 0.4],
+        count=8,
+        direction=12,
+        size=2,
+    )
+
+    created = [
+        r for r in graph.get_all_regions(doc.id)
+        if r.metadata.get("tool") == "apply_fx"
+    ]
+    assert "FX 'speed_lines' created 8 region" in result
+    assert all(r.metadata["fx_type"] == "speed_lines" for r in created)
+    assert all(r.style.blend_mode == "screen" for r in created)
+
+
+def test_apply_fx_motion_blur_uses_selector_source_regions():
+    graph, doc, style_mcp = _setup()
+
+    result = style_mcp.tools["apply_fx"](
+        document_id=doc.id,
+        type="motion_blur",
+        selector={"ids": ["panel"]},
+        count=3,
+        length=0.05,
+        color="#88CCFF",
+    )
+
+    trails = [
+        r for r in graph.get_all_regions(doc.id)
+        if r.metadata.get("fx_type") == "motion_blur"
+    ]
+    assert "FX 'motion_blur' created 3 region" in result
+    assert all(r.metadata.get("source") == "panel" for r in trails)

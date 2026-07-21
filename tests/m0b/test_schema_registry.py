@@ -359,6 +359,25 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
+    def test_apply_fx_valid(self):
+        errs = validate_input("apply_fx", {
+            "type": "impact_lines",
+            "bounds": [0.1, 0.1, 0.8, 0.8],
+            "center": [0.5, 0.45],
+            "count": 32,
+            "direction": 90,
+            "length": 0.35,
+            "size": 3,
+        })
+        assert errs == []
+
+    def test_apply_fx_rejects_unknown_type(self):
+        errs = validate_input("apply_fx", {
+            "type": "sparkle_magic",
+            "bounds": [0.1, 0.1, 0.8, 0.8],
+        })
+        assert len(errs) > 0
+
     def test_find_objects_shared_selector_valid(self):
         errs = validate_input("find_objects", {
             "selector": {

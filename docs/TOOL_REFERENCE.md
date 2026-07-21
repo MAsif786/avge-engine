@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (60 tools)
+# AVGE Engine — Tool Reference (61 tools)
 
-_Generated from `__main__` — tool set: m0b-v22_
+_Generated from `__main__` — tool set: m0b-v23_
 
 ## `add_bumps`
 
@@ -92,6 +92,36 @@ Apply atmospheric perspective to existing regions by blending fills/strokes towa
 | `near_y` | `number` |  |  |
 | `opacity_falloff` | `number` |  |  |
 | `selector` | `any` |  |  |
+
+---
+
+## `apply_fx`
+
+Create editable vector FX overlays for directional and radiant effects. Types: lens_flare, motion_blur, speed_lines, impact_lines, particles. Use apply_texture_effect for surface overlays like paper, halftone, bloom, or grain; use apply_fx for scene/action effects with direction, center, rays, streaks, or particles.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `blend_mode` | `any` |  |  |
+| `bounds` | `any` |  |  |
+| `center` | `any` |  |  |
+| `clip_to` | `any` |  |  |
+| `color` | `string` |  |  |
+| `count` | `integer` |  |  |
+| `direction` | `number` |  |  |
+| `document_id` | `any` |  |  |
+| `intensity` | `number` |  |  |
+| `layer` | `string` |  |  |
+| `length` | `number` |  |  |
+| `opacity` | `number` |  |  |
+| `secondary_color` | `any` |  |  |
+| `seed` | `integer` |  |  |
+| `selector` | `any` |  |  |
+| `size` | `any` |  | Base FX stroke/dot size in canvas pixels. |
+| `spread` | `number` |  |  |
+| `type` | `string` | ✓ |  |
+| `z_index` | `integer` |  |  |
 
 ---
 

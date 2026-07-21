@@ -11,7 +11,7 @@ This backlog is implementation-oriented. Usage recipes belong in `docs/design-gu
 | `duplicate(pattern="scatter", count, bounds, seed, jitter)` | Cloud/rock/grass/prop scatter needs, ad hoc randomized placement | Implemented in `m0b-v20` as a `duplicate` mode with bounded random center placement and existing jitter support. |
 | `add_shading(mode="gradient", stops, light_direction, strength)` | Separate architecture gradient-shading proposal | Continuous per-plane shading cannot be expressed by hard two-tone copies. |
 | `generate_background_asset(mode, bounds, count, density, seed, detail)` | `generate_shape(pattern="cornice")`, `generate_shape(pattern="awning")`, `generate_shape(pattern="rooftop_props")`, `create_facade_details`, `create_building_cluster`, tree/water/rock/grass generators | Implemented in `m0b-v21` with generic modes for facade detail, tree clusters, cloud banks, water ripples, rock clusters, and grass patches. |
-| `apply_fx(type="lens_flare"|"motion_blur"|"speed_lines"|"impact_lines"|"particles", ...)` | `create_lens_flare`, `create_motion_effect`, weather/particle helper tools | Directional/radiant/repeated FX share one parameter family. Single-stroke weather remains a brush preset. |
+| `apply_fx(type="lens_flare"|"motion_blur"|"speed_lines"|"impact_lines"|"particles", ...)` | `create_lens_flare`, `create_motion_effect`, weather/particle helper tools | Implemented in `m0b-v23` for editable vector directional/radiant/action FX. Single-stroke weather remains a brush preset. |
 | `mix_region_colors(source_region_id, target_region_id, mix_ratio, output)` | True `mixer_brush` behavior | Needs two source regions and generated intermediate color overlays, so it is not just a brush preset. |
 | `smudge_region` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
 | `warp_region(region_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Deforms non-rectangular vector outlines beyond affine transform and `project_quad`. |
@@ -70,7 +70,7 @@ These should not be added as standalone tools.
 
 ## Namespace Assignment
 
-- **Eager core:** `add_shading`, `apply_fx`, `warp_region`, `export_raster`
+- **Eager core:** `add_shading`, `warp_region`, `export_raster`
 - **Style:** `mix_region_colors`, `smudge_region`/`smudge_edge`, `pattern_brush_along_path`, brush preset table
 - **Geometry:** `measure_geometry`, `create_measurement_grid`, `symmetry_duplicate`, `mesh_warp_region`, Bézier mode for `create_curve`
 - **Scene:** `create_adjustment_layer`, `create_surface_stripes`, `resize_document`, `set_print_metadata`
@@ -99,9 +99,8 @@ Next work starts in Phase 2.
 
 ### Phase 2 — Art Quality And Deformation
 
-1. `apply_fx`
-2. `mix_region_colors`
-3. `warp_region`
+1. `mix_region_colors`
+2. `warp_region`
 
 ### Phase 3 — Publishing And Measurement
 

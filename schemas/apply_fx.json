@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/apply_fx/v1.json",
+  "title": "apply_fx",
+  "description": "Create editable vector FX overlays for directional and radiant scene/action effects.",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["lens_flare", "motion_blur", "speed_lines", "impact_lines", "particles"]
+    },
+    "selector": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector"
+    },
+    "document_id": { "type": ["string", "null"] },
+    "bounds": {
+      "type": ["array", "null"],
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "minimum": -2, "maximum": 3 }
+    },
+    "center": {
+      "type": ["array", "null"],
+      "minItems": 2,
+      "maxItems": 2,
+      "items": { "type": "number", "minimum": -2, "maximum": 3 }
+    },
+    "direction": { "type": "number", "default": 0 },
+    "count": { "type": "integer", "minimum": 1, "maximum": 500, "default": 24 },
+    "color": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color"
+    },
+    "secondary_color": {
+      "anyOf": [
+        { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+        { "type": "null" }
+      ]
+    },
+    "intensity": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.65 },
+    "length": { "type": "number", "minimum": 0, "maximum": 4, "default": 0.18 },
+    "spread": { "type": "number", "minimum": 0, "maximum": 360, "default": 35 },
+    "size": {
+      "type": ["number", "null"],
+      "description": "Base FX stroke/dot size in canvas pixels.",
+      "minimum": 0,
+      "maximum": 512
+    },
+    "opacity": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.55 },
+    "blend_mode": {
+      "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/blend_mode"
+    },
+    "layer": { "type": "string", "default": "fx" },
+    "z_index": { "type": "integer", "default": 380 },
+    "clip_to": { "type": ["string", "null"] },
+    "seed": { "type": "integer", "default": 1 }
+  },
+  "required": ["type"],
+  "additionalProperties": false
+}
