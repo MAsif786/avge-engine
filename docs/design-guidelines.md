@@ -313,6 +313,7 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 | `list_brush_presets` / `apply_brush_style` | `group` or `selector` | discover brush preset names, then apply `brush`, `color`, `size`, `opacity`, `apply_to`, `blend_mode`, `pressure`, `texture_strength` |
 | `set_layer_role` | `layer`, `role` | `z_base`, `opacity`, `blend_mode` |
 | `apply_texture_effect` | `effect` | `selector`, `bounds`, `clip_to`, `color`, `secondary_color`, `density`, `size`, `opacity`, `angle`, `blend_mode` |
+| `generate_background_asset` | `mode`, `bounds` | `count`, `density`, `seed`, `detail`, `color`, `secondary_color`, `layer`, `clip_to` |
 | `transform_objects` | `selector` | `dx`, `dy`, `scale`, `rotate`, `group_mode`, `mirror_x`, `mirror_y`, `z_index`, `mode`, `alignment` |
 | `project_quad` | `target_quad` | `source_region_id`, `replace_source`, `columns`, `rows`, `fill`, `stroke`, `stroke_width`, `z_index`, `inherit_style` |
 | `generate_shape` | `pattern`, `params` | Pattern-specific — see `generate_shape` docs |

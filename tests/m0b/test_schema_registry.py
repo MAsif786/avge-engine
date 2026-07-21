@@ -395,6 +395,32 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
+    def test_generate_background_asset_valid(self):
+        errs = validate_input("generate_background_asset", {
+            "mode": "facade_detail",
+            "bounds": [0.1, 0.2, 0.5, 0.4],
+            "count": 12,
+            "detail": ["mullions", "sills", "pipes"],
+            "color": "#334455",
+        })
+        assert errs == []
+
+    def test_generate_background_asset_nature_mode_valid(self):
+        errs = validate_input("generate_background_asset", {
+            "mode": "grass_patch",
+            "bounds": [0.1, 0.7, 0.6, 0.2],
+            "density": 2.5,
+            "seed": 5,
+        })
+        assert errs == []
+
+    def test_generate_background_asset_rejects_unknown_mode(self):
+        errs = validate_input("generate_background_asset", {
+            "mode": "city",
+            "bounds": [0.1, 0.2, 0.5, 0.4],
+        })
+        assert len(errs) > 0
+
     def test_add_shading_shared_selector_valid(self):
         errs = validate_input("add_shading", {
             "selector": {"layer": "facades", "bounds": {"max_y": 0.8}},

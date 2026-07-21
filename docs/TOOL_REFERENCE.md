@@ -1,6 +1,6 @@
-# AVGE Engine — Tool Reference (58 tools)
+# AVGE Engine — Tool Reference (59 tools)
 
-_Generated from `__main__` — tool set: m0b-v20_
+_Generated from `__main__` — tool set: m0b-v21_
 
 ## `add_bumps`
 
@@ -150,6 +150,7 @@ Execute multiple operations in a single call. **ALL** registered tools work in b
   edit_region: region_id, outline, fill, stroke, z_index, shape
   refine_line: region_id, mode, strength, simplify_tolerance, smoothness
   duplicate: region_id, pattern, count, dx, dy, bounds, seed, columns, rows, spacing_falloff, scale_falloff
+  generate_background_asset: mode, bounds, count, density, seed
   create_shadow: region_id, optional onto_region_id, direction, distance, softness, sy
   apply_depth_haze: selector, haze_color, near_y, far_y, max_strength
   restyle: selector, mode, fill, stroke, stroke_width, material
@@ -904,6 +905,31 @@ Create a soft irregular cloud from overlapping blurred puffs, with lighter top l
 | `shade_direction` | `number` |  |  |
 | `shade_fill` | `string` |  |  |
 | `width` | `number` | ✓ |  |
+| `z_index` | `integer` |  |  |
+
+---
+
+## `generate_background_asset`
+
+Generate reusable editable background details from one generic tool. Modes: facade_detail, tree_cluster, cloud_bank, water_ripples, rock_cluster, grass_patch. Use this for secondary environment density after perspective/massing is correct, instead of adding separate object-specific tools for every cloud, tree, rock, grass, pipe, sill, or ripple.
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `bounds` | `array` | ✓ | Asset bounds as [x, y, width, height] in normalized coordinates. |
+| `clip_to` | `any` |  |  |
+| `color` | `any` |  |  |
+| `count` | `integer` |  |  |
+| `density` | `number` |  |  |
+| `detail` | `any` |  | Facade detail subset: mullions, sills, pipes, cornice. |
+| `document_id` | `any` |  |  |
+| `layer` | `string` |  |  |
+| `mode` | `string` | ✓ |  |
+| `opacity` | `number` |  |  |
+| `region_id` | `any` |  | Prefix/group id for generated regions. |
+| `secondary_color` | `any` |  |  |
+| `seed` | `integer` |  |  |
 | `z_index` | `integer` |  |  |
 
 ---

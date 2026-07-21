@@ -5,6 +5,14 @@ import random
 from typing import Literal
 
 PIVOT_MODES = Literal["center", "base", "fixed"]
+BACKGROUND_ASSET_MODES = Literal[
+    "facade_detail",
+    "tree_cluster",
+    "cloud_bank",
+    "water_ripples",
+    "rock_cluster",
+    "grass_patch",
+]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
@@ -1226,6 +1234,166 @@ def create_tools(mcp):
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
         return f"Cloud generated: {prefix}, puffs={puff_count}, regions={len(created)}"
+
+    @mcp.tool(
+        name="generate_background_asset",
+        description="Generate reusable editable background details from one generic tool. "
+        "Modes: facade_detail, tree_cluster, cloud_bank, water_ripples, rock_cluster, grass_patch. "
+        "Use this for secondary environment density after perspective/massing is correct, instead of "
+        "adding separate object-specific tools for every cloud, tree, rock, grass, pipe, sill, or ripple.",
+    )
+    def generate_background_asset(
+        mode: BACKGROUND_ASSET_MODES,
+        bounds: list[float],
+        document_id: str | None = None,
+        region_id: str | None = None,
+        count: int = 12,
+        density: float = 1.0,
+        seed: int = 1,
+        detail: list[str] | None = None,
+        color: str | None = None,
+        secondary_color: str | None = None,
+        layer: str = "background_detail",
+        z_index: int = 0,
+        opacity: float = 1.0,
+        clip_to: str | None = None,
+    ) -> str:
+        """Generate editable background asset clusters inside a bounds rectangle."""
+        from avge_engine.scene import CurveConstraints, Style
+
+        scene = get_graph()
+        try:
+            doc_id = resolve_doc(document_id)
+        except RuntimeError:
+            return "Error: No active document"
+        if len(bounds) != 4:
+            return "Error: bounds must be [x, y, width, height]"
+        x, y, w, h = [float(v) for v in bounds]
+        if w <= 0 or h <= 0:
+            return "Error: bounds width and height must be positive"
+
+        rng = random.Random(seed)
+        safe_count = max(1, min(400, int(count * max(0.1, density))))
+        prefix = region_id or f"bg_{mode}_{seed}"
+        created: list[str] = []
+
+        def add_line(name: str, pts, stroke: str, sw: float, op: float, smooth: float = 0.0):
+            r = scene.create_line(
+                points=pts,
+                document_id=doc_id,
+                region_id=f"{prefix}_{name}_{len(created):03d}",
+                layer=layer,
+                z_index=z_index + len(created),
+                stroke=stroke,
+                stroke_width=stroke_width_to_norm(doc_id, sw) or 0.002,
+                opacity=_clamp01(opacity * op),
+                stroke_linecap="round",
+                smoothness=smooth,
+            )
+            r.clip_to = clip_to
+            r.metadata.update({"tool": "generate_background_asset", "mode": mode, "part": name})
+            created.append(r.id)
+            return r
+
+        def add_region(name: str, outline, fill: str, stroke: str | None, sw: float, op: float, smooth: float = 0.2):
+            r = scene.create_region(
+                outline=outline,
+                document_id=doc_id,
+                region_id=f"{prefix}_{name}_{len(created):03d}",
+                layer=layer,
+                z_index=z_index + len(created),
+                clip_to=clip_to,
+                constraints=CurveConstraints(smoothness=smooth, closed=True),
+                style=Style(
+                    fill=fill,
+                    stroke=stroke,
+                    stroke_width=stroke_width_to_norm(doc_id, sw) or 0.001,
+                    opacity=_clamp01(opacity * op),
+                ),
+                metadata={"tool": "generate_background_asset", "mode": mode, "part": name},
+            )
+            created.append(r.id)
+            return r
+
+        if mode == "facade_detail":
+            enabled = set(detail or ["mullions", "sills", "pipes", "cornice"])
+            stroke = color or "#39464D"
+            accent = secondary_color or "#D8E2E5"
+            if "mullions" in enabled:
+                cols = max(2, min(18, safe_count // 2))
+                for i in range(1, cols):
+                    px = x + w * i / cols
+                    add_line("mullion", [(px, y), (px, y + h)], stroke, 1.2, 0.55)
+            if "sills" in enabled:
+                rows = max(2, min(12, safe_count // 3))
+                for i in range(1, rows + 1):
+                    py = y + h * i / (rows + 1)
+                    add_line("sill", [(x + 0.04 * w, py), (x + 0.96 * w, py)], accent, 1.4, 0.7)
+            if "pipes" in enabled:
+                for _ in range(max(1, min(4, safe_count // 8))):
+                    px = x + w * rng.uniform(0.08, 0.92)
+                    wobble = w * rng.uniform(-0.015, 0.015)
+                    add_line("pipe", [(px, y), (px + wobble, y + h)], stroke, 2.0, 0.65, 0.35)
+            if "cornice" in enabled:
+                ch = h * 0.05
+                add_region("cornice", [(x, y), (x + w, y), (x + w * 0.96, y + ch), (x + w * 0.04, y + ch)], accent, stroke, 1.0, 0.85)
+        elif mode == "tree_cluster":
+            trunk = secondary_color or "#5A3A25"
+            leaf = color or "#3F7A43"
+            for _ in range(safe_count):
+                cx = x + rng.random() * w
+                base = y + h * rng.uniform(0.72, 0.98)
+                th = h * rng.uniform(0.18, 0.34)
+                add_line("trunk", [(cx, base), (cx + rng.uniform(-0.01, 0.01) * w, base - th)], trunk, 2.0, 0.75, 0.15)
+                for _ in range(rng.randint(2, 4)):
+                    rx = w * rng.uniform(0.025, 0.055)
+                    ry = h * rng.uniform(0.035, 0.075)
+                    pcx = cx + rng.uniform(-0.04, 0.04) * w
+                    pcy = base - th + rng.uniform(-0.035, 0.035) * h
+                    add_region("leaf", [(pcx, pcy - ry), (pcx + rx, pcy), (pcx, pcy + ry), (pcx - rx, pcy)], leaf, None, 0.5, rng.uniform(0.65, 0.92), 0.75)
+        elif mode == "cloud_bank":
+            fill = color or "#FFFFFF"
+            shadow = secondary_color or "#BFD4E2"
+            for _ in range(safe_count):
+                cx = x + rng.random() * w
+                cy = y + h * rng.uniform(0.2, 0.78)
+                rx = w * rng.uniform(0.04, 0.12)
+                ry = h * rng.uniform(0.10, 0.26)
+                add_region("cloud_shadow", [(cx - rx, cy), (cx, cy - ry * 0.7), (cx + rx, cy), (cx, cy + ry * 0.42)], shadow, None, 0.5, 0.24, 0.82)
+                add_region("cloud_puff", [(cx - rx * 0.9, cy), (cx, cy - ry), (cx + rx * 0.9, cy), (cx, cy + ry * 0.55)], fill, None, 0.5, 0.55, 0.85)
+        elif mode == "water_ripples":
+            stroke = color or "#A8F7FF"
+            accent = secondary_color or "#FFFFFF"
+            for i in range(safe_count):
+                py = y + rng.random() * h
+                px = x + rng.random() * w
+                length = w * rng.uniform(0.08, 0.32)
+                wave = h * rng.uniform(0.008, 0.025)
+                add_line("ripple", [(px, py), (px + length * 0.35, py - wave), (px + length, py + wave * 0.25)], stroke if i % 4 else accent, 1.3, rng.uniform(0.24, 0.62), 0.6)
+        elif mode == "rock_cluster":
+            fill = color or "#7E8079"
+            stroke = secondary_color or "#4C504B"
+            for _ in range(safe_count):
+                cx = x + rng.random() * w
+                cy = y + rng.random() * h
+                rw = w * rng.uniform(0.015, 0.055)
+                rh = h * rng.uniform(0.025, 0.08)
+                add_region("rock", [(cx - rw, cy + rh * 0.2), (cx - rw * 0.3, cy - rh), (cx + rw * 0.75, cy - rh * 0.55), (cx + rw, cy + rh * 0.45), (cx, cy + rh)], fill, stroke, 0.8, rng.uniform(0.65, 0.95), 0.18)
+        elif mode == "grass_patch":
+            stroke = color or "#3F7F3F"
+            accent = secondary_color or "#A8D26B"
+            for i in range(safe_count):
+                px = x + rng.random() * w
+                base = y + h * rng.uniform(0.72, 1.0)
+                blade = h * rng.uniform(0.08, 0.26)
+                lean = w * rng.uniform(-0.025, 0.025)
+                add_line("grass", [(px, base), (px + lean, base - blade)], stroke if i % 5 else accent, 1.1, rng.uniform(0.35, 0.85), 0.35)
+        else:
+            return f"Error: Unknown background asset mode '{mode}'"
+
+        scene.group_regions(prefix, created, doc_id, replace=True)
+        scene._persist(doc_id)
+        return f"Background asset generated: mode={mode}, regions={len(created)}, group={prefix}, ids={', '.join(created[:6])}"
 
     @mcp.tool(
         name="create_surface_stripes",

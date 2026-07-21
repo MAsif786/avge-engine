@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://avge.dev/schemas/generate_background_asset/v1.json",
+  "title": "generate_background_asset",
+  "description": "Generate editable reusable background details from one generic tool.",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["facade_detail", "tree_cluster", "cloud_bank", "water_ripples", "rock_cluster", "grass_patch"]
+    },
+    "bounds": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "number", "minimum": -2, "maximum": 3 },
+      "description": "Asset bounds as [x, y, width, height] in normalized coordinates."
+    },
+    "document_id": { "type": ["string", "null"] },
+    "region_id": { "type": ["string", "null"] },
+    "count": { "type": "integer", "minimum": 1, "maximum": 400, "default": 12 },
+    "density": { "type": "number", "minimum": 0.1, "maximum": 10, "default": 1 },
+    "seed": { "type": "integer", "default": 1 },
+    "detail": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "enum": ["mullions", "sills", "pipes", "cornice"]
+      }
+    },
+    "color": {
+      "anyOf": [
+        { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+        { "type": "null" }
+      ]
+    },
+    "secondary_color": {
+      "anyOf": [
+        { "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/color" },
+        { "type": "null" }
+      ]
+    },
+    "layer": { "type": "string", "default": "background_detail" },
+    "z_index": { "type": "integer", "default": 0 },
+    "opacity": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 },
+    "clip_to": { "type": ["string", "null"] }
+  },
+  "required": ["mode", "bounds"],
+  "additionalProperties": false
+}

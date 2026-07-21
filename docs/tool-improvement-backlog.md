@@ -10,7 +10,7 @@ This backlog is implementation-oriented. Usage recipes belong in `docs/design-gu
 |---|---|---|
 | `duplicate(pattern="scatter", count, bounds, seed, jitter)` | Cloud/rock/grass/prop scatter needs, ad hoc randomized placement | Implemented in `m0b-v20` as a `duplicate` mode with bounded random center placement and existing jitter support. |
 | `add_shading(mode="gradient", stops, light_direction, strength)` | Separate architecture gradient-shading proposal | Continuous per-plane shading cannot be expressed by hard two-tone copies. |
-| `generate_background_asset(mode, bounds, count, style, density, seed, detail, facade_detail)` | `generate_shape(pattern="cornice")`, `generate_shape(pattern="awning")`, `generate_shape(pattern="rooftop_props")`, `create_facade_details`, `create_building_cluster`, tree/water/rock/grass generators | One generator with modes and detail flags avoids many object-specific tools while addressing recurring background quality gaps. |
+| `generate_background_asset(mode, bounds, count, density, seed, detail)` | `generate_shape(pattern="cornice")`, `generate_shape(pattern="awning")`, `generate_shape(pattern="rooftop_props")`, `create_facade_details`, `create_building_cluster`, tree/water/rock/grass generators | Implemented in `m0b-v21` with generic modes for facade detail, tree clusters, cloud banks, water ripples, rock clusters, and grass patches. |
 | `apply_fx(type="lens_flare"|"motion_blur"|"speed_lines"|"impact_lines"|"particles", ...)` | `create_lens_flare`, `create_motion_effect`, weather/particle helper tools | Directional/radiant/repeated FX share one parameter family. Single-stroke weather remains a brush preset. |
 | `mix_region_colors(source_region_id, target_region_id, mix_ratio, output)` | True `mixer_brush` behavior | Needs two source regions and generated intermediate color overlays, so it is not just a brush preset. |
 | `smudge_region` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
@@ -89,8 +89,7 @@ These should not be added as standalone tools.
 ### Phase 1 — Highest Leverage
 
 1. `add_shading(mode="gradient")`
-2. `generate_background_asset`
-3. `create_comic_panel_layout`
+2. `create_comic_panel_layout`
 
 Each should ship with a golden-scene regression test.
 

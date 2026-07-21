@@ -223,6 +223,56 @@ def test_generate_cloud_creates_soft_layered_regions():
     assert {r.metadata.get("part") for r in cloud_regions} >= {"shade", "puff", "body"}
 
 
+def test_generate_background_asset_facade_detail_groups_parts():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+
+    result = mcp.tools["generate_background_asset"](
+        document_id=doc.id,
+        mode="facade_detail",
+        bounds=[0.2, 0.2, 0.4, 0.5],
+        region_id="facade_bits",
+        count=12,
+        detail=["mullions", "sills", "cornice"],
+    )
+
+    created = [
+        r for r in graph.get_all_regions(doc.id)
+        if r.metadata.get("tool") == "generate_background_asset"
+    ]
+    assert "Background asset generated: mode=facade_detail" in result
+    assert len(created) >= 5
+    assert {r.metadata["part"] for r in created} >= {"mullion", "sill", "cornice"}
+    assert {"name": "facade_bits", "count": len(created)} in graph.list_groups(doc.id)
+
+
+def test_generate_background_asset_tree_cluster_creates_trunks_and_leaves():
+    reset_graph()
+    mcp = _FakeMCP()
+    scene_ops.create_tools(mcp)
+    graph = scene_ops.get_graph()
+    doc = graph.create_document()
+
+    result = mcp.tools["generate_background_asset"](
+        document_id=doc.id,
+        mode="tree_cluster",
+        bounds=[0.1, 0.5, 0.3, 0.25],
+        count=3,
+        seed=4,
+    )
+
+    created = [
+        r for r in graph.get_all_regions(doc.id)
+        if r.metadata.get("mode") == "tree_cluster"
+    ]
+    assert "Background asset generated: mode=tree_cluster" in result
+    assert any(r.metadata.get("part") == "trunk" for r in created)
+    assert any(r.metadata.get("part") == "leaf" for r in created)
+
+
 def test_create_surface_stripes_projects_repeated_road_markings():
     reset_graph()
     mcp = _FakeMCP()

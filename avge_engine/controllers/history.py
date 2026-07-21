@@ -128,6 +128,7 @@ def create_tools(mcp):
         "  project_quad: target_quad, source_region_id, fill, stroke, columns, rows\n"
         "  create_perspective_grid: vanishing_points, horizon_y, bounds\n"
         "  create_facade_grid: target_quad, rows, columns, lit_ratio\n"
+        "  generate_background_asset: mode, bounds, count, density, seed\n"
         "  copy_element: region_id OR group, target_document_id, source_document_id, offset_x/y\n"
         "  create_line_pattern: pattern, points/bounds, stroke_width, width_profile, role\n"
         "  generate_shape: pattern, params\n"
