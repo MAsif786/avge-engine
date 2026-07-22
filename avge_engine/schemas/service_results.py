@@ -90,6 +90,24 @@ class BooleanOperationResult(BaseModel):
     outline_points: int
 
 
+class PerspectiveGridResult(BaseModel):
+    ids: list[str]
+    vp_left: list[float]
+    vp_right: list[float]
+    horizon_y: float
+
+
+class FacadeGridResult(BaseModel):
+    prefix: str
+    windows: int
+    lit_ratio: float
+    region_count: int
+
+
+class SurfaceStripesResult(BaseModel):
+    ids: list[str]
+
+
 class DepthHazeResult(BaseModel):
     affected: int
     haze_color: str

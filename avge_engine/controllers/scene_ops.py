@@ -18,80 +18,13 @@ READING_DIRECTIONS = Literal["ltr", "rtl", "ttb"]
 WARP_MODES = Literal["bend", "bulge", "pinch", "wave", "handle_shift"]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.scene_construction_service import SceneConstructionService
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
 from avge_engine.services.shadow_service import ShadowService
 
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
-
-
-def _lerp_point(a: list[float] | tuple[float, float], b: list[float] | tuple[float, float], t: float) -> list[float]:
-    return [float(a[0]) + (float(b[0]) - float(a[0])) * t, float(a[1]) + (float(b[1]) - float(a[1])) * t]
-
-
-def _quad_point(quad: list[list[float]], u: float, v: float) -> list[float]:
-    top = _lerp_point(quad[0], quad[1], u)
-    bottom = _lerp_point(quad[3], quad[2], u)
-    return _lerp_point(top, bottom, v)
-
-
-def _cell_quad(
-    quad: list[list[float]],
-    u0: float,
-    v0: float,
-    u1: float,
-    v1: float,
-    margin_u: float,
-    margin_v: float,
-) -> list[list[float]]:
-    du = max(0.0, u1 - u0)
-    dv = max(0.0, v1 - v0)
-    uu0 = u0 + du * margin_u
-    uu1 = u1 - du * margin_u
-    vv0 = v0 + dv * margin_v
-    vv1 = v1 - dv * margin_v
-    return [
-        _quad_point(quad, uu0, vv0),
-        _quad_point(quad, uu1, vv0),
-        _quad_point(quad, uu1, vv1),
-        _quad_point(quad, uu0, vv1),
-    ]
-
-
-def _clip_line_to_bounds(
-    p1: list[float],
-    p2: list[float],
-    bounds: tuple[float, float, float, float],
-) -> list[list[float]] | None:
-    """Clip an infinite line through p1/p2 to an axis-aligned bounds rectangle."""
-    x0, y0, x1, y1 = bounds
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
-        return None
-
-    hits: list[tuple[float, list[float]]] = []
-    if abs(dx) > 1e-9:
-        for x in (x0, x1):
-            t = (x - p1[0]) / dx
-            y = p1[1] + dy * t
-            if y0 - 1e-9 <= y <= y1 + 1e-9:
-                hits.append((t, [x, y]))
-    if abs(dy) > 1e-9:
-        for y in (y0, y1):
-            t = (y - p1[1]) / dy
-            x = p1[0] + dx * t
-            if x0 - 1e-9 <= x <= x1 + 1e-9:
-                hits.append((t, [x, y]))
-
-    unique: list[tuple[float, list[float]]] = []
-    for t, pt in sorted(hits, key=lambda item: item[0]):
-        if not any(abs(pt[0] - u[1][0]) < 1e-6 and abs(pt[1] - u[1][1]) < 1e-6 for u in unique):
-            unique.append((t, pt))
-    if len(unique) < 2:
-        return None
-    return [unique[0][1], unique[-1][1]]
 
 
 def create_tools(mcp):
@@ -602,72 +535,30 @@ def create_tools(mcp):
             include_horizon: Also create a horizon guide line.
             stroke_width: Pixel stroke width.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document — call create_document first"
-
-        if len(vanishing_points) != 2:
-            return "Error: vanishing_points must contain exactly two [x,y] points"
-        vp_l = [float(vanishing_points[0][0]), float(vanishing_points[0][1])]
-        vp_r = [float(vanishing_points[1][0]), float(vanishing_points[1][1])]
-        x0, y0, x1, y1 = [float(v) for v in (bounds or [0.0, 0.0, 1.0, 1.0])]
-        if x1 <= x0 or y1 <= y0:
-            return "Error: bounds must be [x0,y0,x1,y1] with positive size"
-
-        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.001
-
-        subpaths: list[list[list[float]]] = []
-        vertical_count = max(2, int(verticals))
-        horizontal_count = max(2, int(horizontals))
-        for i in range(vertical_count):
-            x = x0 + (x1 - x0) * (i / (vertical_count - 1))
-            subpaths.append([[x, y0], [x, y1]])
-        for i in range(horizontal_count):
-            y = y0 + (y1 - y0) * (i / (horizontal_count - 1))
-            left_line = _clip_line_to_bounds(vp_l, [x1, y], (x0, y0, x1, y1))
-            right_line = _clip_line_to_bounds(vp_r, [x0, y], (x0, y0, x1, y1))
-            if left_line:
-                subpaths.append(left_line)
-            if right_line:
-                subpaths.append(right_line)
-
-        rid = region_id or "perspective_grid"
-        try:
-            grid = scene.create_compound_path(
-                subpaths=subpaths,
-                document_id=doc_id,
-                region_id=rid,
+            result = SceneConstructionService().create_perspective_grid(
+                vanishing_points=vanishing_points,
+                horizon_y=horizon_y,
+                document_id=document_id,
+                region_id=region_id,
+                verticals=verticals,
+                horizontals=horizontals,
+                bounds=bounds,
+                include_horizon=include_horizon,
                 layer=layer,
                 z_index=z_index,
-                fill=None,
                 stroke=stroke,
                 stroke_width=stroke_width,
-                opacity=max(0.0, min(1.0, opacity)),
-                smoothness=0.0,
-                closed=False,
+                opacity=opacity,
             )
-            ids = [grid.id]
-            if include_horizon:
-                horizon = scene.create_line(
-                    points=[[x0, horizon_y], [x1, horizon_y]],
-                    document_id=doc_id,
-                    region_id=f"{rid}_horizon",
-                    layer=layer,
-                    z_index=z_index,
-                    stroke=stroke,
-                    stroke_width=stroke_width,
-                    opacity=max(0.0, min(1.0, opacity * 1.25)),
-                    smoothness=0.0,
-                )
-                ids.append(horizon.id)
-            return (
-                f"Perspective grid created: {', '.join(ids)} "
-                f"(vp_left={vp_l}, vp_right={vp_r}, horizon_y={horizon_y})"
-            )
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
+        return (
+            f"Perspective grid created: {', '.join(result.ids)} "
+            f"(vp_left={result.vp_left}, vp_right={result.vp_right}, horizon_y={result.horizon_y})"
+        )
 
     @mcp.tool(
         name="create_facade_grid",
@@ -706,81 +597,37 @@ def create_tools(mcp):
             variation: Deterministic inset variation per window.
             stroke_width: Pixel stroke width.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = SceneConstructionService().create_facade_grid(
+                target_quad=target_quad,
+                rows=rows,
+                columns=columns,
+                document_id=document_id,
+                region_id=region_id,
+                layer=layer,
+                z_index=z_index,
+                facade_fill=facade_fill,
+                facade_stroke=facade_stroke,
+                window_fill=window_fill,
+                lit_fill=lit_fill,
+                window_stroke=window_stroke,
+                stroke_width=stroke_width,
+                opacity=opacity,
+                lit_ratio=lit_ratio,
+                margin_u=margin_u,
+                margin_v=margin_v,
+                variation=variation,
+                seed=seed,
+                create_base=create_base,
+            )
         except RuntimeError:
             return "Error: No active document — call create_document first"
-
-        if len(target_quad) != 4:
-            return "Error: target_quad must contain exactly four [x,y] points"
-        if rows < 1 or columns < 1:
-            return "Error: rows and columns must be >= 1"
-
-        quad = [[float(p[0]), float(p[1])] for p in target_quad]
-        stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.001
-
-        prefix = region_id or "facade"
-        rng = random.Random(seed)
-        created: list[str] = []
-        try:
-            if create_base:
-                base = scene.project_quad(
-                    quad,
-                    document_id=doc_id,
-                    region_id=prefix,
-                    layer=layer,
-                    z_index=z_index,
-                    fill=facade_fill,
-                    stroke=facade_stroke,
-                    stroke_width=stroke_width,
-                    opacity=opacity,
-                    metadata={"tool": "create_facade_grid", "part": "facade"},
-                )
-                created.append(base.id)
-
-            for row in range(rows):
-                for col in range(columns):
-                    cell_noise = (rng.random() - 0.5) * max(0.0, variation)
-                    mu = _clamp01(margin_u + cell_noise)
-                    mv = _clamp01(margin_v - cell_noise * 0.5)
-                    win_quad = _cell_quad(
-                        quad,
-                        col / columns,
-                        row / rows,
-                        (col + 1) / columns,
-                        (row + 1) / rows,
-                        mu,
-                        mv,
-                    )
-                    lit = rng.random() < _clamp01(lit_ratio)
-                    rid = f"{prefix}_w{row:02d}_{col:02d}"
-                    win = scene.project_quad(
-                        win_quad,
-                        document_id=doc_id,
-                        region_id=rid,
-                        layer=layer,
-                        z_index=z_index + 1,
-                        fill=lit_fill if lit else window_fill,
-                        stroke=window_stroke,
-                        stroke_width=stroke_width,
-                        opacity=opacity,
-                        metadata={
-                            "tool": "create_facade_grid",
-                            "part": "window",
-                            "facade": prefix,
-                            "row": row,
-                            "column": col,
-                            "lit": lit,
-                        },
-                    )
-                    created.append(win.id)
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
 
         return (
-            f"Facade grid created: {prefix} with {rows * columns} window(s), "
-            f"lit_ratio={lit_ratio:.2f}, regions={len(created)}"
+            f"Facade grid created: {result.prefix} with {result.windows} window(s), "
+            f"lit_ratio={result.lit_ratio:.2f}, regions={result.region_count}"
         )
 
     @mcp.tool(
@@ -1673,65 +1520,33 @@ def create_tools(mcp):
             gap: Optional initial gap; defaults to evenly filling the range.
             spacing_falloff: Multiplier applied to each next gap, for receding spacing.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = SceneConstructionService().create_surface_stripes(
+                target_quad=target_quad,
+                count=count,
+                document_id=document_id,
+                region_id=region_id,
+                orientation=orientation,
+                start=start,
+                end=end,
+                stripe_width=stripe_width,
+                gap=gap,
+                spacing_falloff=spacing_falloff,
+                fill=fill,
+                stroke=stroke,
+                stroke_width=stroke_width,
+                opacity=opacity,
+                layer=layer,
+                z_index=z_index,
+            )
         except RuntimeError:
             return "Error: No active document"
-        if len(target_quad) != 4:
-            return "Error: target_quad must contain exactly four points"
-        count = max(1, min(100, int(count)))
-        stroke_width = stroke_width_to_norm(doc_id, stroke_width)
-        prefix = region_id or "surface_stripe"
-        start = _clamp01(start)
-        end = _clamp01(end)
-        if end <= start:
-            return "Error: end must be greater than start"
-        if gap is None:
-            gap = max(0.0, (end - start - stripe_width * count) / max(1, count - 1))
-
-        pos = start
-        created: list[str] = []
-        try:
-            for i in range(count):
-                w = max(0.001, stripe_width * (spacing_falloff ** i if spacing_falloff < 1.0 else 1.0))
-                p0 = pos
-                p1 = min(end, pos + w)
-                if p1 <= p0:
-                    break
-                if orientation == "u":
-                    quad = [
-                        _quad_point(target_quad, p0, 0.0),
-                        _quad_point(target_quad, p1, 0.0),
-                        _quad_point(target_quad, p1, 1.0),
-                        _quad_point(target_quad, p0, 1.0),
-                    ]
-                else:
-                    quad = [
-                        _quad_point(target_quad, 0.0, p0),
-                        _quad_point(target_quad, 1.0, p0),
-                        _quad_point(target_quad, 1.0, p1),
-                        _quad_point(target_quad, 0.0, p1),
-                    ]
-                r = scene.project_quad(
-                    quad,
-                    document_id=doc_id,
-                    region_id=f"{prefix}_{i:02d}",
-                    layer=layer,
-                    z_index=z_index + i,
-                    fill=fill,
-                    stroke=stroke,
-                    stroke_width=stroke_width,
-                    opacity=opacity,
-                    metadata={"tool": "create_surface_stripes", "stripe_index": i},
-                )
-                created.append(r.id)
-                pos = p1 + gap * (spacing_falloff ** i)
-                if pos >= end:
-                    break
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
-        return f"Surface stripes created: {len(created)} stripe(s), ids={', '.join(created[:5])}{'...' if len(created) > 5 else ''}"
+        return (
+            f"Surface stripes created: {len(result.ids)} stripe(s), "
+            f"ids={', '.join(result.ids[:5])}{'...' if len(result.ids) > 5 else ''}"
+        )
 
     @mcp.tool(
         name="create_shadow",
