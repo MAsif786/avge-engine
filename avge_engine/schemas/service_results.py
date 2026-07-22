@@ -57,6 +57,17 @@ class CopyElementResult(BaseModel):
     source_region_id: str | None = None
 
 
+class InsertImageResult(BaseModel):
+    mode: str
+    x: float
+    y: float
+    width: float
+    height: float
+    href_length: int | None = None
+    region_id: str | None = None
+    created_ids: list[str] = Field(default_factory=list)
+
+
 class CreateRegionResult(BaseModel):
     region_id: str
     bounds: dict[str, float] | None

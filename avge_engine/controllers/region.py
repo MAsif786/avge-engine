@@ -3,15 +3,7 @@ from __future__ import annotations
 
 import math
 import json as _json
-import random
-import base64
-import mimetypes
-import re
-import xml.etree.ElementTree as ET
-from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
 
 from avge_engine.services.engine import (
     StrokeWidthInput,
@@ -30,124 +22,6 @@ BLEND_MODES = Literal[
     "color-dodge", "color-burn", "soft-light", "hard-light",
 ]
 IMAGE_IMPORT_MODES = Literal["image", "embed", "svg_paths"]
-MAX_EMBED_BYTES = 2_000_000
-MAX_SVG_IMPORT_BYTES = 1_000_000
-
-
-def _read_href_bytes(href: str, max_bytes: int = MAX_EMBED_BYTES) -> tuple[bytes, str]:
-    """Read bytes from http(s), file path, or data URI with a hard size cap."""
-    if href.startswith("data:"):
-        header, _, payload = href.partition(",")
-        if not payload:
-            raise ValueError("Invalid data URI")
-        raw = base64.b64decode(payload) if ";base64" in header else payload.encode("utf-8")
-        mime = header[5:].split(";")[0] or "application/octet-stream"
-        if len(raw) > max_bytes:
-            raise ValueError(f"Image too large ({len(raw)} bytes, max {max_bytes})")
-        return raw, mime
-
-    parsed = urlparse(href)
-    if parsed.scheme in ("http", "https"):
-        req = Request(href, headers={"User-Agent": "AVGE/0.5"})
-        with urlopen(req, timeout=10) as response:
-            mime = response.headers.get_content_type() or "application/octet-stream"
-            raw = response.read(max_bytes + 1)
-        if len(raw) > max_bytes:
-            raise ValueError(f"Image too large (max {max_bytes} bytes)")
-        return raw, mime
-    if parsed.scheme and parsed.scheme != "file":
-        raise ValueError("Only http, https, file, local path, and data URI hrefs are supported")
-
-    path = Path(parsed.path if parsed.scheme == "file" else href).expanduser()
-    raw = path.read_bytes()
-    if len(raw) > max_bytes:
-        raise ValueError(f"Image too large ({len(raw)} bytes, max {max_bytes})")
-    mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
-    return raw, mime
-
-
-def _bytes_to_data_uri(raw: bytes, mime: str) -> str:
-    return f"data:{mime};base64,{base64.b64encode(raw).decode('ascii')}"
-
-
-def _is_svg_href(href: str, mime: str | None = None) -> bool:
-    if mime == "image/svg+xml":
-        return True
-    clean = href.split("?", 1)[0].lower()
-    return clean.endswith(".svg") or href.startswith("data:image/svg+xml")
-
-
-def _parse_svg_length(value: str | None) -> float | None:
-    if not value:
-        return None
-    match = re.match(r"\s*([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?)", value)
-    return float(match.group(1)) if match else None
-
-
-def _svg_viewbox(root: ET.Element) -> tuple[float, float, float, float]:
-    view_box = root.attrib.get("viewBox")
-    if view_box:
-        nums = [float(v) for v in re.findall(r"[+-]?\d*\.?\d+(?:[eE][+-]?\d+)?", view_box)]
-        if len(nums) == 4 and nums[2] > 0 and nums[3] > 0:
-            return nums[0], nums[1], nums[2], nums[3]
-    width = _parse_svg_length(root.attrib.get("width")) or 1.0
-    height = _parse_svg_length(root.attrib.get("height")) or 1.0
-    return 0.0, 0.0, max(0.001, width), max(0.001, height)
-
-
-def _map_svg_outline(
-    outline: list[tuple[float, float]],
-    view_box: tuple[float, float, float, float],
-    x: float,
-    y: float,
-    width: float,
-    height: float,
-) -> list[tuple[float, float]]:
-    vb_x, vb_y, vb_w, vb_h = view_box
-    return [
-        (x + ((px - vb_x) / vb_w) * width, y + ((py - vb_y) / vb_h) * height)
-        for px, py in outline
-    ]
-
-
-def _svg_path_regions(
-    svg_text: str,
-    *,
-    x: float,
-    y: float,
-    width: float,
-    height: float,
-    fill_override: str | None,
-    stroke_override: str | None,
-    stroke_width: float,
-    samples_per_curve: int,
-    max_paths: int,
-) -> list[dict[str, Any]]:
-    from avge_engine.geometry.procedural import parse_svg_path
-
-    root = ET.fromstring(svg_text)
-    view_box = _svg_viewbox(root)
-    regions: list[dict[str, Any]] = []
-    for path_node in root.iter():
-        if path_node.tag.rsplit("}", 1)[-1] != "path":
-            continue
-        path_data = path_node.attrib.get("d")
-        if not path_data:
-            continue
-        outline = parse_svg_path(path_data, samples_per_curve=samples_per_curve)
-        if len(outline) < 2:
-            continue
-        mapped = _map_svg_outline(outline, view_box, x, y, width, height)
-        fill = fill_override if fill_override is not None else path_node.attrib.get("fill", "#CCCCCC")
-        stroke = stroke_override if stroke_override is not None else path_node.attrib.get("stroke", "#333333")
-        if fill in ("none", "transparent"):
-            fill = None
-        if stroke in ("none", "transparent"):
-            stroke = None
-        regions.append({"outline": mapped, "fill": fill, "stroke": stroke, "stroke_width": stroke_width})
-        if len(regions) >= max_paths:
-            break
-    return regions
 
 
 def _relative_to_absolute(scene, doc_id, relative_to, points):
@@ -1128,78 +1002,42 @@ def create_tools(mcp):
             import_mode: "image" preserves href, "embed" stores fetched bytes
                 as data URI, "svg_paths" imports SVG path data as vector regions.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document. Call create_document first."
-
-        try:
-            resolved_href = href
-            if import_mode in ("embed", "svg_paths"):
-                limit = MAX_SVG_IMPORT_BYTES if import_mode == "svg_paths" else MAX_EMBED_BYTES
-                raw, mime = _read_href_bytes(href, max_bytes=limit)
-                if import_mode == "embed":
-                    resolved_href = _bytes_to_data_uri(raw, mime)
-                else:
-                    if not _is_svg_href(href, mime):
-                        return "Error: import_mode='svg_paths' requires SVG input"
-                    sw = stroke_width_to_norm(doc_id, stroke_width) or 0.005
-                    path_defs = _svg_path_regions(
-                        raw.decode("utf-8"),
-                        x=x,
-                        y=y,
-                        width=width,
-                        height=height,
-                        fill_override=fill,
-                        stroke_override=stroke,
-                        stroke_width=sw,
-                        samples_per_curve=samples_per_curve,
-                        max_paths=max_paths,
-                    )
-                    if not path_defs:
-                        return "Error: SVG contained no supported <path d=\"...\"> elements"
-                    created: list[str] = []
-                    prefix = region_id or "svg_path"
-                    for idx, path_def in enumerate(path_defs):
-                        r = scene.create_region(
-                            outline=path_def["outline"],
-                            document_id=doc_id,
-                            region_id=f"{prefix}_{idx:02d}" if len(path_defs) > 1 else prefix,
-                            layer=layer,
-                            z_index=z_index + idx,
-                            clip_to=clip_to,
-                            constraints=CurveConstraints(smoothness=smoothness, closed=True),
-                            style=Style(
-                                fill=path_def["fill"],
-                                stroke=path_def["stroke"],
-                                stroke_width=path_def["stroke_width"],
-                            ),
-                            metadata={"tool": "insert_image", "import_mode": "svg_paths", "source_href": href},
-                        )
-                        if abs(rotate) > 0.001:
-                            object.__setattr__(r.transform, "rotate", rotate)
-                        created.append(r.id)
-                    if len(created) > 1:
-                        scene.group_regions(region_id or "svg_paths", created, doc_id, replace=True)
-                    scene._persist(doc_id)
-                    return f"SVG paths imported: regions={len(created)}, ids={', '.join(created[:6])}"
-
-            r = scene.insert_image(
-                x, y, width, height, resolved_href,
-                document_id=doc_id, region_id=region_id,
-                layer=layer, z_index=z_index,
+            service = RegionService()
+            result = service.insert_image(
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                href=href,
+                document_id=document_id,
+                region_id=region_id,
+                layer=layer,
+                z_index=z_index,
                 preserve_aspect_ratio=preserve_aspect_ratio,
                 rotate=rotate,
                 clip_to=clip_to,
+                import_mode=import_mode,
+                fill=fill,
+                stroke=stroke,
+                stroke_width=stroke_width,
+                smoothness=smoothness,
+                samples_per_curve=samples_per_curve,
+                max_paths=max_paths,
             )
-            return (
-                f"Image added: id={r.id}, mode={import_mode}, "
-                f"({x:.4f},{y:.4f}) {width:.4f}x{height:.4f}, "
-                f"len(href)={len(resolved_href)}"
-            )
-        except (ValueError, RuntimeError, ET.ParseError, OSError, UnicodeDecodeError) as e:
+        except RuntimeError:
+            return "Error: No active document. Call create_document first."
+        except (ValueError, OSError, UnicodeDecodeError) as e:
             return f"Error: {e}"
+        if result.mode == "svg_paths":
+            return f"SVG paths imported: regions={len(result.created_ids)}, ids={', '.join(result.created_ids[:6])}"
+        if result.region_id is None or result.href_length is None:
+            return "Error: insert_image returned no region"
+        return (
+            f"Image added: id={result.region_id}, mode={result.mode}, "
+            f"({result.x:.4f},{result.y:.4f}) {result.width:.4f}x{result.height:.4f}, "
+            f"len(href)={result.href_length}"
+        )
 
     @mcp.tool(
         name="create_primitive",

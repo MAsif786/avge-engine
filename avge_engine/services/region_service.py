@@ -5,8 +5,23 @@ from typing import Any
 
 from avge_engine.geometry import CurveConstraints, normalize_outline
 from avge_engine.schemas.common import StrokeWidthInput
-from avge_engine.schemas.service_results import CopyElementResult, EditRegionResult, EditRegionsResult, RefineLineResult
+from avge_engine.schemas.service_results import (
+    CopyElementResult,
+    EditRegionResult,
+    EditRegionsResult,
+    InsertImageResult,
+    RefineLineResult,
+)
 from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.image_import_service import (
+    MAX_EMBED_BYTES,
+    MAX_SVG_IMPORT_BYTES,
+    bytes_to_data_uri,
+    is_svg_href,
+    read_href_bytes,
+    svg_path_regions,
+)
+from avge_engine.scene import Style
 
 
 class RegionService:
@@ -255,6 +270,85 @@ class RegionService:
             source_region_id=region_id,
         )
 
+    def insert_image(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        href: str,
+        document_id: str | None = None,
+        region_id: str | None = None,
+        layer: str = "default",
+        z_index: int = 0,
+        preserve_aspect_ratio: str = "xMidYMid meet",
+        rotate: float = 0.0,
+        clip_to: str | None = None,
+        import_mode: str = "image",
+        fill: str | None = None,
+        stroke: str | None = None,
+        stroke_width: StrokeWidthInput = None,
+        smoothness: float = 0.0,
+        samples_per_curve: int = 12,
+        max_paths: int = 50,
+    ) -> InsertImageResult:
+        """Insert an image, embed image bytes, or import SVG paths as regions."""
+        doc_id = resolve_doc(document_id)
+        resolved_href = href
+        if import_mode in ("embed", "svg_paths"):
+            limit = MAX_SVG_IMPORT_BYTES if import_mode == "svg_paths" else MAX_EMBED_BYTES
+            raw, mime = read_href_bytes(href, max_bytes=limit)
+            if import_mode == "embed":
+                resolved_href = bytes_to_data_uri(raw, mime)
+            else:
+                if not is_svg_href(href, mime):
+                    raise ValueError("import_mode='svg_paths' requires SVG input")
+                return self._insert_svg_paths(
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    href=href,
+                    raw=raw,
+                    document_id=doc_id,
+                    region_id=region_id,
+                    layer=layer,
+                    z_index=z_index,
+                    rotate=rotate,
+                    clip_to=clip_to,
+                    fill=fill,
+                    stroke=stroke,
+                    stroke_width=stroke_width,
+                    smoothness=smoothness,
+                    samples_per_curve=samples_per_curve,
+                    max_paths=max_paths,
+                )
+
+        region = self.graph.insert_image(
+            x,
+            y,
+            width,
+            height,
+            resolved_href,
+            document_id=doc_id,
+            region_id=region_id,
+            layer=layer,
+            z_index=z_index,
+            preserve_aspect_ratio=preserve_aspect_ratio,
+            rotate=rotate,
+            clip_to=clip_to,
+        )
+        return InsertImageResult(
+            mode=import_mode,
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            href_length=len(resolved_href),
+            region_id=region.id,
+        )
+
     def _outline_with_point_edit(
         self,
         doc_id: str,
@@ -276,6 +370,77 @@ class RegionService:
             off_y = point_dy if point_dy is not None else 0.0
             points[point_index] = (points[point_index][0] + off_x, points[point_index][1] + off_y)
         return points
+
+    def _insert_svg_paths(
+        self,
+        *,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+        href: str,
+        raw: bytes,
+        document_id: str,
+        region_id: str | None,
+        layer: str,
+        z_index: int,
+        rotate: float,
+        clip_to: str | None,
+        fill: str | None,
+        stroke: str | None,
+        stroke_width: StrokeWidthInput,
+        smoothness: float,
+        samples_per_curve: int,
+        max_paths: int,
+    ) -> InsertImageResult:
+        sw = stroke_width_to_norm(document_id, stroke_width) or 0.005
+        path_defs = svg_path_regions(
+            raw.decode("utf-8"),
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            fill_override=fill,
+            stroke_override=stroke,
+            stroke_width=sw,
+            samples_per_curve=samples_per_curve,
+            max_paths=max_paths,
+        )
+        if not path_defs:
+            raise ValueError("SVG contained no supported <path d=\"...\"> elements")
+
+        created: list[str] = []
+        prefix = region_id or "svg_path"
+        for idx, path_def in enumerate(path_defs):
+            region = self.graph.create_region(
+                outline=path_def["outline"],
+                document_id=document_id,
+                region_id=f"{prefix}_{idx:02d}" if len(path_defs) > 1 else prefix,
+                layer=layer,
+                z_index=z_index + idx,
+                clip_to=clip_to,
+                constraints=CurveConstraints(smoothness=smoothness, closed=True),
+                style=Style(
+                    fill=path_def["fill"],
+                    stroke=path_def["stroke"],
+                    stroke_width=path_def["stroke_width"],
+                ),
+                metadata={"tool": "insert_image", "import_mode": "svg_paths", "source_href": href},
+            )
+            if abs(rotate) > 0.001:
+                object.__setattr__(region.transform, "rotate", rotate)
+            created.append(region.id)
+        if len(created) > 1:
+            self.graph.group_regions(region_id or "svg_paths", created, document_id, replace=True)
+        self.graph._persist(document_id)
+        return InsertImageResult(
+            mode="svg_paths",
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+            created_ids=created,
+        )
 
     def _apply_update_dict(self, doc_id: str, region_id: str, update: dict[str, Any]) -> None:
         region = self.graph.get_region(region_id, doc_id)
