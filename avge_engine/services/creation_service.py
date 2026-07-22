@@ -1,4 +1,4 @@
-"""Region, primitive, curve, and boolean creation service."""
+"""Element, primitive, curve, and boolean creation service."""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ from avge_engine.schemas.service_results import (
     BooleanOperationResult,
     CreateCurveResult,
     CreatePrimitiveResult,
-    CreateRegionResult,
+    CreateElementResult,
 )
 from avge_engine.services.base import BaseService
 from avge_engine.services.engine import stroke_width_to_norm
@@ -18,12 +18,12 @@ from avge_engine.services.engine import stroke_width_to_norm
 class CreationService(BaseService):
     """Application service for graph creation operations."""
 
-    def create_region(
+    def create_element(
         self,
         *,
         outline: list[list[float]],
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         closed: bool = True,
         smoothness: float = 0.5,
@@ -38,7 +38,7 @@ class CreationService(BaseService):
         blend_mode: str | None = None,
         tags: dict | None = None,
         blur: float = 0.0,
-    ) -> CreateRegionResult:
+    ) -> CreateElementResult:
         doc_id = self._require_document(document_id)
         resolved_fill = self._resolve_fill(fill, fill_gradient)
         metadata = self._resolve_tags(tags)
@@ -56,9 +56,9 @@ class CreationService(BaseService):
             blend_mode=blend_mode,
             blur=blur,
         )
-        region = self.graph.create_region(
+        element = self.graph.create_element(
             outline=[(float(p[0]), float(p[1])) for p in outline],
-            region_id=region_id,
+            element_id=element_id,
             document_id=doc_id,
             layer=layer,
             z_index=z_index,
@@ -70,9 +70,9 @@ class CreationService(BaseService):
         warnings = []
         if len(outline) > 30:
             warnings.append(f"Advisory: {len(outline)} points is high")
-        return CreateRegionResult(
-            region_id=region.id,
-            bounds=region.bounds,
+        return CreateElementResult(
+            element_id=element.id,
+            bounds=element.bounds,
             outline_point_count=len(outline),
             warnings=warnings,
         )
@@ -86,7 +86,7 @@ class CreationService(BaseService):
         height: float,
         rx: float = 0.0,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | None = "#CCCCCC",
@@ -96,14 +96,14 @@ class CreationService(BaseService):
         blend_mode: str | None = None,
     ) -> CreatePrimitiveResult:
         doc_id = self._require_document(document_id)
-        region = self.graph.create_rect(
+        element = self.graph.create_rect(
             x,
             y,
             width,
             height,
             rx=rx,
             document_id=doc_id,
-            region_id=region_id,
+            element_id=element_id,
             layer=layer,
             z_index=z_index,
             fill=fill,
@@ -112,7 +112,7 @@ class CreationService(BaseService):
             opacity=opacity,
             blend_mode=blend_mode,
         )
-        return CreatePrimitiveResult(region_id=region.id)
+        return CreatePrimitiveResult(element_id=element.id)
 
     def create_ellipse(
         self,
@@ -122,7 +122,7 @@ class CreationService(BaseService):
         rx: float,
         ry: float | None = None,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | None = "#CCCCCC",
@@ -132,13 +132,13 @@ class CreationService(BaseService):
         blend_mode: str | None = None,
     ) -> CreatePrimitiveResult:
         doc_id = self._require_document(document_id)
-        region = self.graph.create_ellipse(
+        element = self.graph.create_ellipse(
             cx,
             cy,
             rx,
             ry=ry,
             document_id=doc_id,
-            region_id=region_id,
+            element_id=element_id,
             layer=layer,
             z_index=z_index,
             fill=fill,
@@ -147,7 +147,7 @@ class CreationService(BaseService):
             opacity=opacity,
             blend_mode=blend_mode,
         )
-        return CreatePrimitiveResult(region_id=region.id)
+        return CreatePrimitiveResult(element_id=element.id)
 
     def create_line(
         self,
@@ -157,7 +157,7 @@ class CreationService(BaseService):
         x2: float,
         y2: float,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         stroke: str | None = "#333333",
@@ -166,13 +166,13 @@ class CreationService(BaseService):
         blend_mode: str | None = None,
     ) -> CreatePrimitiveResult:
         doc_id = self._require_document(document_id)
-        region = self.graph.create_line(
+        element = self.graph.create_line(
             x1,
             y1,
             x2,
             y2,
             document_id=doc_id,
-            region_id=region_id,
+            element_id=element_id,
             layer=layer,
             z_index=z_index,
             stroke=stroke,
@@ -180,14 +180,14 @@ class CreationService(BaseService):
             opacity=opacity,
             blend_mode=blend_mode,
         )
-        return CreatePrimitiveResult(region_id=region.id)
+        return CreatePrimitiveResult(element_id=element.id)
 
     def create_curve(
         self,
         *,
         points: list[list[float]],
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         stroke: str | None = "#333333",
@@ -202,13 +202,13 @@ class CreationService(BaseService):
         if len(points) == 2:
             x1, y1 = points[0]
             x2, y2 = points[1]
-            region = self.graph.create_line(
+            element = self.graph.create_line(
                 x1,
                 y1,
                 x2,
                 y2,
                 document_id=doc_id,
-                region_id=region_id,
+                element_id=element_id,
                 layer=layer,
                 z_index=z_index,
                 stroke=stroke,
@@ -218,10 +218,10 @@ class CreationService(BaseService):
                 stroke_linecap=stroke_linecap,
             )
         else:
-            region = self.graph.create_line(
+            element = self.graph.create_line(
                 points=points,
                 document_id=doc_id,
-                region_id=region_id,
+                element_id=element_id,
                 layer=layer,
                 z_index=z_index,
                 stroke=stroke,
@@ -231,14 +231,14 @@ class CreationService(BaseService):
                 stroke_linecap=stroke_linecap,
                 smoothness=smoothness,
             )
-        return CreateCurveResult(region_id=region.id, points=len(points), smoothness=smoothness)
+        return CreateCurveResult(element_id=element.id, points=len(points), smoothness=smoothness)
 
     def boolean_operation(
         self,
         *,
         operation: str = "union",
-        region_ids: list[str],
-        new_region_id: str | None = None,
+        element_ids: list[str],
+        new_element_id: str | None = None,
         document_id: str | None = None,
         keep_originals: bool = False,
         fill: str | None = None,
@@ -249,8 +249,8 @@ class CreationService(BaseService):
         doc_id = self._require_document(document_id)
         result = self.graph.boolean_operation(
             operation=operation,
-            region_ids=region_ids,
-            new_region_id=new_region_id,
+            element_ids=element_ids,
+            new_element_id=new_element_id,
             document_id=doc_id,
             keep_originals=keep_originals,
             fill=fill,
@@ -258,7 +258,7 @@ class CreationService(BaseService):
             stroke_width=stroke_width_to_norm(doc_id, stroke_width),
             opacity=opacity,
         )
-        return BooleanOperationResult(region_id=result.id, outline_points=len(result.outline))
+        return BooleanOperationResult(element_id=result.id, outline_points=len(result.outline))
 
     def _require_document(self, document_id: str | None) -> str:
         doc_id = document_id or self.graph.active_document_id()

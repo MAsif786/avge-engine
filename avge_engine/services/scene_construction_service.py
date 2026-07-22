@@ -20,7 +20,7 @@ class SceneConstructionService(BaseService):
         vanishing_points: list[list[float]],
         horizon_y: float = 0.5,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         verticals: int = 9,
         horizontals: int = 9,
         bounds: list[float] | None = None,
@@ -31,7 +31,7 @@ class SceneConstructionService(BaseService):
         stroke_width: StrokeWidthInput = None,
         opacity: float = 0.35,
     ) -> PerspectiveGridResult:
-        """Create two-point perspective construction guide regions."""
+        """Create two-point perspective construction guide elements."""
         doc_id = resolve_doc(document_id)
         if len(vanishing_points) != 2:
             raise ValueError("vanishing_points must contain exactly two [x,y] points")
@@ -57,11 +57,11 @@ class SceneConstructionService(BaseService):
             if right_line:
                 subpaths.append(right_line)
 
-        rid = region_id or "perspective_grid"
+        rid = element_id or "perspective_grid"
         grid = self.graph.create_compound_path(
             subpaths=subpaths,
             document_id=doc_id,
-            region_id=rid,
+            element_id=rid,
             layer=layer,
             z_index=z_index,
             fill=None,
@@ -76,7 +76,7 @@ class SceneConstructionService(BaseService):
             horizon = self.graph.create_line(
                 points=[[x0, horizon_y], [x1, horizon_y]],
                 document_id=doc_id,
-                region_id=f"{rid}_horizon",
+                element_id=f"{rid}_horizon",
                 layer=layer,
                 z_index=z_index,
                 stroke=stroke,
@@ -94,7 +94,7 @@ class SceneConstructionService(BaseService):
         rows: int,
         columns: int,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "architecture",
         z_index: int = 0,
         facade_fill: str = "#2C3542",
@@ -111,7 +111,7 @@ class SceneConstructionService(BaseService):
         seed: int = 1,
         create_base: bool = True,
     ) -> FacadeGridResult:
-        """Create a perspective facade panel plus individually editable window regions."""
+        """Create a perspective facade panel plus individually editable window elements."""
         doc_id = resolve_doc(document_id)
         if len(target_quad) != 4:
             raise ValueError("target_quad must contain exactly four [x,y] points")
@@ -120,7 +120,7 @@ class SceneConstructionService(BaseService):
 
         quad = [[float(p[0]), float(p[1])] for p in target_quad]
         resolved_stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.001
-        prefix = region_id or "facade"
+        prefix = element_id or "facade"
         rng = random.Random(seed)
         created: list[str] = []
 
@@ -128,7 +128,7 @@ class SceneConstructionService(BaseService):
             base = self.graph.project_quad(
                 quad,
                 document_id=doc_id,
-                region_id=prefix,
+                element_id=prefix,
                 layer=layer,
                 z_index=z_index,
                 fill=facade_fill,
@@ -158,7 +158,7 @@ class SceneConstructionService(BaseService):
                 win = self.graph.project_quad(
                     win_quad,
                     document_id=doc_id,
-                    region_id=rid,
+                    element_id=rid,
                     layer=layer,
                     z_index=z_index + 1,
                     fill=lit_fill if lit else window_fill,
@@ -180,7 +180,7 @@ class SceneConstructionService(BaseService):
             prefix=prefix,
             windows=rows * columns,
             lit_ratio=lit_ratio,
-            region_count=len(created),
+            element_count=len(created),
         )
 
     def create_surface_stripes(
@@ -189,7 +189,7 @@ class SceneConstructionService(BaseService):
         target_quad: list[list[float]],
         count: int,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         orientation: str = "u",
         start: float = 0.08,
         end: float = 0.92,
@@ -209,7 +209,7 @@ class SceneConstructionService(BaseService):
             raise ValueError("target_quad must contain exactly four points")
         count = max(1, min(100, int(count)))
         resolved_stroke_width = stroke_width_to_norm(doc_id, stroke_width)
-        prefix = region_id or "surface_stripe"
+        prefix = element_id or "surface_stripe"
         start = clamp01(start)
         end = clamp01(end)
         if end <= start:
@@ -239,10 +239,10 @@ class SceneConstructionService(BaseService):
                     quad_point(target_quad, 1.0, p1),
                     quad_point(target_quad, 0.0, p1),
                 ]
-            region = self.graph.project_quad(
+            element = self.graph.project_quad(
                 quad,
                 document_id=doc_id,
-                region_id=f"{prefix}_{i:02d}",
+                element_id=f"{prefix}_{i:02d}",
                 layer=layer,
                 z_index=z_index + i,
                 fill=fill,
@@ -251,7 +251,7 @@ class SceneConstructionService(BaseService):
                 opacity=opacity,
                 metadata={"tool": "create_surface_stripes", "stripe_index": i},
             )
-            created.append(region.id)
+            created.append(element.id)
             pos = p1 + gap * (spacing_falloff ** i)
             if pos >= end:
                 break

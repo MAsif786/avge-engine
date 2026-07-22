@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/add_shading/v1.json",
   "title": "add_shading",
-  "description": "Add directional shading to one region or a shared selector of regions.",
+  "description": "Add directional shading to one element or a shared selector of elements.",
   "type": "object",
   "properties": {
-    "region_id": {
+    "element_id": {
       "type": ["string", "null"],
-      "description": "Legacy single region ID to shade."
+      "description": "Legacy single element ID to shade."
     },
     "selector": {
       "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/selector",
@@ -41,7 +41,7 @@
     }
   },
   "anyOf": [
-    { "required": ["region_id"] },
+    { "required": ["element_id"] },
     { "required": ["selector"] }
   ],
   "additionalProperties": false

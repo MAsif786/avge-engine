@@ -23,7 +23,7 @@
     "rows": { "type": "integer", "minimum": 1, "maximum": 80 },
     "columns": { "type": "integer", "minimum": 1, "maximum": 40 },
     "document_id": { "type": ["string", "null"], "default": null },
-    "region_id": { "type": ["string", "null"], "default": null },
+    "element_id": { "type": ["string", "null"], "default": null },
     "layer": { "type": "string", "default": "architecture" },
     "z_index": { "type": "integer", "default": 0 },
     "facade_fill": { "type": "string", "default": "#2C3542" },

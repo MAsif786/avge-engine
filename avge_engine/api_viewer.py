@@ -233,7 +233,7 @@ def viewer_html() -> str:
           <select id="sort">
             <option value="updated">Updated</option>
             <option value="name">Name</option>
-            <option value="regions">Regions</option>
+            <option value="elements">Elements</option>
             <option value="version">Version</option>
           </select>
           <select id="order">
@@ -298,8 +298,8 @@ def viewer_html() -> str:
       return state.docs
         .filter((d) => `${d.name || ""} ${d.id}`.toLowerCase().includes(q))
         .sort((a, b) => {
-          let av = sort === "regions" ? a.region_count : a[sort];
-          let bv = sort === "regions" ? b.region_count : b[sort];
+          let av = sort === "elements" ? a.element_count : a[sort];
+          let bv = sort === "elements" ? b.element_count : b[sort];
           if (sort === "updated") {
             av = Date.parse(av || "") || 0;
             bv = Date.parse(bv || "") || 0;
@@ -325,7 +325,7 @@ def viewer_html() -> str:
           <div class="doc-title">${escapeHtml(name)}</div>
           <div class="doc-meta">
             <span>ID ${escapeHtml(doc.id)}</span>
-            <span>${doc.region_count} regions</span>
+            <span>${doc.element_count} elements</span>
             <span>v${doc.version}</span>
           </div>
           <div class="doc-meta">${escapeHtml(fmtDate(doc.updated))}</div>`;
@@ -376,7 +376,7 @@ def viewer_html() -> str:
       state.versions = [];
       state.selectedVersion = "current";
       $("selectedName").textContent = doc ? docName(doc) : "No document selected";
-      $("selectedId").textContent = doc ? `${doc.id} - ${doc.region_count} regions - v${doc.version}` : "";
+      $("selectedId").textContent = doc ? `${doc.id} - ${doc.element_count} elements - v${doc.version}` : "";
       renderVersions();
       if (pushRoute) updateRoute(id);
       renderList();

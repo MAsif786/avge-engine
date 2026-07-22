@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/find_objects/v1.json",
   "title": "find_objects",
-  "description": "Query regions using the shared selector schema. Legacy top-level filters are still accepted for compatibility.",
+  "description": "Query elements using the shared selector schema. Legacy top-level filters are still accepted for compatibility.",
   "type": "object",
   "properties": {
     "document_id": { "type": ["string", "null"] },

@@ -12,7 +12,7 @@ from avge_engine.effects.brushes import BRUSH_PRESETS, BrushName, brush_preset_c
 from avge_engine.effects.style import VALID_BLEND_MODES
 from avge_engine.geometry import CurveConstraints
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
-from avge_engine.services.selector_service import select_region_ids
+from avge_engine.services.selector_service import select_element_ids
 from avge_engine.services.style_service import StyleService
 from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
 from avge_engine.utils.math_utils import clamp01
@@ -34,13 +34,13 @@ TEXTURE_EFFECTS = Literal[
     "bloom", "particles", "gradient_light", "rim_light",
 ]
 FX_TYPES = Literal["lens_flare", "motion_blur", "speed_lines", "impact_lines", "particles"]
-COLOR_MIX_OUTPUTS = Literal["return_color", "apply_source", "apply_target", "new_region"]
+COLOR_MIX_OUTPUTS = Literal["return_color", "apply_source", "apply_target", "new_element"]
 
 def _scene_bounds_for_ids(scene, doc_id: str, ids: list[str]) -> dict[str, float] | None:
     boxes = []
     for rid in ids:
         try:
-            bounds = scene.get_region(rid, doc_id).bounds
+            bounds = scene.get_element(rid, doc_id).bounds
         except ValueError:
             continue
         if bounds:
@@ -59,7 +59,7 @@ def _append_unique(base: str, suffix: str) -> str:
 
 
 def _apply_preset(preset_name: str, scene, doc_id: str, ids: list[str]) -> str | None:
-    """Apply a named style preset to a list of region IDs.
+    """Apply a named style preset to a list of element IDs.
     Returns error string on failure, None on success.
     """
     presets = getattr(scene, "PRESETS", None)
@@ -75,8 +75,8 @@ def _apply_preset(preset_name: str, scene, doc_id: str, ids: list[str]) -> str |
     sw = cfg.get("stroke_width")
     for rid in ids:
         try:
-            scene.edit_region(
-                region_id=rid, document_id=doc_id,
+            scene.edit_element(
+                element_id=rid, document_id=doc_id,
                 fill=fill, stroke=stroke, stroke_width=sw,
                 opacity=cfg.get("opacity"), blend_mode=bm,
             )
@@ -90,13 +90,13 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="restyle",
-        description="Change the appearance of a selection of regions. "
+        description="Change the appearance of a selection of elements. "
         "Consolidates recolor_conditional and recolor_palette "
-        "into one tool. Select regions via ``selector``, then apply changes "
+        "into one tool. Select elements via ``selector``, then apply changes "
         "via ``mode``.\n"
         "Modes:\n"
         "  exact — set fill/stroke/opacity directly (directly)\n"
-        "  hsl_offset — shift each region's current color by HSL delta\n"
+        "  hsl_offset — shift each element's current color by HSL delta\n"
         "  palette_swap — replace one exact fill color with another\n"
         "Materials: glass, brushed_metal, concrete, wood, tile, foliage\n"
         "Selector keys: ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke\n"
@@ -123,7 +123,7 @@ def create_tools(mcp):
         material_detail: bool = True,
         material_intensity: float = 0.65,
     ) -> str:
-        """Change region appearance with flexible selection and mode.
+        """Change element appearance with flexible selection and mode.
 
         Args:
             selector: Shared selector. Keys: ids, group_name, layer, fill,
@@ -144,7 +144,7 @@ def create_tools(mcp):
             material: Built-in material preset: glass, brushed_metal,
                 concrete, wood, tile, or foliage. Applies base style and,
                 by default, generated highlight/shadow/texture overlays.
-            material_detail: If True, generate editable overlay regions.
+            material_detail: If True, generate editable overlay elements.
             material_intensity: Overlay strength from 0.0 to 1.0.
         """
         import json
@@ -157,21 +157,21 @@ def create_tools(mcp):
         raw_stroke_width = stroke_width
         stroke_width = stroke_width_to_norm(doc_id, stroke_width)
 
-        target_ids = select_region_ids(scene, doc_id, selector)
+        target_ids = select_element_ids(scene, doc_id, selector)
 
         if not target_ids:
-            return "Error: No matching regions found via selector"
+            return "Error: No matching elements found via selector"
 
         # Set z_index if provided (applied before mode dispatch)
         if z_index is not None:
             for rid in target_ids:
                 try:
-                    scene.edit_region(region_id=rid, document_id=doc_id, z_index=z_index)
+                    scene.edit_element(element_id=rid, document_id=doc_id, z_index=z_index)
                 except (ValueError, RuntimeError):
                     pass
             if all(p is None for p in [fill, stroke, stroke_width, opacity, fill_gradient, blend_mode,
                                         fill_hsl_offset, stroke_hsl_offset, from_color, preset, material]):
-                return f"z_index set to {z_index} on {len(target_ids)} region(s)"
+                return f"z_index set to {z_index} on {len(target_ids)} element(s)"
 
         # Dispatch by mode
         if mode == "palette_swap":
@@ -180,16 +180,16 @@ def create_tools(mcp):
             matches = scene.find_objects(document_id=doc_id, fill=from_color)
             p_ids = [m["id"] for m in matches if m["id"] in target_ids]
             if not p_ids:
-                return f"No regions found with fill='{from_color}'"
+                return f"No elements found with fill='{from_color}'"
             resolved = None if to_color in ("none", "transparent") else to_color
             affected = scene.style_objects(ids=p_ids, document_id=doc_id, fill=resolved)
-            return f"Palette swap: replaced '{from_color}' with '{to_color}' on {len(affected)} region(s)"
+            return f"Palette swap: replaced '{from_color}' with '{to_color}' on {len(affected)} element(s)"
 
         if mode == "hsl_offset":
             affected = 0
             for rid in target_ids:
                 try:
-                    r = scene.get_region(rid, doc_id)
+                    r = scene.get_element(rid, doc_id)
                     kwargs = {}
                     if fill_hsl_offset:
                         cur = r.style.fill
@@ -212,11 +212,11 @@ def create_tools(mcp):
                     if opacity is not None:
                         kwargs["opacity"] = max(0.0, min(1.0, opacity))
                     if kwargs:
-                        scene.edit_region(region_id=rid, document_id=doc_id, **kwargs)
+                        scene.edit_element(element_id=rid, document_id=doc_id, **kwargs)
                         affected += 1
                 except (ValueError, RuntimeError):
                     pass
-            return f"HSL offset applied to {affected} region(s)"
+            return f"HSL offset applied to {affected} element(s)"
 
         # Exact mode (default) — matches style_objects behavior
         if material is None and preset in MATERIAL_PRESETS:
@@ -237,8 +237,8 @@ def create_tools(mcp):
                 )
             except (ValueError, RuntimeError) as e:
                 return f"Error: {e}"
-            detail = f" with {result.detail_count} detail region(s)" if material_detail else ""
-            return f"Material '{result.material}' applied to {result.affected} region(s){detail}"
+            detail = f" with {result.detail_count} detail element(s)" if material_detail else ""
+            return f"Material '{result.material}' applied to {result.affected} element(s){detail}"
 
         if preset:
             presets = getattr(scene, "PRESETS", {})
@@ -250,13 +250,13 @@ def create_tools(mcp):
                 preset_stroke = cfg.get("stroke")
                 preset_sw = cfg.get("stroke_width")
                 for rid in target_ids:
-                    scene.edit_region(
-                        region_id=rid, document_id=doc_id,
+                    scene.edit_element(
+                        element_id=rid, document_id=doc_id,
                         fill=preset_fill, stroke=preset_stroke,
                         stroke_width=preset_sw,
                         opacity=cfg.get("opacity"), blend_mode=bm,
                     )
-                return f"Preset '{preset}' applied to {len(target_ids)} region(s)"
+                return f"Preset '{preset}' applied to {len(target_ids)} element(s)"
 
         # Resolve named gradient reference (defined via define_gradient)
         if isinstance(fill_gradient, str):
@@ -282,7 +282,7 @@ def create_tools(mcp):
             stroke_width=stroke_width, opacity=opacity,
             fill_gradient=fill_gradient, blend_mode=blend_mode,
         )
-        return f"Restyled {len(affected)} region(s)"
+        return f"Restyled {len(affected)} element(s)"
 
 
     @mcp.tool(
@@ -302,7 +302,7 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="apply_brush_style",
-        description="Apply a digital art brush preset to existing regions. "
+        description="Apply a digital art brush preset to existing elements. "
         "Use list_brush_presets to discover supported presets for line art, paint, texture, natural strokes, and FX. "
         "Use restyle(material=...) for substance/surface looks like glass, wood, concrete, tile, or foliage. "
         "Use apply_texture_effect for separate overlay FX such as paper grain, halftone, bloom, and particles; "
@@ -322,7 +322,7 @@ def create_tools(mcp):
         pressure: bool | None = None,
         texture_strength: float = 0.0,
     ) -> str:
-        """Apply a brush preset to selected regions.
+        """Apply a brush preset to selected elements.
 
         Args:
             selector: Common selector: ids, group_name, fill, layer, or tags.
@@ -340,9 +340,9 @@ def create_tools(mcp):
             return "Error: No active document"
         if brush not in BRUSH_PRESETS:
             return f"Error: Unknown brush '{brush}'"
-        target_ids = select_region_ids(scene, doc_id, selector)
+        target_ids = select_element_ids(scene, doc_id, selector)
         if not target_ids:
-            return "Error: No matching regions found"
+            return "Error: No matching elements found"
 
         cfg = BRUSH_PRESETS[brush]
         stroke_color = color or cfg["stroke"]
@@ -357,7 +357,7 @@ def create_tools(mcp):
 
         for rid in target_ids:
             try:
-                region = scene.get_region(rid, doc_id)
+                element = scene.get_element(rid, doc_id)
                 kwargs: dict[str, Any] = {
                     "opacity": resolved_opacity,
                     "blend_mode": resolved_blend,
@@ -373,10 +373,10 @@ def create_tools(mcp):
                     kwargs["fill"] = stroke_color
                 if cfg.get("blur", 0) > 0:
                     kwargs["blur"] = float(cfg["blur"])
-                scene.edit_region(region_id=rid, document_id=doc_id, **kwargs)
+                scene.edit_element(element_id=rid, document_id=doc_id, **kwargs)
                 affected += 1
 
-                if texture_strength > 0 and len(region.outline) >= 2:
+                if texture_strength > 0 and len(element.outline) >= 2:
                     passes = max(1, min(5, round(texture_strength * 5)))
                     for i in range(passes):
                         pts = [
@@ -384,29 +384,29 @@ def create_tools(mcp):
                                 max(0.0, min(1.0, p[0] + rng.uniform(-0.004, 0.004) * texture_strength)),
                                 max(0.0, min(1.0, p[1] + rng.uniform(-0.004, 0.004) * texture_strength)),
                             )
-                            for p in region.outline
+                            for p in element.outline
                         ]
-                        if region.constraints.closed and len(pts) > 2:
+                        if element.constraints.closed and len(pts) > 2:
                             pts.append(pts[0])
                         overlay = scene.create_line(
                             points=pts,
                             document_id=doc_id,
-                            region_id=f"{rid}_{brush}_grain_{i}",
-                            layer=region.layer,
-                            z_index=region.z_index + 1,
+                            element_id=f"{rid}_{brush}_grain_{i}",
+                            layer=element.layer,
+                            z_index=element.z_index + 1,
                             stroke=stroke_color,
                             stroke_width=stroke_width * rng.uniform(0.45, 0.8),
                             opacity=resolved_opacity * 0.35 * texture_strength,
                             blend_mode=resolved_blend,
                             stroke_linecap="round",
-                            smoothness=region.constraints.smoothness,
+                            smoothness=element.constraints.smoothness,
                         )
                         overlay.metadata.update({"brush_overlay_for": rid, "brush": brush})
                         overlays.append(overlay.id)
             except (ValueError, RuntimeError):
                 continue
 
-        return f"Brush '{brush}' applied to {affected} region(s), overlays={len(overlays)}"
+        return f"Brush '{brush}' applied to {affected} element(s), overlays={len(overlays)}"
 
 
     @mcp.tool(
@@ -422,15 +422,15 @@ def create_tools(mcp):
         opacity: float | None = None,
         blend_mode: BLEND_MODES | None = None,
     ) -> str:
-        """Tag every region on a layer with a workflow role."""
+        """Tag every element on a layer with a workflow role."""
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
-        target_ids = select_region_ids(scene, doc_id, {"layer": layer})
+        target_ids = select_element_ids(scene, doc_id, {"layer": layer})
         if not target_ids:
-            return f"Error: No regions found on layer '{layer}'"
+            return f"Error: No elements found on layer '{layer}'"
         base = LAYER_ROLE_Z.get(role, 0) if z_base is None else z_base
         affected = 0
         for idx, rid in enumerate(target_ids):
@@ -451,11 +451,11 @@ def create_tools(mcp):
                     kwargs["blend_mode"] = "multiply"
                 elif role in ("highlight", "glow", "fx"):
                     kwargs["blend_mode"] = "screen"
-                scene.edit_region(region_id=rid, document_id=doc_id, **kwargs)
+                scene.edit_element(element_id=rid, document_id=doc_id, **kwargs)
                 affected += 1
             except (ValueError, RuntimeError):
                 continue
-        return f"Layer '{layer}' role set to '{role}' on {affected} region(s)"
+        return f"Layer '{layer}' role set to '{role}' on {affected} element(s)"
 
 
     @mcp.tool(
@@ -489,7 +489,7 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
-        target_ids = select_region_ids(scene, doc_id, selector)
+        target_ids = select_element_ids(scene, doc_id, selector)
         if clip_to and not target_ids:
             target_ids = [clip_to]
         box = None
@@ -498,14 +498,14 @@ def create_tools(mcp):
         elif target_ids:
             box = _scene_bounds_for_ids(scene, doc_id, target_ids)
         if not box:
-            return "Error: bounds or matching regions required"
+            return "Error: bounds or matching elements required"
 
         base_clip = clip_to or (target_ids[0] if len(target_ids) == 1 else None)
         base_layer = layer
         base_z = z_index
         if base_clip:
             try:
-                src = scene.get_region(base_clip, doc_id)
+                src = scene.get_element(base_clip, doc_id)
                 base_layer = base_layer or src.layer
                 base_z = base_z if base_z is not None else src.z_index + 4
             except ValueError:
@@ -518,10 +518,10 @@ def create_tools(mcp):
         x, y, w, h = box["x"], box["y"], max(0.001, box["w"]), max(0.001, box["h"])
         resolved_blend = blend_mode
 
-        def mark(region):
-            region.clip_to = base_clip
-            region.metadata.update({"tool": "apply_texture_effect", "effect": effect})
-            created.append(region.id)
+        def mark(element):
+            element.clip_to = base_clip
+            element.metadata.update({"tool": "apply_texture_effect", "effect": effect})
+            created.append(element.id)
 
         try:
             if effect in ("halftone", "screen_tone"):
@@ -537,7 +537,7 @@ def create_tools(mcp):
                         r = scene.create_ellipse(
                             px, py, dot_r * rng.uniform(0.75, 1.15),
                             document_id=doc_id,
-                            region_id=f"fx_{effect}_{len(created):03d}",
+                            element_id=f"fx_{effect}_{len(created):03d}",
                             layer=base_layer,
                             z_index=base_z,
                             fill=color,
@@ -557,7 +557,7 @@ def create_tools(mcp):
                     r = scene.create_line(
                         points=[(px, py), p2],
                         document_id=doc_id,
-                        region_id=f"fx_{effect}_{i:03d}",
+                        element_id=f"fx_{effect}_{i:03d}",
                         layer=base_layer,
                         z_index=base_z,
                         stroke=color if i % 3 else (secondary_color or color),
@@ -571,13 +571,13 @@ def create_tools(mcp):
                 ids = target_ids or ([base_clip] if base_clip else [])
                 for rid in ids:
                     try:
-                        src = scene.get_region(rid, doc_id)
+                        src = scene.get_element(rid, doc_id)
                     except ValueError:
                         continue
-                    r = scene.create_region(
+                    r = scene.create_element(
                         outline=src.outline,
                         document_id=doc_id,
-                        region_id=_append_unique(rid, "bloom"),
+                        element_id=_append_unique(rid, "bloom"),
                         layer=base_layer,
                         z_index=src.z_index + 3,
                         constraints=src.constraints,
@@ -594,7 +594,7 @@ def create_tools(mcp):
                     r = scene.create_ellipse(
                         px, py, dot,
                         document_id=doc_id,
-                        region_id=f"fx_particle_{i:03d}",
+                        element_id=f"fx_particle_{i:03d}",
                         layer=base_layer,
                         z_index=base_z + i % 3,
                         fill=color if i % 4 else (secondary_color or color),
@@ -625,10 +625,10 @@ def create_tools(mcp):
                     stroke = color
                     sw = max(wnorm, min(w, h) * 0.035)
                     outline = [(x + 0.06 * w, y + 0.08 * h), (x + 0.55 * w, y), (x + 0.94 * w, y + 0.20 * h)]
-                r = scene.create_region(
+                r = scene.create_element(
                     outline=outline,
                     document_id=doc_id,
-                    region_id=f"fx_{effect}_{seed}",
+                    element_id=f"fx_{effect}_{seed}",
                     layer=base_layer,
                     z_index=base_z,
                     clip_to=base_clip,
@@ -643,7 +643,7 @@ def create_tools(mcp):
             return f"Error: {exc}"
 
         scene._persist(doc_id)
-        return f"Texture effect '{effect}' created {len(created)} region(s)"
+        return f"Texture effect '{effect}' created {len(created)} element(s)"
 
 
     @mcp.tool(
@@ -674,14 +674,14 @@ def create_tools(mcp):
         clip_to: str | None = None,
         seed: int = 1,
     ) -> str:
-        """Create vector FX regions and lines."""
+        """Create vector FX elements and lines."""
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
 
-        target_ids = select_region_ids(scene, doc_id, selector)
+        target_ids = select_element_ids(scene, doc_id, selector)
         box = None
         if bounds:
             if len(bounds) != 4:
@@ -704,17 +704,17 @@ def create_tools(mcp):
         resolved_opacity = clamp01(opacity * intensity)
         safe_count = max(1, min(500, int(count)))
 
-        def mark(region, part: str):
-            region.clip_to = clip_to
-            region.metadata.update({"tool": "apply_fx", "fx_type": type, "part": part})
-            created.append(region.id)
-            return region
+        def mark(element, part: str):
+            element.clip_to = clip_to
+            element.metadata.update({"tool": "apply_fx", "fx_type": type, "part": part})
+            created.append(element.id)
+            return element
 
         def add_line(part: str, points, stroke: str, sw: float, op: float, smooth: float = 0.0):
             r = scene.create_line(
                 points=points,
                 document_id=doc_id,
-                region_id=f"fx_{type}_{part}_{len(created):03d}",
+                element_id=f"fx_{type}_{part}_{len(created):03d}",
                 layer=layer,
                 z_index=z_index + len(created),
                 stroke=stroke,
@@ -733,7 +733,7 @@ def create_tools(mcp):
                 radius,
                 radius,
                 document_id=doc_id,
-                region_id=f"fx_{type}_{part}_{len(created):03d}",
+                element_id=f"fx_{type}_{part}_{len(created):03d}",
                 layer=layer,
                 z_index=z_index + len(created),
                 fill=fill,
@@ -788,16 +788,16 @@ def create_tools(mcp):
                 if ids:
                     for rid in ids:
                         try:
-                            src = scene.get_region(rid, doc_id)
+                            src = scene.get_element(rid, doc_id)
                         except ValueError:
                             continue
                         for i in range(max(2, min(8, safe_count))):
                             d = length * (i + 1) / max(2, min(8, safe_count))
                             outline = [(px - math.cos(theta) * d, py - math.sin(theta) * d) for px, py in src.outline]
-                            r = scene.create_region(
+                            r = scene.create_element(
                                 outline=outline,
                                 document_id=doc_id,
-                                region_id=f"fx_motion_blur_{rid}_{i}",
+                                element_id=f"fx_motion_blur_{rid}_{i}",
                                 layer=layer,
                                 z_index=z_index + len(created),
                                 constraints=src.constraints,
@@ -817,31 +817,31 @@ def create_tools(mcp):
             return f"Error: {exc}"
 
         scene._persist(doc_id)
-        return f"FX '{type}' created {len(created)} region(s)"
+        return f"FX '{type}' created {len(created)} element(s)"
 
 
     @mcp.tool(
-        name="mix_region_colors",
-        description="Mix colors from two existing regions and return, apply, or duplicate the result. "
+        name="mix_element_colors",
+        description="Mix colors from two existing elements and return, apply, or duplicate the result. "
         "Use this when a requested color should be derived from existing artwork instead of invented manually. "
         "Only solid hex fill/stroke colors are mixed; gradients and named paints are rejected.",
     )
-    def mix_region_colors(
-        source_region_id: str,
-        target_region_id: str,
+    def mix_element_colors(
+        source_element_id: str,
+        target_element_id: str,
         document_id: str | None = None,
         mix_ratio: float = 0.5,
         source_channel: Literal["fill", "stroke"] = "fill",
         target_channel: Literal["fill", "stroke"] = "fill",
         output: COLOR_MIX_OUTPUTS = "return_color",
         apply_to: Literal["fill", "stroke", "both"] = "fill",
-        new_region_id: str | None = None,
+        new_element_id: str | None = None,
         offset_x: float = 0.02,
         offset_y: float = 0.02,
         opacity: float | None = None,
         blend_mode: BLEND_MODES | None = None,
     ) -> dict[str, Any] | str:
-        """Mix two existing region colors and optionally apply the result."""
+        """Mix two existing element colors and optionally apply the result."""
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
@@ -849,8 +849,8 @@ def create_tools(mcp):
             return "Error: No active document"
 
         try:
-            source = scene.get_region(source_region_id, doc_id)
-            target = scene.get_region(target_region_id, doc_id)
+            source = scene.get_element(source_element_id, doc_id)
+            target = scene.get_element(target_element_id, doc_id)
         except ValueError as exc:
             return f"Error: {exc}"
 
@@ -866,9 +866,9 @@ def create_tools(mcp):
         if mixed is None:
             return "Error: Could not mix colors"
         metadata = {
-            "tool": "mix_region_colors",
-            "source_region_id": source_region_id,
-            "target_region_id": target_region_id,
+            "tool": "mix_element_colors",
+            "source_element_id": source_element_id,
+            "target_element_id": target_element_id,
             "source_color": source_color,
             "target_color": target_color,
             "mix_ratio": ratio,
@@ -891,16 +891,16 @@ def create_tools(mcp):
             return kwargs
 
         if output == "apply_source":
-            scene.edit_region(region_id=source_region_id, document_id=doc_id, **style_kwargs())
-            return f"Mixed color {mixed} applied to source region '{source_region_id}'"
+            scene.edit_element(element_id=source_element_id, document_id=doc_id, **style_kwargs())
+            return f"Mixed color {mixed} applied to source element '{source_element_id}'"
         if output == "apply_target":
-            scene.edit_region(region_id=target_region_id, document_id=doc_id, **style_kwargs())
-            return f"Mixed color {mixed} applied to target region '{target_region_id}'"
-        if output == "new_region":
-            rid = new_region_id or f"{source_region_id}_mix_{target_region_id}"
-            duplicate = scene.duplicate_region(
-                region_id=source_region_id,
-                new_region_id=rid,
+            scene.edit_element(element_id=target_element_id, document_id=doc_id, **style_kwargs())
+            return f"Mixed color {mixed} applied to target element '{target_element_id}'"
+        if output == "new_element":
+            rid = new_element_id or f"{source_element_id}_mix_{target_element_id}"
+            duplicate = scene.duplicate_element(
+                element_id=source_element_id,
+                new_element_id=rid,
                 document_id=doc_id,
                 offset_x=offset_x,
                 offset_y=offset_y,
@@ -911,17 +911,17 @@ def create_tools(mcp):
                 z_index=source.z_index + 1,
             )
             duplicate.metadata.update(metadata)
-            scene._auto_checkpoint(doc_id, "mix_region_colors", duplicate.id)
+            scene._auto_checkpoint(doc_id, "mix_element_colors", duplicate.id)
             scene._persist(doc_id)
-            return f"Mixed color {mixed} created new region '{duplicate.id}'"
+            return f"Mixed color {mixed} created new element '{duplicate.id}'"
         return f"Error: Unknown output '{output}'"
 
 
     @mcp.tool(
         name="apply_depth_haze",
-        description="Apply atmospheric perspective to existing regions by blending fills/strokes toward a haze color "
+        description="Apply atmospheric perspective to existing elements by blending fills/strokes toward a haze color "
         "based on distance. Use for far buildings, skyline, canals, and background layers so scenes gain depth "
-        "without manually restyling every region.",
+        "without manually restyling every element.",
     )
     def apply_depth_haze(
         document_id: str | None = None,
@@ -934,13 +934,13 @@ def create_tools(mcp):
         affect_stroke: bool = True,
         opacity_falloff: float = 0.0,
     ) -> str:
-        """Blend selected regions toward haze_color based on their vertical depth.
+        """Blend selected elements toward haze_color based on their vertical depth.
 
         Args:
-            selector: Shared selector. Omitted means all regions.
+            selector: Shared selector. Omitted means all elements.
             haze_color: Hex color to blend toward, typically sky/horizon color.
-            near_y: Regions at or below this center-y get no haze.
-            far_y: Regions at or above this center-y get max_strength haze.
+            near_y: Elements at or below this center-y get no haze.
+            far_y: Elements at or above this center-y get max_strength haze.
             max_strength: Maximum blend amount.
             affect_fill: Blend hex fills.
             affect_stroke: Blend hex strokes.
@@ -961,12 +961,12 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
         except LookupError:
-            return "Error: No matching regions found"
+            return "Error: No matching elements found"
         except ValueError as e:
             return f"Error: {e}"
 
         return (
-            f"Depth haze applied to {result.affected} region(s) "
+            f"Depth haze applied to {result.affected} element(s) "
             f"(haze_color={result.haze_color}, max_strength={result.max_strength})"
         )
 
@@ -975,7 +975,7 @@ def create_tools(mcp):
         name="generate_palette",
         description="Generate a color harmony palette. Returns hex values "
         "the agent can use for fills/strokes. "
-        "💡 Use instead of inventing arbitrary hex values per region. "
+        "💡 Use instead of inventing arbitrary hex values per element. "
         "Feed the output into restyle(selector={...}, fill="#...").",
     )
     def generate_palette(
@@ -1048,8 +1048,8 @@ def create_tools(mcp):
         name="define_gradient",
         description="Store a named gradient definition. The returned gradient "
         "dict can be referenced in restyle(fill_gradient=...) or "
-        "create_region(fill_gradient=...). "
-        "💡 Define once, reuse across many regions.",
+        "create_element(fill_gradient=...). "
+        "💡 Define once, reuse across many elements.",
     )
     def define_gradient(
         name: str,
@@ -1093,7 +1093,7 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="apply_line_hierarchy",
-        description="Automate stroke-weight by depth: outer silhouette regions "
+        description="Automate stroke-weight by depth: outer silhouette elements "
         "get thicker strokes, internal detail gets thinner. "
         "Accepts the shared selector shape to limit the pass to ids, group_name, layer, fill, tags, bounds, z_min, z_max, or has_stroke. "
         "💡 Apply after building a scene to enforce consistent line hierarchy.",
@@ -1109,9 +1109,9 @@ def create_tools(mcp):
 
         Args:
             document_id: Document UUID.
-            selector: Shared selector. Omit/null to process all regions.
-            outer_width: Stroke width for silhouette/outer regions in canvas pixels.
-            inner_width: Stroke width for internal detail regions in canvas pixels.
+            selector: Shared selector. Omit/null to process all elements.
+            outer_width: Stroke width for silhouette/outer elements in canvas pixels.
+            inner_width: Stroke width for internal detail elements in canvas pixels.
             basis: "z_index", "layer", or "bounding_size".
         """
         try:
@@ -1125,7 +1125,7 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
         except LookupError:
-            return "Error: No regions found"
+            return "Error: No elements found"
         except ValueError as e:
             return f"Error: {e}"
 
@@ -1154,11 +1154,11 @@ def create_tools(mcp):
             if not scene.load_document(doc_id):
                 results.append(f"[{doc_id}] not found")
                 continue
-            regions = scene.get_all_regions(doc_id)
+            elements = scene.get_all_elements(doc_id)
             fills = set()
             strokes = set()
             sws = set()
-            for r in regions:
+            for r in elements:
                 if isinstance(r.style.fill, str) and r.style.fill.startswith("#"):
                     fills.add(r.style.fill.upper())
                 if isinstance(r.style.stroke, str) and r.style.stroke.startswith("#"):
@@ -1176,7 +1176,7 @@ def create_tools(mcp):
             all_fills = [set() for _ in document_ids]
             for i, doc_id in enumerate(document_ids):
                 if scene.load_document(doc_id):
-                    for r in scene.get_all_regions(doc_id):
+                    for r in scene.get_all_elements(doc_id):
                         if isinstance(r.style.fill, str) and r.style.fill.startswith("#"):
                             all_fills[i].add(r.style.fill.upper())
             if len(document_ids) >= 2:

@@ -1,4 +1,4 @@
-from avge_engine.controllers import region, style
+from avge_engine.controllers import element, style
 from avge_engine.effects import Style
 from avge_engine.services.engine import reset_graph
 
@@ -16,34 +16,34 @@ class _FakeMCP:
 
 def _setup():
     reset_graph()
-    region_mcp = _FakeMCP()
+    element_mcp = _FakeMCP()
     style_mcp = _FakeMCP()
-    region.create_tools(region_mcp)
+    element.create_tools(element_mcp)
     style.create_tools(style_mcp)
-    graph = region.get_graph()
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="panel",
+        element_id="panel",
         outline=[(0.2, 0.2), (0.8, 0.2), (0.8, 0.7), (0.2, 0.7)],
         layer="base",
     )
     graph.create_line(
         points=[(0.25, 0.3), (0.45, 0.25), (0.65, 0.36)],
         document_id=doc.id,
-        region_id="line",
+        element_id="line",
         layer="ink",
     )
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="warm",
+        element_id="warm",
         outline=[(0.1, 0.75), (0.25, 0.75), (0.25, 0.9), (0.1, 0.9)],
         layer="swatches",
         style=Style(fill="#FF0000"),
     )
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="cool",
+        element_id="cool",
         outline=[(0.3, 0.75), (0.45, 0.75), (0.45, 0.9), (0.3, 0.9)],
         layer="swatches",
         style=Style(fill="#0000FF"),
@@ -63,8 +63,8 @@ def test_apply_brush_style_updates_vector_style_and_metadata():
         texture_strength=0.4,
     )
 
-    line = graph.get_region("line", doc.id)
-    overlays = [r for r in graph.get_all_regions(doc.id) if r.metadata.get("brush_overlay_for") == "line"]
+    line = graph.get_element("line", doc.id)
+    overlays = [r for r in graph.get_all_elements(doc.id) if r.metadata.get("brush_overlay_for") == "line"]
     assert "Brush 'g_pen' applied" in result
     assert line.style.stroke == "#111111"
     assert line.metadata["brush"] == "g_pen"
@@ -81,7 +81,7 @@ def test_apply_brush_style_supports_line_art_pen_presets():
         brush="technical_pen",
     )
 
-    line = graph.get_region("line", doc.id)
+    line = graph.get_element("line", doc.id)
     assert "Brush 'technical_pen' applied" in result
     assert line.metadata["brush"] == "technical_pen"
     assert line.style.stroke == "#101010"
@@ -113,7 +113,7 @@ def test_apply_brush_style_supports_background_and_fx_aliases():
         brush="water_brush",
     )
 
-    line = graph.get_region("line", doc.id)
+    line = graph.get_element("line", doc.id)
     assert "Brush 'water_brush' applied" in result
     assert line.metadata["brush"] == "water_brush"
     assert line.style.blend_mode == "screen"
@@ -121,17 +121,17 @@ def test_apply_brush_style_supports_background_and_fx_aliases():
 
 def test_refine_line_tool_corrects_existing_linework():
     graph, doc, _ = _setup()
-    region_mcp = _FakeMCP()
-    region.create_tools(region_mcp)
+    element_mcp = _FakeMCP()
+    element.create_tools(element_mcp)
 
-    result = region_mcp.tools["refine_line"](
+    result = element_mcp.tools["refine_line"](
         document_id=doc.id,
-        region_id="line",
+        element_id="line",
         mode="straighten",
         smoothness=0.0,
     )
 
-    line = graph.get_region("line", doc.id)
+    line = graph.get_element("line", doc.id)
     assert "Line refined: id=line" in result
     assert len(line.outline) == 2
     assert line.constraints.smoothness == 0.0
@@ -146,7 +146,7 @@ def test_set_layer_role_normalizes_layer_metadata_and_style():
         role="shadow",
     )
 
-    panel = graph.get_region("panel", doc.id)
+    panel = graph.get_element("panel", doc.id)
     assert "role set to 'shadow'" in result
     assert panel.metadata["layer_role"] == "shadow"
     assert panel.style.blend_mode == "multiply"
@@ -166,7 +166,7 @@ def test_apply_texture_effect_creates_clipped_halftone_overlay():
     )
 
     created = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("tool") == "apply_texture_effect"
     ]
     assert "Texture effect 'halftone'" in result
@@ -187,7 +187,7 @@ def test_apply_texture_effect_creates_bloom_with_blur():
     )
 
     blooms = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("effect") == "bloom"
     ]
     assert len(blooms) == 1
@@ -208,15 +208,15 @@ def test_apply_fx_creates_speed_lines_from_bounds():
     )
 
     created = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("tool") == "apply_fx"
     ]
-    assert "FX 'speed_lines' created 8 region" in result
+    assert "FX 'speed_lines' created 8 element" in result
     assert all(r.metadata["fx_type"] == "speed_lines" for r in created)
     assert all(r.style.blend_mode == "screen" for r in created)
 
 
-def test_apply_fx_motion_blur_uses_selector_source_regions():
+def test_apply_fx_motion_blur_uses_selector_source_elements():
     graph, doc, style_mcp = _setup()
 
     result = style_mcp.tools["apply_fx"](
@@ -229,20 +229,20 @@ def test_apply_fx_motion_blur_uses_selector_source_regions():
     )
 
     trails = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("fx_type") == "motion_blur"
     ]
-    assert "FX 'motion_blur' created 3 region" in result
+    assert "FX 'motion_blur' created 3 element" in result
     assert all(r.metadata.get("source") == "panel" for r in trails)
 
 
-def test_mix_region_colors_can_return_mixed_color():
+def test_mix_element_colors_can_return_mixed_color():
     _, doc, style_mcp = _setup()
 
-    result = style_mcp.tools["mix_region_colors"](
+    result = style_mcp.tools["mix_element_colors"](
         document_id=doc.id,
-        source_region_id="warm",
-        target_region_id="cool",
+        source_element_id="warm",
+        target_element_id="cool",
         mix_ratio=0.5,
     )
 
@@ -251,36 +251,36 @@ def test_mix_region_colors_can_return_mixed_color():
     assert result["target_color"] == "#0000FF"
 
 
-def test_mix_region_colors_can_apply_to_target():
+def test_mix_element_colors_can_apply_to_target():
     graph, doc, style_mcp = _setup()
 
-    result = style_mcp.tools["mix_region_colors"](
+    result = style_mcp.tools["mix_element_colors"](
         document_id=doc.id,
-        source_region_id="warm",
-        target_region_id="cool",
+        source_element_id="warm",
+        target_element_id="cool",
         mix_ratio=0.25,
         output="apply_target",
     )
 
-    cool = graph.get_region("cool", doc.id)
-    assert "applied to target region 'cool'" in result
+    cool = graph.get_element("cool", doc.id)
+    assert "applied to target element 'cool'" in result
     assert cool.style.fill == "#BF0040"
     assert cool.metadata["mixed_color"] == "#BF0040"
 
 
-def test_mix_region_colors_can_create_new_region():
+def test_mix_element_colors_can_create_new_element():
     graph, doc, style_mcp = _setup()
 
-    result = style_mcp.tools["mix_region_colors"](
+    result = style_mcp.tools["mix_element_colors"](
         document_id=doc.id,
-        source_region_id="warm",
-        target_region_id="cool",
+        source_element_id="warm",
+        target_element_id="cool",
         mix_ratio=0.75,
-        output="new_region",
-        new_region_id="mixed_swatch",
+        output="new_element",
+        new_element_id="mixed_swatch",
     )
 
-    mixed = graph.get_region("mixed_swatch", doc.id)
-    assert "created new region 'mixed_swatch'" in result
+    mixed = graph.get_element("mixed_swatch", doc.id)
+    assert "created new element 'mixed_swatch'" in result
     assert mixed.style.fill == "#4000BF"
-    assert mixed.metadata["tool"] == "mix_region_colors"
+    assert mixed.metadata["tool"] == "mix_element_colors"

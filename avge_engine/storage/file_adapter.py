@@ -2,7 +2,7 @@
 File-based storage adapter — saves documents as JSON files on disk.
 
 Each document is a .json file named <doc_id>.json in a storage directory.
-Includes document metadata and all regions as serializable dicts.
+Includes document metadata and all elements as serializable dicts.
 
 Supports hot-reload: saves every mutation, loads on demand.
 Uses atomic writes (write to .tmp → rename) to prevent race conditions
@@ -93,7 +93,7 @@ class FileStorageAdapter(StorageAdapter):
                     "id": doc.get("id", path.stem),
                     "name": doc.get("name", ""),
                     "version": doc.get("version", 0),
-                    "region_count": len(data.get("regions", {})),
+                    "element_count": len(data.get("elements", {})),
                     "updated": meta.get("updated", ""),
                     "storage_format": meta.get("storage_format", "legacy"),
                 })

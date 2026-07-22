@@ -42,13 +42,13 @@ class DocumentService(BaseService):
         set_active_doc(doc.id)
         return doc
 
-    def get_document_summary(self, document_id: str | None = None, *, include_regions: bool = False) -> DocumentSummary:
+    def get_document_summary(self, document_id: str | None = None, *, include_elements: bool = False) -> DocumentSummary:
         doc_id = resolve_doc(document_id)
         desc = self.graph.describe_scene(doc_id)
         return DocumentSummary(
             document=desc["document"],
-            region_count=desc["region_count"],
-            regions=desc["regions"] if include_regions else None,
+            element_count=desc["element_count"],
+            elements=desc["elements"] if include_elements else None,
         )
 
     def list_documents(self) -> list[dict[str, Any]]:
@@ -66,7 +66,7 @@ class DocumentService(BaseService):
         if set_active:
             set_active_doc(clone.id)
         desc = self.graph.describe_scene(clone.id)
-        return clone, source_id, desc["region_count"]
+        return clone, source_id, desc["element_count"]
 
     def delete_documents(self, ids: list[str], *, confirm: bool = False) -> DeleteDocumentsResult:
         stored = {d["id"]: d for d in list_stored_documents()}
@@ -124,8 +124,8 @@ class DocumentService(BaseService):
         desc = self.graph.describe_scene(document_id)
         return DocumentSummary(
             document=desc["document"],
-            region_count=desc["region_count"],
-            regions=desc["regions"],
+            element_count=desc["element_count"],
+            elements=desc["elements"],
         )
 
     @staticmethod

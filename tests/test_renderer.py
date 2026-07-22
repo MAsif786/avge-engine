@@ -11,7 +11,7 @@ def _doc(scene):
 def test_svg_output():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
+    scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
     svg = svg_serialize(scene, did)
     assert '<?xml' in svg
     assert '<svg' in svg
@@ -26,11 +26,11 @@ def test_svg_background():
     assert '#FF0000' in svg
 
 
-def test_svg_multiple_regions():
+def test_svg_multiple_elements():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.create_region(document_id=did, region_id="r2", outline=[(0.2,0.2),(0.8,0.2),(0.8,0.8),(0.2,0.8)])
+    scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
+    scene.create_element(document_id=did, element_id="r2", outline=[(0.2,0.2),(0.8,0.2),(0.8,0.8),(0.2,0.8)])
     svg = svg_serialize(scene, did)
     assert svg.count('<path') == 2
 
@@ -55,7 +55,7 @@ def test_svg_primitive_ellipse():
 def test_svg_polygon_smoothness_zero():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)],
+    scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)],
                         constraints=CurveConstraints(smoothness=0.0))
     svg = svg_serialize(scene, did)
     assert '<polygon' in svg
@@ -64,8 +64,8 @@ def test_svg_polygon_smoothness_zero():
 def test_svg_clip_path():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="clip", outline=[(0.1,0.1),(0.9,0.1),(0.9,0.9),(0.1,0.9)])
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)], clip_to="clip")
+    scene.create_element(document_id=did, element_id="clip", outline=[(0.1,0.1),(0.9,0.1),(0.9,0.9),(0.1,0.9)])
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)], clip_to="clip")
     svg = svg_serialize(scene, did)
     assert '<clipPath' in svg
     assert 'clip-path=' in svg
@@ -74,13 +74,13 @@ def test_svg_clip_path():
 def test_svg_z_order():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="back", outline=[(0,0),(1,0),(1,1),(0,1)], z_index=0)
-    scene.create_region(document_id=did, region_id="front", outline=[(0.2,0.2),(0.8,0.2),(0.8,0.8),(0.2,0.8)], z_index=10)
+    scene.create_element(document_id=did, element_id="back", outline=[(0,0),(1,0),(1,1),(0,1)], z_index=0)
+    scene.create_element(document_id=did, element_id="front", outline=[(0.2,0.2),(0.8,0.2),(0.8,0.8),(0.2,0.8)], z_index=10)
     svg = svg_serialize(scene, did)
-    # Region order in SVG
+    # Element order in SVG
     back_pos = svg.index('back') if 'back' in svg else -1
     front_pos = svg.index('front') if 'front' in svg else -1
-    # SVG doesn't include region IDs, but both paths should be present
+    # SVG doesn't include element IDs, but both paths should be present
     assert svg.count('<path') == 2
 
 
@@ -93,7 +93,7 @@ def test_svg_gradient():
               "stops": [{"offset": 0, "color": "#FFF"}, {"offset": 1, "color": "#000"}]},
         stroke="#000",
     )
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)], style=gradient_style)
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)], style=gradient_style)
     svg = svg_serialize(scene, did)
     assert '<linearGradient' in svg
     assert 'url(#' in svg
@@ -129,7 +129,7 @@ def test_curve_sample():
 def test_svg_blend_mode():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#F00", blend_mode="multiply"))
     svg = svg_serialize(scene, did)
     assert 'mix-blend-mode' in svg
@@ -138,7 +138,7 @@ def test_svg_blend_mode():
 def test_svg_opacity():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#F00", opacity=0.5))
     svg = svg_serialize(scene, did)
     assert 'opacity=' in svg
@@ -162,7 +162,7 @@ def test_svg_text_combines_primitive_and_style_opacity_once():
     scene = SceneGraph()
     did = _doc(scene)
     r = scene.create_text(0.5, 0.5, "Hello", document_id=did, opacity=0.9)
-    scene.edit_region(r.id, document_id=did, opacity=0.5)
+    scene.edit_element(r.id, document_id=did, opacity=0.5)
 
     svg = svg_serialize(scene, did)
 
@@ -193,7 +193,7 @@ def test_svg_image():
 def test_svg_image_clip_path():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_ellipse(0.5, 0.5, 0.2, 0.15, document_id=did, region_id="clip")
+    scene.create_ellipse(0.5, 0.5, 0.2, 0.15, document_id=did, element_id="clip")
     scene.insert_image(
         0.2,
         0.2,
@@ -201,7 +201,7 @@ def test_svg_image_clip_path():
         0.5,
         "data:image/png;base64,abc",
         document_id=did,
-        region_id="img",
+        element_id="img",
         clip_to="clip",
     )
 
@@ -213,34 +213,34 @@ def test_svg_image_clip_path():
     assert 'clip-path="url(#clip_clip)"' in image_line
 
 
-def test_edit_region_shape_rect():
+def test_edit_element_shape_rect():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.edit_region("r", document_id=did, shape={"type": "rect", "x": 0.1, "y": 0.1,
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
+    scene.edit_element("r", document_id=did, shape={"type": "rect", "x": 0.1, "y": 0.1,
                                                     "width": 0.5, "height": 0.3, "rx": 0.05})
-    r = scene.get_region("r", did)
+    r = scene.get_element("r", did)
     assert r.primitive["type"] == "rect"
     assert r.primitive["width"] == 0.5
 
 
-def test_edit_region_shape_ellipse():
+def test_edit_element_shape_ellipse():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.edit_region("r", document_id=did,
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
+    scene.edit_element("r", document_id=did,
                        shape={"type": "ellipse", "cx": 0.5, "cy": 0.5, "rx": 0.2})
-    r = scene.get_region("r", did)
+    r = scene.get_element("r", did)
     assert r.primitive["type"] == "ellipse"
 
 
-def test_edit_region_outline_update():
+def test_edit_element_outline_update():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.edit_region("r", document_id=did, smoothness=0.8,
+    scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
+    scene.edit_element("r", document_id=did, smoothness=0.8,
                        tensions=(0.5, 0.5, 0.5, 0.5))
-    r = scene.get_region("r", did)
+    r = scene.get_element("r", did)
     assert r.constraints.smoothness == 0.8
 
 
@@ -256,10 +256,10 @@ def test_png_symbol_font_fallback():
     assert 'Apple Symbols' in svg, 'SVG should include Apple Symbols font fallback'
 
 
-def test_edit_region_stroke_dasharray():
+def test_edit_element_stroke_dasharray():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_line(0.1, 0.1, 0.9, 0.9, document_id=did, region_id="line1")
-    scene.edit_region("line1", document_id=did, stroke_dasharray="4,2")
-    r = scene.get_region("line1", did)
+    scene.create_line(0.1, 0.1, 0.9, 0.9, document_id=did, element_id="line1")
+    scene.edit_element("line1", document_id=did, stroke_dasharray="4,2")
+    r = scene.get_element("line1", did)
     assert r.style.stroke_dasharray == "4,2"

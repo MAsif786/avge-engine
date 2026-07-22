@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/style_objects/v1.json",
   "title": "style_objects",
-  "description": "Update the visual style of one or more existing regions. Only provided fields are changed; omitted fields are left untouched.",
+  "description": "Update the visual style of one or more existing elements. Only provided fields are changed; omitted fields are left untouched.",
   "type": "object",
   "properties": {
     "ids": {
       "type": ["array", "null"],
-      "description": "Region IDs to restyle.",
+      "description": "Element IDs to restyle.",
       "items": { "type": "string" },
       "minItems": 1,
       "maxItems": 200
@@ -39,7 +39,7 @@
     },
     "material_detail": {
       "type": "boolean",
-      "description": "When material is provided, generate editable highlight/shadow/texture detail regions.",
+      "description": "When material is provided, generate editable highlight/shadow/texture detail elements.",
       "default": true
     },
     "material_intensity": {

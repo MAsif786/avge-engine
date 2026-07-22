@@ -20,7 +20,7 @@ class StorageAdapter(ABC):
 
     Each document is stored as a dict with keys:
       - document: DocumentNode as dict
-      - regions: {region_id: RegionNode as dict}
+      - elements: {element_id: ElementNode as dict}
       - metadata: {created, updated, version, ...}
     """
 

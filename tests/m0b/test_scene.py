@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from avge_engine.scene import SceneGraph, CurveConstraints, ElementNode, Style, RegionNode
+from avge_engine.scene import SceneGraph, CurveConstraints, ElementNode, Style, ElementNode
 from avge_engine.geometry import fit_curves, compute_bounds, normalize_outline
 from avge_engine.renderer import svg_serialize
 
@@ -31,43 +31,43 @@ class TestSceneGraph:
         doc2 = scene.create_document()
         assert doc1.id != doc2.id
 
-    def test_clone_document_copies_regions_gradients_and_groups(self):
+    def test_clone_document_copies_elements_gradients_and_groups(self):
         scene = SceneGraph()
         doc = scene.create_document(width=800, height=600, name="source", background="#101820")
         doc.gradients["sky"] = {"type": "linear", "stops": [{"offset": 0, "color": "#000000"}]}
-        scene.create_region(
+        scene.create_element(
             outline=[(0.1, 0.1), (0.4, 0.1), (0.4, 0.4), (0.1, 0.4)],
-            region_id="panel",
+            element_id="panel",
             document_id=doc.id,
             style=Style(fill="#336699"),
             layer="buildings",
             metadata={"kind": "facade"},
         )
-        scene.group_regions("facades", ["panel"], document_id=doc.id)
+        scene.group_elements("facades", ["panel"], document_id=doc.id)
 
         clone = scene.clone_document(doc.id, name="copy")
 
         assert clone.id != doc.id
         assert clone.name == "copy"
         assert clone.width == 800
-        assert scene.get_region("panel", clone.id).style.fill == "#336699"
-        assert scene.get_region("panel", clone.id) is not scene.get_region("panel", doc.id)
+        assert scene.get_element("panel", clone.id).style.fill == "#336699"
+        assert scene.get_element("panel", clone.id) is not scene.get_element("panel", doc.id)
         assert scene.get_document(clone.id).gradients == scene.get_document(doc.id).gradients
         assert scene.get_document(clone.id).gradients is not scene.get_document(doc.id).gradients
         assert [r["id"] for r in scene.get_group("facades", clone.id)] == ["panel"]
 
-    def test_create_region(self):
+    def test_create_element(self):
         scene = SceneGraph()
         scene.create_document()
-        region = scene.create_region(
+        element = scene.create_element(
             outline=[(0.1, 0.1), (0.5, 0.8), (0.9, 0.1)],
-            region_id="tri",
+            element_id="tri",
         )
-        assert region.id == "tri"
-        assert len(region.outline) == 3
-        assert isinstance(region, ElementNode)
+        assert element.id == "tri"
+        assert len(element.outline) == 3
+        assert isinstance(element, ElementNode)
 
-    def test_element_aliases_wrap_region_store(self):
+    def test_element_aliases_wrap_element_store(self):
         scene = SceneGraph()
         doc = scene.create_document()
         element = scene.create_element(
@@ -77,64 +77,64 @@ class TestSceneGraph:
         )
 
         assert element.id == "tri"
-        assert scene.get_element("tri", doc.id) is scene.get_region("tri", doc.id)
+        assert scene.get_element("tri", doc.id) is scene.get_element("tri", doc.id)
         assert scene.has_element("tri", doc.id) is True
-        assert scene.element_count(doc.id) == scene.region_count(doc.id) == 1
-        assert scene.get_all_elements(doc.id) == scene.get_all_regions(doc.id)
+        assert scene.element_count(doc.id) == scene.element_count(doc.id) == 1
+        assert scene.get_all_elements(doc.id) == scene.get_all_elements(doc.id)
         assert scene.delete_elements(doc.id, ["tri"]) == ["tri"]
         assert scene.has_element("tri", doc.id) is False
 
-    def test_create_region_no_document(self):
+    def test_create_element_no_document(self):
         scene = SceneGraph()
         with pytest.raises(RuntimeError):
-            scene.create_region(outline=[(0, 0), (1, 1)])
+            scene.create_element(outline=[(0, 0), (1, 1)])
 
-    def test_create_region_duplicate_id(self):
+    def test_create_element_duplicate_id(self):
         scene = SceneGraph()
         scene.create_document()
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
         with pytest.raises(ValueError):
-            scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+            scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
 
-    def test_get_region(self):
+    def test_get_element(self):
         scene = SceneGraph()
         scene.create_document()
-        r = scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
-        assert scene.get_region("r1").id == "r1"
+        r = scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
+        assert scene.get_element("r1").id == "r1"
 
-    def test_get_region_not_found(self):
+    def test_get_element_not_found(self):
         scene = SceneGraph()
         scene.create_document()
         with pytest.raises(ValueError):
-            scene.get_region("nonexistent")
+            scene.get_element("nonexistent")
 
-    def test_region_count(self):
+    def test_element_count(self):
         scene = SceneGraph()
         scene.create_document()
-        assert scene.region_count() == 0
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)])
-        assert scene.region_count() == 1
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)])
-        assert scene.region_count() == 2
+        assert scene.element_count() == 0
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)])
+        assert scene.element_count() == 1
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)])
+        assert scene.element_count() == 2
 
     def test_style_objects(self):
         scene = SceneGraph()
         scene.create_document()
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r2")
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r2")
 
         affected = scene.style_objects(["r1", "r2"], fill="#00FF00")
         assert len(affected) == 2
-        assert scene.get_region("r1").style.fill == "#00FF00"
-        assert scene.get_region("r2").style.fill == "#00FF00"
+        assert scene.get_element("r1").style.fill == "#00FF00"
+        assert scene.get_element("r2").style.fill == "#00FF00"
 
     def test_style_objects_partial_update(self):
         scene = SceneGraph()
         scene.create_document()
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
 
         scene.style_objects(["r1"], stroke_width=0.02, opacity=0.5)
-        r = scene.get_region("r1")
+        r = scene.get_element("r1")
         assert r.style.stroke_width == 0.02
         assert r.style.opacity == 0.5
         assert r.style.fill == "#CCCCCC"  # unchanged
@@ -143,12 +143,12 @@ class TestSceneGraph:
     def test_describe_scene_structure(self):
         scene = SceneGraph()
         scene.create_document()
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)], region_id="r1")
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
 
         desc = scene.describe_scene()
-        assert desc["region_count"] == 1
-        assert len(desc["regions"]) == 1
-        assert desc["regions"][0]["id"] == "r1"
+        assert desc["element_count"] == 1
+        assert len(desc["elements"]) == 1
+        assert desc["elements"][0]["id"] == "r1"
         assert "document" in desc
         assert "warnings" in desc
 
@@ -156,18 +156,18 @@ class TestSceneGraph:
         scene = SceneGraph()
         scene.create_document()
         desc = scene.describe_scene()
-        assert desc["region_count"] == 0
+        assert desc["element_count"] == 0
 
     def test_reset(self):
         scene = SceneGraph()
         scene.create_document()
-        scene.create_region(outline=[(0, 0), (1, 0), (1, 1)])
+        scene.create_element(outline=[(0, 0), (1, 0), (1, 1)])
         scene.reset()
         assert scene.has_document() is False
-        # region_count raises RuntimeError after reset (no doc)
+        # element_count raises RuntimeError after reset (no doc)
         import pytest
         with pytest.raises(RuntimeError):
-            scene.region_count()
+            scene.element_count()
 
 
 class TestCurveEngine:
@@ -258,14 +258,14 @@ class TestDeterminism:
     def _make_scene(self):
         scene = SceneGraph()
         scene.create_document(1000, 1000)
-        scene.create_region(
-            region_id="r1",
+        scene.create_element(
+            element_id="r1",
             outline=[(0.1, 0.2), (0.5, 0.8), (0.9, 0.3)],
             constraints=CurveConstraints(smoothness=0.3, closed=True),
             style=Style(fill="#FF0000", stroke="#000000"),
         )
-        scene.create_region(
-            region_id="r2",
+        scene.create_element(
+            element_id="r2",
             outline=[(0.2, 0.1), (0.4, 0.5), (0.7, 0.4)],
             constraints=CurveConstraints(smoothness=0.7, closed=False),
             style=Style(fill=None, stroke="#333333", stroke_width=0.01),

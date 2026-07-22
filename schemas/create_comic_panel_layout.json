@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/create_comic_panel_layout/v1.json",
   "title": "create_comic_panel_layout",
-  "description": "Create grouped editable comic/page panel regions with gutters and reading-order metadata.",
+  "description": "Create grouped editable comic/page panel elements with gutters and reading-order metadata.",
   "type": "object",
   "properties": {
     "layout": {

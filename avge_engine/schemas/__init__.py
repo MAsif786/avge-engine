@@ -32,16 +32,16 @@ from avge_engine.schemas.operations import (
     ReorderLayerRequest,
     TransformObjectsRequest,
 )
-from avge_engine.schemas.region import (
+from avge_engine.schemas.element import (
     BooleanOpRequest,
     CopyElementRequest,
     CreateCurveRequest,
     CreateEllipseRequest,
     CreateLineRequest,
     CreateRectRequest,
-    CreateRegionRequest,
-    DeleteRegionRequest,
-    EditRegionRequest,
+    CreateElementRequest,
+    DeleteElementRequest,
+    EditElementRequest,
 )
 
 __all__ = [
@@ -62,15 +62,15 @@ __all__ = [
     "CreateEllipseRequest",
     "CreateLineRequest",
     "CreateRectRequest",
-    "CreateRegionRequest",
+    "CreateElementRequest",
     "CritiqueRequest",
     "DeleteDocumentRequest",
-    "DeleteRegionRequest",
+    "DeleteElementRequest",
     "DescribeSceneRequest",
     "DocIdBody",
     "DocIdLimitBody",
     "DuplicateGroupRequest",
-    "EditRegionRequest",
+    "EditElementRequest",
     "ExportSvgRequest",
     "ExtrudeOutlineRequest",
     "FindObjectsRequest",

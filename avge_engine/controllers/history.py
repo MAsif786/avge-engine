@@ -27,7 +27,7 @@ def create_tools(mcp):
             return "Error: No document — create one first"
         return (
             f"Checkpoint '{name}' saved "
-            f"({data['region_count']} regions at version {data['version']})"
+            f"({data['element_count']} elements at version {data['version']})"
         )
 
     @mcp.tool(
@@ -52,7 +52,7 @@ def create_tools(mcp):
             return f"Error: {e}"
         return (
             f"Restored from checkpoint '{name}' "
-            f"({data['region_count']} regions at version {data['version']})"
+            f"({data['element_count']} elements at version {data['version']})"
         )
 
     @mcp.tool(
@@ -87,7 +87,7 @@ def create_tools(mcp):
         for entry in entries:
             lines.append(
                 f"  {entry.name} [{entry.time}] {entry.action} "
-                f"{entry.detail}  ({entry.region_count} regions)"
+                f"{entry.detail}  ({entry.element_count} elements)"
             )
         if lines:
             lines.append(
@@ -99,29 +99,29 @@ def create_tools(mcp):
         name="batch",
         description="Execute multiple operations in a single call. "
         "**ALL** registered tools work in batch — not just the ones listed.\n"
-        "  create_region: outline, fill, stroke, smoothness, closed, z_index, stroke_width\n"
+        "  create_element: outline, fill, stroke, smoothness, closed, z_index, stroke_width\n"
         "  create_ellipse_band: cx, cy, rx, ry, thickness, start_angle, end_angle, perspective\n"
         "  create_primitive: shape (rect/ellipse/line/polyline/compound_path), fill, stroke, stroke_width\n"
         "  create_curve: points, stroke, stroke_width, smoothness\n"
         "  create_text: x, y, text, fill, font_size, font_family, text_anchor\n"
         "  insert_image: x, y, width, height, href, import_mode (image/embed/svg_paths), clip_to\n"
         "  import_svg_path: path_data, fill, smoothness\n"
-        "  edit_region: region_id, outline, fill, stroke, z_index, shape\n"
-        "  duplicate: region_id, pattern, count, dx, dy, bounds, seed, columns, rows, spacing_falloff, scale_falloff\n"
-        "  create_shadow: region_id, optional onto_region_id, direction, distance, softness, sy\n"
+        "  edit_element: element_id, outline, fill, stroke, z_index, shape\n"
+        "  duplicate: element_id, pattern, count, dx, dy, bounds, seed, columns, rows, spacing_falloff, scale_falloff\n"
+        "  create_shadow: element_id, optional onto_element_id, direction, distance, softness, sy\n"
         "  apply_depth_haze: selector, haze_color, near_y, far_y, max_strength\n"
         "  restyle: selector, mode, fill, stroke, stroke_width, material\n"
-        "  mix_region_colors: source_region_id, target_region_id, mix_ratio, output\n"
+        "  mix_element_colors: source_element_id, target_element_id, mix_ratio, output\n"
         "  apply_fx: type, bounds/selector, center, direction, count, length\n"
-        "  delete_region: ids\n"
+        "  delete_element: ids\n"
         "  transform_objects: selector, mode, dx, dy, scale, rotate, alignment\n"
-        "  warp_region: region_id, mode, strength, axis, center, handles, falloff\n"
-        "  project_quad: target_quad, source_region_id, fill, stroke, columns, rows\n"
+        "  warp_element: element_id, mode, strength, axis, center, handles, falloff\n"
+        "  project_quad: target_quad, source_element_id, fill, stroke, columns, rows\n"
         "  create_perspective_grid: vanishing_points, horizon_y, bounds\n"
         "  create_facade_grid: target_quad, rows, columns, lit_ratio\n"
         "  generate_background_asset: mode, bounds, count, density, seed\n"
         "  create_comic_panel_layout: layout, rows, columns, bounds, gutter_x/y, reading_direction\n"
-        "  copy_element: region_id OR group, target_document_id, source_document_id, offset_x/y\n"
+        "  copy_element: element_id OR group, target_document_id, source_document_id, offset_x/y\n"
         "  create_line_pattern: pattern, points/bounds, stroke_width, width_profile, role\n"
         "  generate_shape: pattern, params\n"
         "💡 Inline shapes: create primitives directly — "

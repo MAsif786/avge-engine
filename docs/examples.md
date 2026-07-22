@@ -10,8 +10,8 @@ A detailed kitchen scene with a fridge, countertop, and evening lighting. Demons
 
 ![Fridge Scene](results/fridge-scene.png)
 
-- **124 regions** — fridge body, door, handle, interior shelves, counter, wall tiles, floor
-- **Techniques**: `create_region` for boxes, `add_shading` for directional highlights, `restyle` for color tuning
+- **124 elements** — fridge body, door, handle, interior shelves, counter, wall tiles, floor
+- **Techniques**: `create_element` for boxes, `add_shading` for directional highlights, `restyle` for color tuning
 - **Style**: Cel-shaded with warm ambient + cool shadow tones
 
 <div align="right">[SVG](results/fridge-scene.svg)</div>
@@ -24,7 +24,7 @@ A detailed room with bed, desk, window, posters, baseboards, and lighting.
 
 ![Bedroom](results/bedroom.png)
 
-- **166 regions** — walls, floor, ceiling, window frame, baseboard, furniture
+- **166 elements** — walls, floor, ceiling, window frame, baseboard, furniture
 - **Techniques**: `create_primitive` (rects), `create_curve` (curtains), z-ordering for depth
 - **Style**: Flat-color 2D illustration
 
@@ -38,7 +38,7 @@ A wide outdoor scene with mountains, clouds, and sky gradient.
 
 ![Landscape](results/landscape.png)
 
-- **172 regions** — sky, distant mountains, clouds, terrain layers
+- **172 elements** — sky, distant mountains, clouds, terrain layers
 - **Techniques**: Gradient backgrounds, layered depth via z_index, `create_curve` for mountain silhouettes
 - **Style**: Atmospheric perspective with gradient fills
 
@@ -52,7 +52,7 @@ A front-facing iPhone with screen, dynamic island, camera, and UI elements.
 
 ![iPhone](results/iphone-mockup.png)
 
-- **126 regions** — phone body, screen, dynamic island, speakers, camera lenses, UI chrome
+- **126 elements** — phone body, screen, dynamic island, speakers, camera lenses, UI chrome
 - **Techniques**: `create_primitive` (rounded rects for body/camera), boolean operations for cutouts
 - **Style**: Clean product mockup with precise proportions
 
@@ -66,8 +66,8 @@ A multi-panel manga page featuring a cat character in a comic story — panels, 
 
 ![Cat Manga Page](results/cat-manga.png)
 
-- **241 regions** — 4 panels with borders, cat character (body, head, ears, eyes, whiskers), speech bubbles, backgrounds
-- **Techniques**: `speech_bubble` for dialogue, `create_region` with smoothness for character curves, panel layout via coordinates
+- **241 elements** — 4 panels with borders, cat character (body, head, ears, eyes, whiskers), speech bubbles, backgrounds
+- **Techniques**: `speech_bubble` for dialogue, `create_element` with smoothness for character curves, panel layout via coordinates
 - **Style**: Black-and-white manga with character-driven storytelling
 
 <div align="right">[SVG](results/cat-manga.svg)</div>
@@ -80,7 +80,7 @@ A detailed anime-style character head with layered hair, eyes, and shading.
 
 ![Character Head](results/character-head.png)
 
-- **56 regions** — head base, hair layers, eyes, irises, eyebrows, mouth, shading
+- **56 elements** — head base, hair layers, eyes, irises, eyebrows, mouth, shading
 - **Techniques**: `segmented_chain` for hair strands, `add_shading` for skin/hair shadows, `smoothness_per_point` for curved contours
 - **Style**: Anime cel-shade
 
@@ -96,7 +96,7 @@ Text skewed to match an isometric face using `skew_y`. The right face has a -30�
 
 - **Techniques**: `skew_y` on `create_text` matches the face angle, `letter_spacing` for title tracking, `font_weight` for contrast
 - **Face angles**: right face = `skew_y: -30`, left face = `skew_y: 30`
-- Use `get_region` to inspect face coordinates before placing text
+- Use `get_element` to inspect face coordinates before placing text
 
 <div align="right">[SVG](results/isotext.svg)</div>
 
@@ -123,10 +123,10 @@ A procedural isometric table built entirely from `isometric_box` + `attach` patt
 |---|---|
 | **Procedural geometry** | Hair via `segmented_chain`, armature skeletons |
 | **Boolean operations** | Complex cutouts and merged shapes |
-| **Shading** | Directional highlight/shadow on any region |
+| **Shading** | Directional highlight/shadow on any element |
 | **Primitives** | Furniture, appliances, product mockups |
 | **Curves and lines** | Clothing folds, face outlines, mountain silhouettes |
 | **Duplication patterns** | Radial (clock faces), grid (tiles), mirror symmetry |
 | **Multi-panel layouts** | Manga/comic page with borders and balloons |
 | **Text and images** | Labels, branding elements, embedded images |
-| **Batch operations** | Multi-region color changes in one call |
+| **Batch operations** | Multi-element color changes in one call |

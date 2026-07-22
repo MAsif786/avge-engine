@@ -3,17 +3,17 @@
 
 **Purpose:** the AVGE engine gives you geometric and stylistic capability (fills, strokes, gradients, opacity, layering, effects) — this skill tells you *when and how* to reach for that capability so results look intentional rather than like a generic clip-art placeholder. Geometry correctness (proportion, symmetry, recognizability) is necessary but not sufficient — this skill is about the remaining 30% that separates "technically a coffee cup" from "a coffee cup someone designed."
 
-Apply this skill on every `create_region`/`style_objects` call, not as a final pass — retrofitting flat shapes with depth after the fact costs more tool calls than building it in from the start.
+Apply this skill on every `create_element`/`style_objects` call, not as a final pass — retrofitting flat shapes with depth after the fact costs more tool calls than building it in from the start.
 
 ---
 
-## 1. Every filled region gets depth, not a flat fill
+## 1. Every filled element gets depth, not a flat fill
 
-A single flat `fill` color reads as a placeholder. Before finalizing a region's style, choose one:
+A single flat `fill` color reads as a placeholder. Before finalizing a element's style, choose one:
 
-- **Two-tone shading**: split a curved/rounded surface into a "lit" region and a "shadow" region using two adjacent Regions of the same hue family (e.g. base `#E8D4B0` + a darker `#C9AD82` sliver along one edge to imply where light doesn't reach). This is what worked well in the coffee cup's liquid surface (two nested browns) — extend that same trick to every major surface, not just the ones that happened to need it structurally.
+- **Two-tone shading**: split a curved/rounded surface into a "lit" element and a "shadow" element using two adjacent Elements of the same hue family (e.g. base `#E8D4B0` + a darker `#C9AD82` sliver along one edge to imply where light doesn't reach). This is what worked well in the coffee cup's liquid surface (two nested browns) — extend that same trick to every major surface, not just the ones that happened to need it structurally.
 - **Gradient fill** where the tool supports it: light-to-dark along the axis facing away from an assumed light source (default: upper-left).
-- **A thin highlight stroke or region** (very light tone, low opacity, positioned along one edge) reads as reflected light and is cheap — 1 extra region, disproportionate visual payoff.
+- **A thin highlight stroke or element** (very light tone, low opacity, positioned along one edge) reads as reflected light and is cheap — 1 extra element, disproportionate visual payoff.
 
 Reserve pure flat fill for genuinely flat-by-design objects (icon-style silhouettes, background shapes) — make that a deliberate choice, not the default.
 
@@ -23,20 +23,20 @@ Don't give every stroke the same width. Establish 2–3 tiers per composition:
 - **Outer/primary silhouette**: heaviest stroke (defines the object against the background).
 - **Internal structural lines** (e.g. cup rim, window panes): medium.
 - **Fine detail** (highlights, texture lines): thinnest, or no stroke at all (fill-only).
-Uniform stroke width everywhere (as seen in the MVP results so far — most objects used `width=0.005` across nearly every region) is the single fastest visual tell of an unstyled result. Vary it deliberately.
+Uniform stroke width everywhere (as seen in the MVP results so far — most objects used `width=0.005` across nearly every element) is the single fastest visual tell of an unstyled result. Vary it deliberately.
 
-## 3. Palette: pick 3–5 colors with a relationship, not independent choices per region
+## 3. Palette: pick 3–5 colors with a relationship, not independent choices per element
 
-Before creating any region, decide the palette as a set, not one color at a time:
+Before creating any element, decide the palette as a set, not one color at a time:
 - **Analogous** (adjacent hues — warm browns/tans for the cup, greens for a tree) for a calm, cohesive object.
 - **Complementary accent**: one small element in a contrasting hue draws the eye (e.g. a warm cup with a single cool-toned accent).
 - Avoid pure saturated primaries (`#FF0000`, `#00FF00`, `#FFFF00`-family flat colors) unless the brief calls for a literal flat/icon style — they read as unconsidered defaults. Slightly desaturated, warmed, or cooled variants read as chosen.
-- Reuse the same 3–5 hex values across all regions in a scene rather than picking a new arbitrary color per region — visual coherence comes from a shared, small palette, not variety.
+- Reuse the same 3–5 hex values across all elements in a scene rather than picking a new arbitrary color per element — visual coherence comes from a shared, small palette, not variety.
 
 ## 4. Ground objects with shadow or context, don't float them
 
 A subject centered on pure white with no grounding cue reads as a sticker, not a scene. Cheap, high-payoff additions:
-- A soft ground shadow region (low-opacity dark ellipse/shape beneath the subject) — as the coffee cup benchmark already did with its saucer, extend the same instinct even when the prompt doesn't explicitly ask for a supporting surface (e.g. a subtle shadow under a smiley face's chin, a ground-line under a star if it's meant to sit in a scene rather than float as a pure icon).
+- A soft ground shadow element (low-opacity dark ellipse/shape beneath the subject) — as the coffee cup benchmark already did with its saucer, extend the same instinct even when the prompt doesn't explicitly ask for a supporting surface (e.g. a subtle shadow under a smiley face's chin, a ground-line under a star if it's meant to sit in a scene rather than float as a pure icon).
 - Whether to ground an object is itself a style decision — flat icon-style compositions (app icons, logos) *should* float; representational/scene-style compositions should not. Decide which register the prompt calls for before defaulting to either.
 
 ## 5. Composition: use the canvas deliberately
@@ -44,15 +44,15 @@ A subject centered on pure white with no grounding cue reads as a sticker, not a
 - Default centering (bounding box centered in the 0–1 canvas) is a safe fallback, not a design choice — deliberately shift the subject off-center (e.g. lower-third, or offset toward negative space) when the composition benefits, especially for scene-style (not icon-style) prompts.
 - Leave breathing room: a subject that fills 90%+ of the canvas edge-to-edge reads as cramped. 70–80% of the canvas's shorter dimension is a reasonable default fill ratio for a single-subject composition.
 - For multi-element scenes (house, tree), vary element scale intentionally rather than making every sub-part roughly equal size — visual hierarchy needs one dominant element and supporting smaller ones.
-- **Proportion relative to scene context**: an object's canvas footprint must match how it fits in a real scene. A desk is ~90–100% of the canvas width; headphones resting on it are ~15–25%; a water bottle is ~6–8%. Before creating any region, estimate what fraction of the canvas it should occupy by comparing it to the real-world object it represents alongside the other objects in the scene. The most common proportion mistake is making standalone objects too large (filling 40–50%+ of canvas width when they should be 15–25%). A good heuristic: if the item sits on a surface, its width should be ≤¼ of the surface's width unless it's the sole subject.
+- **Proportion relative to scene context**: an object's canvas footprint must match how it fits in a real scene. A desk is ~90–100% of the canvas width; headphones resting on it are ~15–25%; a water bottle is ~6–8%. Before creating any element, estimate what fraction of the canvas it should occupy by comparing it to the real-world object it represents alongside the other objects in the scene. The most common proportion mistake is making standalone objects too large (filling 40–50%+ of canvas width when they should be 15–25%). A good heuristic: if the item sits on a surface, its width should be ≤¼ of the surface's width unless it's the sole subject.
 
 ## 6. Match the style register to the prompt, and hold it consistently
 
-Before the first `create_region` call, decide (even implicitly) which register this composition is in, and keep every subsequent choice consistent with it:
+Before the first `create_element` call, decide (even implicitly) which register this composition is in, and keep every subsequent choice consistent with it:
 - **Flat/icon style**: bold flat fills, minimal-to-no shading, thick uniform-ish outlines, geometric simplicity. (Rules 1–2 relax here — flat fill is *correct* for this register.)
 - **Soft/organic style**: gradients or two-tone shading throughout, rounded corners (`smoothness` biased high), softer/muted palette.
 - **Line-art style**: little to no fill, all definition carried by stroke weight hierarchy (Rule 2 becomes the primary tool).
-Mixing registers within one composition (e.g. one region flat-shaded, the next gradient-shaded, for no compositional reason) is what makes a result look inconsistent even when each individual region is fine in isolation.
+Mixing registers within one composition (e.g. one element flat-shaded, the next gradient-shaded, for no compositional reason) is what makes a result look inconsistent even when each individual element is fine in isolation.
 
 ## 7. Self-check before finishing (use `render_preview`, not just `describe_scene`)
 
@@ -71,7 +71,7 @@ This maps directly onto why visual feedback outperformed text-only in the MVP co
 
 ## 8. Character design: ask first, plan the register, build layer by layer
 
-Before creating any region of a human/character, establish the following — either from the prompt's explicit description or by asking clarifying questions first:
+Before creating any element of a human/character, establish the following — either from the prompt's explicit description or by asking clarifying questions first:
 
 ### 8a. Decide the style register before anything else
 
@@ -198,12 +198,12 @@ A rotated rect reads as a foreshortened limb because the viewer's brain fills in
 
 After `transform_objects(rotate=...)`, the shape's center shifts. To find the new position for attaching the next segment (e.g. forearm to elbow):
 
-1. Call `describe_scene` to get the region's bounding box
+1. Call `describe_scene` to get the element's bounding box
 2. The rotation pivot is the original center — the post-rotation position is offset
-3. For the next segment, use `offset_x`/`offset_y` on `duplicate_region` to position it at the joint
+3. For the next segment, use `offset_x`/`offset_y` on `duplicate_element` to position it at the joint
 4. Or read the SVG output to verify actual segment endpoints
 
-A future enhancement will provide `get_feature_points(region_id, edge)` that returns actual post-transform coordinates, eliminating the guesswork.
+A future enhancement will provide `get_feature_points(element_id, edge)` that returns actual post-transform coordinates, eliminating the guesswork.
 
 ## 10. Geometric Patterns and Batch Workflows
 
@@ -222,7 +222,7 @@ batch([
 ])
 ```
 
-Supported tools in batch include every registered tool, especially `create_region`, `create_ellipse_band`, `create_primitive`, `create_curve`, `edit_region`, `duplicate_region`, `delete_region`, `style_objects`, `transform_objects`, `project_quad`, and `generate_shape`.
+Supported tools in batch include every registered tool, especially `create_element`, `create_ellipse_band`, `create_primitive`, `create_curve`, `edit_element`, `duplicate_element`, `delete_element`, `style_objects`, `transform_objects`, `project_quad`, and `generate_shape`.
 
 ### 10b. distribute_linear — point sequence generator
 
@@ -239,7 +239,7 @@ generate_shape(pattern="distribute_linear", params={
 
 **Use case — row of buildings:** Feed the returned coordinates into a loop that creates wall rects at each position. One `distribute_linear` call + N batch ops = entire building row.
 
-The `duplicate_grid` tool is an alternative when you already have a source region and just want evenly-spaced copies. `distribute_linear` is better when you need the raw coordinates for custom positioning.
+The `duplicate_grid` tool is an alternative when you already have a source element and just want evenly-spaced copies. `distribute_linear` is better when you need the raw coordinates for custom positioning.
 
 ### 10c. apex_from_edge — outline arithmetic
 
@@ -252,7 +252,7 @@ create_primitive(shape={"type": "rect", "x": 0.1, "y": 0.66, "width": 0.09, "hei
 
 # Step 2: derive roof from wall outline
 generate_shape(pattern="apex_from_edge", params={
-  "region_id": "rect_abc123",
+  "element_id": "rect_abc123",
   "edge": "top",               # project from top edge
   "apex_offset": 0.05,         # roof height (optional; defaults to 0.4×edge width)
   "fill": "#E8D4B0",           # roof fill color
@@ -261,7 +261,7 @@ generate_shape(pattern="apex_from_edge", params={
 → creates triangle outline automatically
 ```
 
-**How it works:** The function finds the two points defining the chosen edge (top = minimum y), calculates the edge midpoint, and projects a third point perpendicularly. The result is a 3-point triangle outline registered as a new region.
+**How it works:** The function finds the two points defining the chosen edge (top = minimum y), calculates the edge midpoint, and projects a third point perpendicularly. The result is a 3-point triangle outline registered as a new element.
 
 **Why this matters:** Every architectural scene with multiple buildings needs wall + roof pairs. Without `apex_from_edge`, each roof requires manual coordinate computation for every apex point. With it, one call generates the roof from the wall's existing geometry.
 
@@ -285,7 +285,7 @@ batch([
 # 3. Generate roofs from each wall
 for wall_id in wall_ids:
   generate_shape(pattern="apex_from_edge",
-    params={"region_id": wall_id, "edge": "top", "fill": "#C94C4C"})
+    params={"element_id": wall_id, "edge": "top", "fill": "#C94C4C"})
 ```
 
 Total calls: 1 (distribute) + 1 (batch) + 1 (apex loop) — instead of 6 walls + 6 roofs individually.
@@ -296,7 +296,7 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 
 | Tool | Required params | Common optional params |
 |---|---|---|
-| `create_region` | `outline` (list of [x,y]) | `fill`, `stroke`, `stroke_width`, `smoothness`, `closed`, `z_index`, `layer`, `clip_to`, `fill_gradient`, `blend_mode` |
+| `create_element` | `outline` (list of [x,y]) | `fill`, `stroke`, `stroke_width`, `smoothness`, `closed`, `z_index`, `layer`, `clip_to`, `fill_gradient`, `blend_mode` |
 | `create_ellipse_band` | `cx`, `cy`, `rx` | `ry`, `thickness`, `inner_rx`, `inner_ry`, `start_angle`, `end_angle`, `rotation`, `perspective`, `skew_x`, `fill`, `stroke`, `stroke_width`, `z_index` |
 | `create_primitive` | `shape` (rect/ellipse/line/polyline/compound_path/etc.) | `fill`, `stroke`, `stroke_width`, `stroke_dasharray`, `smoothness`, `closed`, `z_index`, `layer`, `blend_mode`, `opacity` |
 | `create_curve` | `points` (list of [x,y]) | `stroke`, `stroke_width`, `smoothness`, `z_index`, `layer`, `stroke_linecap`, `blend_mode` |
@@ -304,23 +304,23 @@ Every tool below is supported in `batch(ops=[...])`. Each op dict requires a `"t
 | `insert_image` | `x`, `y`, `width`, `height`, `href` | `import_mode` (`image`, `embed`, `svg_paths`), `clip_to`, `preserve_aspect_ratio`, `rotate`, SVG `fill`/`stroke` overrides |
 | `import_svg_path` | `path_data` (SVG path string) | `fill`, `stroke`, `smoothness`, `closed`, `z_index`, `layer`, `samples_per_curve` |
 | `create_line_pattern` | `pattern` | `points`, `bounds`, `center`, `radius`, `count`, `density`, `amplitude`, `frequency`, `stroke`, `stroke_width`, `width_profile`, `role` |
-| `edit_region` | `region_id` or `ids` | `outline`, `point_index`, `point_coords`, `point_dx`, `point_dy`, `fill`, `stroke`, `smoothness`, `z_index`, `shape`, `layer`, `clip_to`, `blend_mode` |
-| `edit_regions` | `updates` | Per-item `outline`, `point_index`, `point_coords`, `point_dx`, `point_dy`, `fill`, `stroke`, `opacity`, `z_index`, `layer`, `clip_to`, `blend_mode` |
-| `refine_line` | `region_id` | `mode` (`stabilize`, `smooth`, `simplify`, `straighten`), `strength`, `simplify_tolerance`, `smoothness`, `preserve_corners`, `iterations` |
-| `duplicate_region` | `region_id` | `offset_x`, `offset_y`, `scale`, `rotate`, `fill`, `z_index`, `mirror_x`, `mirror_y`, `shadow_mode` |
-| `create_shadow` | `region_id` | `onto_region_id`, `direction`, `distance`, `softness`, `opacity`, `scale`, `sx`, `sy`, `z_offset` |
-| `delete_region` | `ids` (list of region IDs) | — |
+| `edit_element` | `element_id` or `ids` | `outline`, `point_index`, `point_coords`, `point_dx`, `point_dy`, `fill`, `stroke`, `smoothness`, `z_index`, `shape`, `layer`, `clip_to`, `blend_mode` |
+| `edit_elements` | `updates` | Per-item `outline`, `point_index`, `point_coords`, `point_dx`, `point_dy`, `fill`, `stroke`, `opacity`, `z_index`, `layer`, `clip_to`, `blend_mode` |
+| `refine_line` | `element_id` | `mode` (`stabilize`, `smooth`, `simplify`, `straighten`), `strength`, `simplify_tolerance`, `smoothness`, `preserve_corners`, `iterations` |
+| `duplicate_element` | `element_id` | `offset_x`, `offset_y`, `scale`, `rotate`, `fill`, `z_index`, `mirror_x`, `mirror_y`, `shadow_mode` |
+| `create_shadow` | `element_id` | `onto_element_id`, `direction`, `distance`, `softness`, `opacity`, `scale`, `sx`, `sy`, `z_offset` |
+| `delete_element` | `ids` (list of element IDs) | — |
 | `style_objects` / `restyle` | `ids` or `selector` | `fill`, `stroke`, `stroke_width`, `opacity`, `blend_mode`, `clip_to`, `fill_gradient`, `material` (`glass`, `brushed_metal`, `concrete`, `wood`, `tile`, `foliage`) |
 | `list_brush_presets` / `apply_brush_style` | `group` or `selector` | discover brush preset names, then apply `brush`, `color`, `size`, `opacity`, `apply_to`, `blend_mode`, `pressure`, `texture_strength` |
-| `mix_region_colors` | `source_region_id`, `target_region_id` | `mix_ratio`, `source_channel`, `target_channel`, `output`, `apply_to`, `new_region_id`, `offset_x`, `offset_y` |
+| `mix_element_colors` | `source_element_id`, `target_element_id` | `mix_ratio`, `source_channel`, `target_channel`, `output`, `apply_to`, `new_element_id`, `offset_x`, `offset_y` |
 | `set_layer_role` | `layer`, `role` | `z_base`, `opacity`, `blend_mode` |
 | `apply_texture_effect` | `effect` | `selector`, `bounds`, `clip_to`, `color`, `secondary_color`, `density`, `size`, `opacity`, `angle`, `blend_mode` |
 | `apply_fx` | `type`, `bounds` or `selector` | `center`, `direction`, `count`, `color`, `secondary_color`, `intensity`, `length`, `spread`, `size`, `clip_to` |
 | `generate_background_asset` | `mode`, `bounds` | `count`, `density`, `seed`, `detail`, `color`, `secondary_color`, `layer`, `clip_to` |
 | `create_comic_panel_layout` | `layout`, `rows`, `columns` | `bounds`, `margin`, `gutter_x`, `gutter_y`, `reading_direction`, `panel_prefix`, `group_name`, `clip_content` |
 | `transform_objects` | `selector` | `dx`, `dy`, `scale`, `rotate`, `group_mode`, `mirror_x`, `mirror_y`, `z_index`, `mode`, `alignment` |
-| `warp_region` | `region_id` | `mode`, `strength`, `axis`, `center`, `radius`, `frequency`, `phase`, `handles`, `falloff`, `preserve_corners`, `smoothness` |
-| `project_quad` | `target_quad` | `source_region_id`, `replace_source`, `columns`, `rows`, `fill`, `stroke`, `stroke_width`, `z_index`, `inherit_style` |
+| `warp_element` | `element_id` | `mode`, `strength`, `axis`, `center`, `radius`, `frequency`, `phase`, `handles`, `falloff`, `preserve_corners`, `smoothness` |
+| `project_quad` | `target_quad` | `source_element_id`, `replace_source`, `columns`, `rows`, `fill`, `stroke`, `stroke_width`, `z_index`, `inherit_style` |
 | `generate_shape` | `pattern`, `params` | Pattern-specific — see `generate_shape` docs |
 | `critique` | — | `mode` (`rules`, `visual`, `both`), `min_confidence`, `as_json` |
 
@@ -328,15 +328,15 @@ Use `create_line_pattern` for linework families that should be generated consist
 
 Use `refine_line` after rough line placement when the silhouette is correct but the stroke quality needs cleanup. `mode="stabilize"` is the closest equivalent to a drawing-app stabilizer, `mode="simplify"` removes excess points, `mode="smooth"` rounds noisy curves, and `mode="straighten"` converts a stroke into a clean technical line.
 
-For object-bound linework, use `outline_pattern` / `fill_pattern` on the creation tool itself. `create_region(shape=...)`, freeform `create_region(outline=...)`, `create_primitive`, `create_curve`, and `create_ellipse_band` can create editable pattern overlay regions tied to the base object. Examples: dotted circle outline, wavy square border, rough/sketch polygon contour, hatched freeform fill, stippled ellipse fill, or pressure-style curve overlay.
+For object-bound linework, use `outline_pattern` / `fill_pattern` on the creation tool itself. `create_element(shape=...)`, freeform `create_element(outline=...)`, `create_primitive`, `create_curve`, and `create_ellipse_band` can create editable pattern overlay elements tied to the base object. Examples: dotted circle outline, wavy square border, rough/sketch polygon contour, hatched freeform fill, stippled ellipse fill, or pressure-style curve overlay.
 
-For generic digital art workflows, use `set_layer_role` to keep layer purpose and z-order explicit: background, sketch, base_color, shadow, highlight, texture, line_art, glow, and fx should not share one undifferentiated layer. Use `list_brush_presets` when you need the current preset vocabulary, then use `apply_brush_style` on existing strokes/regions when the same geometry should read as line art, paint, texture, natural/background strokes, or FX marks. Use `apply_texture_effect` for clipped vector overlays such as halftone, screen tone, fabric grain, paper/noise, bloom, particles, gradient light, and rim light. These tools complement `restyle` and `create_line_pattern`; they do not replace base fills, palette planning, or object-bound `outline_pattern`/`fill_pattern`.
+For generic digital art workflows, use `set_layer_role` to keep layer purpose and z-order explicit: background, sketch, base_color, shadow, highlight, texture, line_art, glow, and fx should not share one undifferentiated layer. Use `list_brush_presets` when you need the current preset vocabulary, then use `apply_brush_style` on existing strokes/elements when the same geometry should read as line art, paint, texture, natural/background strokes, or FX marks. Use `apply_texture_effect` for clipped vector overlays such as halftone, screen tone, fabric grain, paper/noise, bloom, particles, gradient light, and rim light. These tools complement `restyle` and `create_line_pattern`; they do not replace base fills, palette planning, or object-bound `outline_pattern`/`fill_pattern`.
 
-For whole-region transforms, use `transform_objects` exclusively. Do not use `edit_region` or `edit_regions` to move, scale, rotate, mirror, align, or distribute regions. The edit tools own content/style changes and single-point edits only; `point_dx` / `point_dy` are vertex nudges, not object translation.
+For whole-element transforms, use `transform_objects` exclusively. Do not use `edit_element` or `edit_elements` to move, scale, rotate, mirror, align, or distribute elements. The edit tools own content/style changes and single-point edits only; `point_dx` / `point_dy` are vertex nudges, not object translation.
 
-For any tool that targets existing regions, prefer the shared `selector` object over one-off targeting fields. The standard selector keys are: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds` (`min_x`, `max_x`, `min_y`, `max_y`, `min_w`, `max_w`, `min_h`, `max_h`), `z_min`, `z_max`, and `has_stroke`. Multiple selector filters are AND-ed; `ids` or `group_name` establish the candidate set first.
+For any tool that targets existing elements, prefer the shared `selector` object over one-off targeting fields. The standard selector keys are: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds` (`min_x`, `max_x`, `min_y`, `max_y`, `min_w`, `max_w`, `min_h`, `max_h`), `z_min`, `z_max`, and `has_stroke`. Multiple selector filters are AND-ed; `ids` or `group_name` establish the candidate set first.
 
-**Inline shapes in batch:** Use `create_primitive` or `create_region` with shape data directly:
+**Inline shapes in batch:** Use `create_primitive` or `create_element` with shape data directly:
 ```python
 batch([{"tool": "create_primitive", "shape": {"type": "rect", "x": 0.1, "y": 0.66, "width": 0.09, "height": 0.1},
         "fill": "#CCC", "stroke": "#333"}])

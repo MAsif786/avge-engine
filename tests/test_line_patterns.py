@@ -29,7 +29,7 @@ def test_create_line_pattern_wavy_uniform_stroke():
     result = mcp.tools["create_line_pattern"](
         document_id=doc.id,
         pattern="wavy",
-        region_id="wave",
+        element_id="wave",
         points=[[0.1, 0.5], [0.9, 0.5]],
         count=24,
         amplitude=0.04,
@@ -37,7 +37,7 @@ def test_create_line_pattern_wavy_uniform_stroke():
         stroke_width=3,
     )
 
-    wave = graph.get_region("wave", doc.id)
+    wave = graph.get_element("wave", doc.id)
     assert "Line pattern created: pattern=wavy" in result
     assert wave.constraints.closed is False
     assert wave.constraints.smoothness == 0.45
@@ -51,7 +51,7 @@ def test_create_line_pattern_tapered_creates_filled_ribbon():
     mcp.tools["create_line_pattern"](
         document_id=doc.id,
         pattern="curve",
-        region_id="gesture",
+        element_id="gesture",
         points=[[0.2, 0.8], [0.45, 0.3], [0.8, 0.5]],
         width_profile="tapered",
         start_width=12,
@@ -60,7 +60,7 @@ def test_create_line_pattern_tapered_creates_filled_ribbon():
         role="gesture",
     )
 
-    gesture = graph.get_region("gesture", doc.id)
+    gesture = graph.get_element("gesture", doc.id)
     assert gesture.constraints.closed is True
     assert gesture.style.fill == "#223344"
     assert gesture.style.stroke is None
@@ -75,13 +75,13 @@ def test_create_line_pattern_hatch_renders_compound_path():
     mcp.tools["create_line_pattern"](
         document_id=doc.id,
         pattern="cross_hatch",
-        region_id="shade",
+        element_id="shade",
         bounds=[0.2, 0.2, 0.4, 0.3],
         density=5,
         angle=30,
         stroke_width=1,
     )
-    shade = graph.get_region("shade", doc.id)
+    shade = graph.get_element("shade", doc.id)
     svg = svg_serialize(graph, doc.id)
 
     assert shade.primitive["type"] == "compound_path"
@@ -95,15 +95,15 @@ def test_create_line_pattern_stipple_creates_dots():
     result = mcp.tools["create_line_pattern"](
         document_id=doc.id,
         pattern="stipple",
-        region_id="grain",
+        element_id="grain",
         bounds=[0.1, 0.1, 0.2, 0.2],
         density=12,
         stroke_width=2,
         seed=2,
     )
 
-    dots = [r for r in graph.get_all_regions(doc.id) if r.metadata.get("pattern") == "stipple"]
-    assert "regions=12" in result
+    dots = [r for r in graph.get_all_elements(doc.id) if r.metadata.get("pattern") == "stipple"]
+    assert "elements=12" in result
     assert len(dots) == 12
     assert all(r.primitive["type"] == "ellipse" for r in dots)
 
@@ -114,12 +114,12 @@ def test_create_line_pattern_role_defaults_to_construction_dash():
     mcp.tools["create_line_pattern"](
         document_id=doc.id,
         pattern="straight",
-        region_id="centerline",
+        element_id="centerline",
         points=[[0.5, 0.1], [0.5, 0.9]],
         role="construction",
         stroke_width=1,
     )
 
-    centerline = graph.get_region("centerline", doc.id)
+    centerline = graph.get_element("centerline", doc.id)
     assert centerline.style.opacity == 0.28
     assert centerline.style.stroke_dasharray == "5,5"

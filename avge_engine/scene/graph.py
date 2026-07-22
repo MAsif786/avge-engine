@@ -17,16 +17,16 @@ from avge_engine.geometry import (
 )
 from avge_engine.effects import Style, GradientDef
 from avge_engine.storage import StorageAdapter
-from avge_engine.scene.models import ElementNode, RegionNode, DocumentNode, ToolStats
+from avge_engine.scene.models import ElementNode, DocumentNode, ToolStats
 
 class SceneGraph:
     """In-memory scene graph supporting multiple named documents."""
 
     def __init__(self) -> None:
         self._docs: dict[str, DocumentNode] = {}
-        self._regions_by_doc: dict[str, dict[str, RegionNode]] = {}
+        self._elements_by_doc: dict[str, dict[str, ElementNode]] = {}
         self._groups: dict[str, list[str]] = {}
-        self._checkpoints: dict[str, dict[str, tuple[DocumentNode | None, dict[str, RegionNode]]]] = {}
+        self._checkpoints: dict[str, dict[str, tuple[DocumentNode | None, dict[str, ElementNode]]]] = {}
         self._checkpoint_meta: dict[str, dict[str, str]] = {}
         self._auto_counter: int = 0
         self._auto_enabled: bool = True
@@ -42,13 +42,13 @@ class SceneGraph:
         cls,
         document_id: str,
         doc: DocumentNode | None,
-        regions: dict[str, RegionNode],
+        elements: dict[str, ElementNode],
     ) -> "SceneGraph":
         """Create a graph instance from an in-memory document snapshot."""
         graph = cls()
         if doc is not None:
             graph._docs[document_id] = doc
-        graph._regions_by_doc[document_id] = regions
+        graph._elements_by_doc[document_id] = elements
         graph._last_doc_id = document_id
         return graph
 
@@ -59,7 +59,7 @@ class SceneGraph:
         if doc:
             import datetime as _dt
             doc.updated_at = _dt.datetime.now().isoformat()
-        regions = self._regions_by_doc.get(doc_id, {})
+        elements = self._elements_by_doc.get(doc_id, {})
         groups_data = {}
         if self._groups:
             prefix = f"{doc_id}::"
@@ -69,7 +69,7 @@ class SceneGraph:
         ts = __import__("datetime").datetime.now().isoformat()
         self._storage.save(doc_id, {
             "document": doc.model_dump() if doc else {},
-            "regions": {k: v.model_dump() for k, v in regions.items()},
+            "elements": {k: v.model_dump() for k, v in elements.items()},
             "metadata": {
                 "updated": ts,
                 "tool_stats": self.tool_stats.to_metadata(),
@@ -83,19 +83,19 @@ class SceneGraph:
         data = self._storage.load(document_id)
         if not data:
             return False
-        from avge_engine.scene.models import DocumentNode, RegionNode
+        from avge_engine.scene.models import DocumentNode, ElementNode
         d = data.get("document", {})
         self._docs[document_id] = DocumentNode(**d)
-        regions = {}
-        for rid, r in data.get("regions", {}).items():
+        elements = {}
+        for rid, r in data.get("elements", {}).items():
             if "constraints" in r and isinstance(r["constraints"], dict):
                 r["constraints"] = CurveConstraints(**r["constraints"])
             if "style" in r and isinstance(r["style"], dict):
                 r["style"] = Style(**r["style"])
             if "transform" in r and isinstance(r["transform"], dict):
                 r["transform"] = Transform(**r["transform"])
-            regions[rid] = RegionNode(**r)
-        self._regions_by_doc[document_id] = regions
+            elements[rid] = ElementNode(**r)
+        self._elements_by_doc[document_id] = elements
         self._last_doc_id = document_id
         # Restore groups from storage
         groups_data = data.get("groups", {})
@@ -160,7 +160,7 @@ class SceneGraph:
             updated_at=now,
         )
         self._docs[doc_id] = doc
-        self._regions_by_doc[doc_id] = {}
+        self._elements_by_doc[doc_id] = {}
         self._last_doc_id = doc_id
         self._auto_checkpoint(doc_id, "create_document", f"{width}x{height}")
         self._persist(doc_id)
@@ -172,7 +172,7 @@ class SceneGraph:
         name: str | None = None,
         set_active: bool = True,
     ) -> DocumentNode:
-        """Deep-copy a document and all of its regions into a new document ID."""
+        """Deep-copy a document and all of its elements into a new document ID."""
         source_id = self._resolve_doc(source_document_id)
         if source_id not in self._docs and self._storage:
             self.load_document(source_id)
@@ -189,9 +189,9 @@ class SceneGraph:
         clone.gradients = copy.deepcopy(source.gradients)
 
         self._docs[clone_id] = clone
-        self._regions_by_doc[clone_id] = {
-            rid: region.model_copy(deep=True)
-            for rid, region in self._regions_by_doc.get(source_id, {}).items()
+        self._elements_by_doc[clone_id] = {
+            rid: element.model_copy(deep=True)
+            for rid, element in self._elements_by_doc.get(source_id, {}).items()
         }
 
         if self._groups:
@@ -222,7 +222,7 @@ class SceneGraph:
         """Delete a document from memory and attached storage."""
         existed = document_id in self._docs
         self._docs.pop(document_id, None)
-        self._regions_by_doc.pop(document_id, None)
+        self._elements_by_doc.pop(document_id, None)
 
         prefix = f"{document_id}::"
         for key in list(self._groups):
@@ -251,68 +251,21 @@ class SceneGraph:
                 "width": d.width,
                 "height": d.height,
                 "version": d.version,
-                "region_count": len(self._regions_by_doc.get(d.id, {})),
+                "element_count": len(self._elements_by_doc.get(d.id, {})),
                 "created_at": d.created_at,
                 "updated_at": d.updated_at,
             }
             for d in self._docs.values()
         ]
 
-    # ── Region operations ───────────────────────────────────────────
-
-    def _regions_for(self, document_id: str) -> dict[str, RegionNode]:
-        """Get the regions dict for a document."""
-        regions = self._regions_by_doc.get(document_id)
-        if regions is None:
-            raise ValueError(f"Document '{document_id}' not found")
-        return regions
+    # ── Element operations ───────────────────────────────────────────
 
     def _elements_for(self, document_id: str) -> dict[str, ElementNode]:
-        """Get drawable elements for a document.
-
-        This aliases the legacy region store while internal code migrates to
-        element terminology.
-        """
-        return self._regions_for(document_id)
-
-    def create_region(
-        self,
-        outline: list[Point2D],
-        document_id: str | None = None,
-        region_id: str | None = None,
-        layer: str = "default",
-        z_index: int = 0,
-        clip_to: str | None = None,
-        constraints: CurveConstraints | None = None,
-        style: Style | None = None,
-        transform: Transform | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> RegionNode:
-        doc_id = self._resolve_doc(document_id)
-        doc = self.get_document(doc_id)
-        regions = self._regions_for(doc_id)
-        rid = region_id or f"r_{uuid.uuid4().hex[:8]}"
-        if rid in regions:
-            raise ValueError(f"Region '{rid}' already exists in document '{document_id}'")
-
-        norm_outline = normalize_outline(outline)
-
-        region = RegionNode(
-            id=rid,
-            layer=layer,
-            z_index=z_index,
-            clip_to=clip_to,
-            outline=norm_outline,
-            constraints=constraints or CurveConstraints(),
-            style=style or Style(),
-            transform=transform or Transform(),
-            metadata=metadata or {},
-        )
-        regions[rid] = region
-        self._auto_checkpoint(doc_id, "create_region", rid)
-        self._persist(doc_id)
-        doc.version += 1
-        return region
+        """Get the elements dict for a document."""
+        elements = self._elements_by_doc.get(document_id)
+        if elements is None:
+            raise ValueError(f"Document '{document_id}' not found")
+        return elements
 
     def create_element(
         self,
@@ -327,85 +280,69 @@ class SceneGraph:
         transform: Transform | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> ElementNode:
-        """Create a drawable element.
+        doc_id = self._resolve_doc(document_id)
+        doc = self.get_document(doc_id)
+        elements = self._elements_for(doc_id)
+        rid = element_id or f"r_{uuid.uuid4().hex[:8]}"
+        if rid in elements:
+            raise ValueError(f"Element '{rid}' already exists in document '{document_id}'")
 
-        Compatibility wrapper around create_region while public tools and
-        storage still use region naming.
-        """
-        return self.create_region(
-            outline=outline,
-            document_id=document_id,
-            region_id=element_id,
+        norm_outline = normalize_outline(outline)
+
+        element = ElementNode(
+            id=rid,
             layer=layer,
             z_index=z_index,
             clip_to=clip_to,
-            constraints=constraints,
-            style=style,
-            transform=transform,
-            metadata=metadata,
+            outline=norm_outline,
+            constraints=constraints or CurveConstraints(),
+            style=style or Style(),
+            transform=transform or Transform(),
+            metadata=metadata or {},
         )
-
-    def get_region(self, region_id: str, document_id: str | None = None) -> RegionNode:
-        regions = self._regions_for(self._resolve_doc(document_id))
-        region = regions.get(region_id)
-        if region is None:
-            raise ValueError(f"Region '{region_id}' not found in document '{document_id}'")
-        return region
+        elements[rid] = element
+        self._auto_checkpoint(doc_id, "create_element", rid)
+        self._persist(doc_id)
+        doc.version += 1
+        return element
 
     def get_element(self, element_id: str, document_id: str | None = None) -> ElementNode:
-        element = self._elements_for(self._resolve_doc(document_id)).get(element_id)
+        elements = self._elements_for(self._resolve_doc(document_id))
+        element = elements.get(element_id)
         if element is None:
             raise ValueError(f"Element '{element_id}' not found in document '{document_id}'")
         return element
 
-    def has_region(self, region_id: str, document_id: str | None = None) -> bool:
-        return region_id in self._regions_for(self._resolve_doc(document_id))
-
     def has_element(self, element_id: str, document_id: str | None = None) -> bool:
         return element_id in self._elements_for(self._resolve_doc(document_id))
 
-    def get_all_regions(self, document_id: str) -> list[RegionNode]:
-        """Return regions in insertion order."""
-        return list(self._regions_for(document_id).values())
-
     def get_all_elements(self, document_id: str) -> list[ElementNode]:
-        """Return drawable elements in insertion order."""
+        """Return elements in insertion order."""
         return list(self._elements_for(document_id).values())
-
-    def region_count(self, document_id: str | None = None) -> int:
-        return len(self._regions_for(self._resolve_doc(document_id)))
 
     def element_count(self, document_id: str | None = None) -> int:
         return len(self._elements_for(self._resolve_doc(document_id)))
 
-    # ── Region deletion ────────────────────────────────────────────────
+    # ── Element deletion ────────────────────────────────────────────────
 
-    def delete_region(self, document_id: str, region_id: str) -> bool:
-        """Delete a region by ID. Returns True if deleted, False if not found."""
-        regions = self._regions_for(document_id)
-        if region_id not in regions:
+    def delete_element(self, document_id: str, element_id: str) -> bool:
+        """Delete a element by ID. Returns True if deleted, False if not found."""
+        elements = self._elements_for(document_id)
+        if element_id not in elements:
             return False
-        del regions[region_id]
+        del elements[element_id]
         self.get_document(document_id).version += 1
-        self._auto_checkpoint(document_id, "delete_region", region_id)
+        self._auto_checkpoint(document_id, "delete_element", element_id)
         self._persist(document_id)
         return True
 
-    def delete_regions(self, document_id: str, ids: list[str]) -> list[str]:
-        """Delete multiple regions. Returns list of actually deleted IDs."""
-        deleted: list[str] = []
-        for rid in ids:
-            if self.delete_region(document_id, rid):
-                deleted.append(rid)
-        return deleted
-
-    def delete_element(self, document_id: str, element_id: str) -> bool:
-        """Delete an element by ID."""
-        return self.delete_region(document_id, element_id)
-
     def delete_elements(self, document_id: str, ids: list[str]) -> list[str]:
         """Delete multiple elements. Returns list of actually deleted IDs."""
-        return self.delete_regions(document_id, ids)
+        deleted: list[str] = []
+        for rid in ids:
+            if self.delete_element(document_id, rid):
+                deleted.append(rid)
+        return deleted
 
     # ── Style presets ──────────────────────────────────────────────
 
@@ -434,8 +371,8 @@ class SceneGraph:
     def boolean_operation(
         self,
         operation: str,
-        region_ids: list[str],
-        new_region_id: str | None = None,
+        element_ids: list[str],
+        new_element_id: str | None = None,
         document_id: str | None = None,
         *,
         keep_originals: bool = False,
@@ -443,36 +380,36 @@ class SceneGraph:
         stroke: str | None = None,
         stroke_width: float | None = None,
         opacity: float | None = None,
-    ) -> RegionNode:
-        """Perform boolean geometry on regions using shapely.
+    ) -> ElementNode:
+        """Perform boolean geometry on elements using shapely.
 
         Args:
             operation: "union", "subtract", "intersect", or "xor".
-            region_ids: IDs of at least 2 regions to combine.
-            new_region_id: ID for the result region.
-            keep_originals: If True, keep input regions (default False).
+            element_ids: IDs of at least 2 elements to combine.
+            new_element_id: ID for the result element.
+            keep_originals: If True, keep input elements (default False).
             fill: Fill color for the result.
             stroke: Stroke color for the result.
             stroke_width: Stroke width for the result.
             opacity: Opacity for the result.
 
-        Returns the new RegionNode.
+        Returns the new ElementNode.
         """
         import shapely
         from shapely.geometry import Polygon
         from shapely.ops import unary_union
 
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
-        if len(region_ids) < 2:
-            raise ValueError("Need at least 2 regions for boolean operation")
+        elements = self._elements_for(doc_id)
+        if len(element_ids) < 2:
+            raise ValueError("Need at least 2 elements for boolean operation")
 
-        # Sample each region's fitted curve to get boundary polygon
+        # Sample each element's fitted curve to get boundary polygon
         polys: list[Polygon] = []
-        for rid in region_ids:
-            r = regions.get(rid)
+        for rid in element_ids:
+            r = elements.get(rid)
             if r is None:
-                raise ValueError(f"Region '{rid}' not found")
+                raise ValueError(f"Element '{rid}' not found")
             segments = fit_curves(
                 r.outline,
                 closed=r.constraints.closed,
@@ -483,7 +420,7 @@ class SceneGraph:
             )
             pts = sample_curve(segments, samples_per_segment=64)
             if len(pts) < 3:
-                raise ValueError(f"Region '{rid}' has too few boundary points ({len(pts)})")
+                raise ValueError(f"Element '{rid}' has too few boundary points ({len(pts)})")
             poly = Polygon(pts)
             if not poly.is_valid:
                 poly = poly.buffer(0)
@@ -525,7 +462,7 @@ class SceneGraph:
         if len(coords) < 3:
             raise RuntimeError("Boolean result has too few points")
 
-        rid = new_region_id or f"bool_{uuid.uuid4().hex[:6]}"
+        rid = new_element_id or f"bool_{uuid.uuid4().hex[:6]}"
         result_fill = fill if fill is not None else "#CCCCCC"
         result_style = Style(
             fill=result_fill,
@@ -533,67 +470,67 @@ class SceneGraph:
             stroke_width=max(0.001, min(0.1, stroke_width)) if stroke_width is not None else 0.005,
             opacity=max(0.0, min(1.0, opacity)) if opacity is not None else 1.0,
         )
-        result_region = RegionNode(
+        result_element = ElementNode(
             id=rid,
             outline=[(float(x), float(y)) for x, y in coords],
             constraints=CurveConstraints(smoothness=0.3, closed=True),
             style=result_style,
         )
-        self._regions_for(doc_id)[rid] = result_region
+        self._elements_for(doc_id)[rid] = result_element
         self.get_document(doc_id).version += 1
 
         if not keep_originals:
-            for rid in region_ids:
-                del regions[rid]
+            for rid in element_ids:
+                del elements[rid]
 
         self._auto_checkpoint(doc_id, f"boolean_{operation}", rid)
         self._persist(doc_id)
-        return result_region
+        return result_element
 
     # ── Group operations ───────────────────────────────────────────
 
-    def group_regions(self, group_name: str, region_ids: list[str], document_id: str | None = None, *, replace: bool = False) -> list[str]:
-        """Group regions under a name. Creates or appends to an existing group.
+    def group_elements(self, group_name: str, element_ids: list[str], document_id: str | None = None, *, replace: bool = False) -> list[str]:
+        """Group elements under a name. Creates or appends to an existing group.
         When ``replace`` is True, replaces existing members instead of appending.
         """
         doc_id = self._resolve_doc(document_id)
         key = f"{doc_id}::{group_name}"
         existing = [] if replace else self._groups.get(key, [])
-        for rid in region_ids:
-            if self.has_region(rid, doc_id) and rid not in existing:
+        for rid in element_ids:
+            if self.has_element(rid, doc_id) and rid not in existing:
                 existing.append(rid)
         self._groups[key] = existing
         self._persist(doc_id)
         return existing
 
-    def add_to_group(self, group_name: str, region_ids: list[str], document_id: str | None = None) -> list[str]:
-        """Add regions to an existing group. Creates the group if it doesn't exist.
+    def add_to_group(self, group_name: str, element_ids: list[str], document_id: str | None = None) -> list[str]:
+        """Add elements to an existing group. Creates the group if it doesn't exist.
         Returns the updated member list.
         """
         doc_id = self._resolve_doc(document_id)
         key = f"{doc_id}::{group_name}"
         members = self._groups.get(key, [])
-        for rid in region_ids:
-            if self.has_region(rid, doc_id) and rid not in members:
+        for rid in element_ids:
+            if self.has_element(rid, doc_id) and rid not in members:
                 members.append(rid)
         self._groups[key] = members
         self._persist(doc_id)
         return members
 
-    def remove_from_group(self, group_name: str, region_ids: list[str], document_id: str | None = None) -> list[str]:
-        """Remove specific regions from a group. Returns the updated member list.
+    def remove_from_group(self, group_name: str, element_ids: list[str], document_id: str | None = None) -> list[str]:
+        """Remove specific elements from a group. Returns the updated member list.
         Raises ValueError if the group doesn't exist.
         """
         doc_id = self._resolve_doc(document_id)
         key = f"{doc_id}::{group_name}"
         if key not in self._groups:
             raise ValueError(f"Group '{group_name}' not found")
-        removed_ids = [rid for rid in region_ids if rid in self._groups[key]]
-        self._groups[key] = [rid for rid in self._groups[key] if rid not in region_ids]
+        removed_ids = [rid for rid in element_ids if rid in self._groups[key]]
+        self._groups[key] = [rid for rid in self._groups[key] if rid not in element_ids]
         self._persist(doc_id)
         return removed_ids
 
-    def ungroup_regions(self, group_name: str | list[str], document_id: str | None = None) -> bool | list[str]:
+    def ungroup_elements(self, group_name: str | list[str], document_id: str | None = None) -> bool | list[str]:
         """Remove one or more groups. Returns True (single) or list of removed names."""
         doc_id = self._resolve_doc(document_id)
         if isinstance(group_name, str):
@@ -612,14 +549,14 @@ class SceneGraph:
         return removed
 
     def get_group(self, group_name: str, document_id: str | None = None) -> list[dict]:
-        """Get regions in a group with their IDs and bounds."""
+        """Get elements in a group with their IDs and bounds."""
         doc_id = self._resolve_doc(document_id)
         key = f"{doc_id}::{group_name}"
         ids = self._groups.get(key, [])
         result = []
         for rid in ids:
             try:
-                r = self.get_region(rid, doc_id)
+                r = self.get_element(rid, doc_id)
                 result.append({'id': rid, 'bounds': r.bounds})
             except ValueError:
                 pass
@@ -647,9 +584,9 @@ class SceneGraph:
         mirror_x: bool = False,
         mirror_y: bool = False,
     ) -> list[str]:
-        """Duplicate all regions in a named group with transforms applied.
+        """Duplicate all elements in a named group with transforms applied.
 
-        Each region is copied, offset/scaled/rotated/mirrored, and added
+        Each element is copied, offset/scaled/rotated/mirrored, and added
         to a new group. The original group is unchanged.
         """
         import math
@@ -671,7 +608,7 @@ class SceneGraph:
         new_ids: list[str] = []
         for m in members:
             rid = m["id"]
-            original = self._regions_for(doc_id).get(rid)
+            original = self._elements_for(doc_id).get(rid)
             if original is None:
                 continue
             new_rid = f"{new_prefix or group_name + '_copy'}_{rid}"
@@ -684,15 +621,15 @@ class SceneGraph:
                 rx = lx * cos_a - ly * sin_a
                 ry = lx * sin_a + ly * cos_a
                 new_outline.append((rx + cx + dx, ry + cy + dy))
-            from avge_engine.scene.models import RegionNode
-            dup = RegionNode(
+            from avge_engine.scene.models import ElementNode
+            dup = ElementNode(
                 id=new_rid, layer=original.layer, z_index=original.z_index,
                 clip_to=original.clip_to, outline=new_outline,
                 constraints=original.constraints, style=original.style,
                 transform=original.transform,
                 metadata=original.metadata.copy() if original.metadata else {},
             )
-            self._regions_for(doc_id)[new_rid] = dup
+            self._elements_for(doc_id)[new_rid] = dup
             new_ids.append(new_rid)
 
         if new_ids:
@@ -706,20 +643,20 @@ class SceneGraph:
     # ── Layer operations ───────────────────────────────────────────
 
     def list_layers(self, document_id: str | None = None) -> list[dict]:
-        """List all unique layers and their region counts."""
+        """List all unique layers and their element counts."""
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         layers: dict[str, int] = {}
-        for r in regions.values():
+        for r in elements.values():
             layers[r.layer] = layers.get(r.layer, 0) + 1
         return [{'layer': k, 'count': v} for k, v in sorted(layers.items())]
 
     def reorder_layer(self, layer: str, z_offset: int, document_id: str | None = None) -> int:
-        """Shift all regions in a layer by z_offset. Returns count affected."""
+        """Shift all elements in a layer by z_offset. Returns count affected."""
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         count = 0
-        for r in regions.values():
+        for r in elements.values():
             if r.layer == layer:
                 r.z_index += z_offset
                 r.version += 1
@@ -728,35 +665,35 @@ class SceneGraph:
             self.get_document(doc_id).version += 1
         return count
 
-    def move_to_front(self, region_id: str, document_id: str | None = None) -> bool:
-        """Move a region to the highest z_index. Returns True if moved."""
+    def move_to_front(self, element_id: str, document_id: str | None = None) -> bool:
+        """Move a element to the highest z_index. Returns True if moved."""
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
-        region = regions.get(region_id)
-        if region is None:
+        elements = self._elements_for(doc_id)
+        element = elements.get(element_id)
+        if element is None:
             return False
-        max_z = max(r.z_index for r in regions.values())
-        if region.z_index < max_z:
-            region.z_index = max_z + 1
-            region.version += 1
+        max_z = max(r.z_index for r in elements.values())
+        if element.z_index < max_z:
+            element.z_index = max_z + 1
+            element.version += 1
             self.get_document(doc_id).version += 1
-            self._auto_checkpoint(doc_id, "move_to_front", region_id)
+            self._auto_checkpoint(doc_id, "move_to_front", element_id)
             self._persist(doc_id)
         return True
 
-    def move_to_back(self, region_id: str, document_id: str | None = None) -> bool:
-        """Move a region to the lowest z_index. Returns True if moved."""
+    def move_to_back(self, element_id: str, document_id: str | None = None) -> bool:
+        """Move a element to the lowest z_index. Returns True if moved."""
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
-        region = regions.get(region_id)
-        if region is None:
+        elements = self._elements_for(doc_id)
+        element = elements.get(element_id)
+        if element is None:
             return False
-        min_z = min(r.z_index for r in regions.values())
-        if region.z_index > min_z:
-            region.z_index = min_z - 1
-            region.version += 1
+        min_z = min(r.z_index for r in elements.values())
+        if element.z_index > min_z:
+            element.z_index = min_z - 1
+            element.version += 1
             self.get_document(doc_id).version += 1
-            self._auto_checkpoint(doc_id, "move_to_back", region_id)
+            self._auto_checkpoint(doc_id, "move_to_back", element_id)
             self._persist(doc_id)
         return True
 
@@ -765,38 +702,38 @@ class SceneGraph:
     def critique_composition(self, document_id: str | None = None) -> list[str]:
         """Auto-check the scene against design skill rules. Returns list of findings."""
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         findings: list[str] = []
 
-        # Rule 1: Depth — count gradient-filled vs flat-filled regions
-        flat_cnt = sum(1 for r in regions.values()
+        # Rule 1: Depth — count gradient-filled vs flat-filled elements
+        flat_cnt = sum(1 for r in elements.values()
                       if isinstance(r.style.fill, str) and r.style.fill and r.style.opacity >= 0.95)
-        grad_cnt = sum(1 for r in regions.values()
+        grad_cnt = sum(1 for r in elements.values()
                       if isinstance(r.style.fill, dict))
         if flat_cnt > grad_cnt * 3 and flat_cnt > 5:
             findings.append(f"Rule 1 (depth): {flat_cnt} flat fills, only {grad_cnt} gradients — consider more depth shading")
 
         # Rule 2: Stroke hierarchy — check for uniform stroke widths
-        widths = [r.style.stroke_width for r in regions.values() if r.style.stroke]
+        widths = [r.style.stroke_width for r in elements.values() if r.style.stroke]
         if len(widths) > 3:
             unique = len(set(f'{w:.4f}' for w in widths))
             if unique <= 1:
-                findings.append(f"Rule 2 (stroke hierarchy): all {len(widths)} stroked regions use the same width — vary by silhouette vs detail")
+                findings.append(f"Rule 2 (stroke hierarchy): all {len(widths)} stroked elements use the same width — vary by silhouette vs detail")
 
         # Rule 3: Palette size
-        fills = [str(r.style.fill) for r in regions.values() if r.style.fill and isinstance(r.style.fill, str)]
+        fills = [str(r.style.fill) for r in elements.values() if r.style.fill and isinstance(r.style.fill, str)]
         unique_fills = len(set(fills))
         if unique_fills > 8:
             findings.append(f"Rule 3 (palette): {unique_fills} unique fill colors — aim for 3-5 cohesive colors")
         if unique_fills <= 1 and len(fills) > 5:
-            findings.append(f"Rule 3 (palette): only 1 fill color across {len(fills)} regions — add variation")
+            findings.append(f"Rule 3 (palette): only 1 fill color across {len(fills)} elements — add variation")
 
-        # Rule 5: Overlapping / misaligned regions —
-        # Detect when a region logically inside another extends beyond it.
-        # Only flag when the inner region's center is within the outer bounds
-        # (proving containment intent) but the inner region protrudes outside.
-        sorted_regions = sorted(regions.values(), key=lambda r: r.z_index)
-        for i, outer in enumerate(sorted_regions):
+        # Rule 5: Overlapping / misaligned elements —
+        # Detect when a element logically inside another extends beyond it.
+        # Only flag when the inner element's center is within the outer bounds
+        # (proving containment intent) but the inner element protrudes outside.
+        sorted_elements = sorted(elements.values(), key=lambda r: r.z_index)
+        for i, outer in enumerate(sorted_elements):
             if outer.z_index < 0:
                 continue
             ob = outer.bounds
@@ -804,7 +741,7 @@ class SceneGraph:
                 continue
             ox1, oy1 = ob["x"], ob["y"]
             ox2, oy2 = ob["x"] + ob["w"], ob["y"] + ob["h"]
-            for inner in sorted_regions[i+1:]:
+            for inner in sorted_elements[i+1:]:
                 if inner.z_index <= outer.z_index:
                     continue
                 ib = inner.bounds
@@ -825,20 +762,20 @@ class SceneGraph:
                 if (ix1 < ox1 - margin or iy1 < oy1 - margin or
                     ix2 > ox2 + margin or iy2 > oy2 + margin):
                     findings.append(
-                        f"Rule 5 (overlap): region '{inner.id}' (z={inner.z_index}) "
+                        f"Rule 5 (overlap): element '{inner.id}' (z={inner.z_index}) "
                         f"extends outside '{outer.id}' (z={outer.z_index}) — "
                         f"inner should stay inside outer bounds for correct layering"
                     )
                     break
 
-        # Rule 6: Off-canvas — region extends fully outside the viewport
-        for r in regions.values():
+        # Rule 6: Off-canvas — element extends fully outside the viewport
+        for r in elements.values():
             b = r.bounds
             if b and (b['x'] + b['w'] < 0 or b['x'] > 1 or b['y'] + b['h'] < 0 or b['y'] > 1):
-                findings.append(f"Rule 6 (grounding): region '{r.id}' is off-canvas")
+                findings.append(f"Rule 6 (grounding): element '{r.id}' is off-canvas")
 
         # General: empty scene
-        if not regions:
+        if not elements:
             findings.append("Scene is empty — nothing to critique")
 
         return findings
@@ -846,19 +783,19 @@ class SceneGraph:
     def critique_preview_quality(self, document_id: str | None = None) -> list[dict[str, Any]]:
         """Preview-oriented visual critique with actionable findings."""
         doc_id = self._resolve_doc(document_id)
-        regions = list(self._regions_for(doc_id).values())
+        elements = list(self._elements_for(doc_id).values())
         findings: list[dict[str, Any]] = []
-        if not regions:
+        if not elements:
             return [{
                 "code": "empty_scene",
                 "severity": "high",
                 "confidence": 1.0,
                 "message": "Scene is empty — there is no preview to critique.",
-                "suggestion": "Call create_region/create_primitive before preview critique.",
-                "region_ids": [],
+                "suggestion": "Call create_element/create_primitive before preview critique.",
+                "element_ids": [],
             }]
 
-        visible = [r for r in regions if r.style.opacity > 0.02]
+        visible = [r for r in elements if r.style.opacity > 0.02]
         filled = [r for r in visible if r.style.fill is not None]
         shadows = [
             r for r in visible
@@ -867,7 +804,7 @@ class SceneGraph:
             or r.style.blend_mode == "multiply" and r.style.opacity <= 0.35
         ]
         gradients = [r for r in filled if isinstance(r.style.fill, dict)]
-        material_regions = [
+        material_elements = [
             r for r in visible
             if r.metadata.get("material") or r.metadata.get("material_source")
         ]
@@ -881,31 +818,31 @@ class SceneGraph:
         ]
 
         def add(code: str, severity: str, confidence: float, message: str,
-                suggestion: str, region_ids: list[str] | None = None) -> None:
+                suggestion: str, element_ids: list[str] | None = None) -> None:
             findings.append({
                 "code": code,
                 "severity": severity,
                 "confidence": round(max(0.0, min(1.0, confidence)), 2),
                 "message": message,
                 "suggestion": suggestion,
-                "region_ids": region_ids or [],
+                "element_ids": element_ids or [],
             })
 
         # Too flat: many opaque flat fills, little gradient/material/shadow support.
         if len(filled) >= 4:
             flat_ratio = len(flat) / max(1, len(filled))
-            depth_marks = len(gradients) + len(material_regions) + len(shadows)
+            depth_marks = len(gradients) + len(material_elements) + len(shadows)
             if flat_ratio >= 0.72 and depth_marks <= max(1, len(filled) // 5):
                 add(
                     "too_flat",
                     "high" if flat_ratio > 0.85 else "medium",
                     flat_ratio,
-                    f"{len(flat)} of {len(filled)} filled regions are opaque flat colors with little depth treatment.",
+                    f"{len(flat)} of {len(filled)} filled elements are opaque flat colors with little depth treatment.",
                     "Use restyle(material=...), fill_gradient, create_shadow, or add_shading on major objects.",
                     [r.id for r in flat[:6]],
                 )
 
-        # Over-rounded: too many pill-like rects or high-smoothness low-detail regions.
+        # Over-rounded: too many pill-like rects or high-smoothness low-detail elements.
         rounded_ids: list[str] = []
         for r in visible:
             if r.primitive and r.primitive.get("type") == "rect":
@@ -921,7 +858,7 @@ class SceneGraph:
                 "over_rounded",
                 "medium",
                 min(1.0, len(rounded_ids) / max(1, len(visible)) + 0.25),
-                f"{len(rounded_ids)} regions look highly rounded/pill-like, which can make the preview toy-like.",
+                f"{len(rounded_ids)} elements look highly rounded/pill-like, which can make the preview toy-like.",
                 "Reduce rx/smoothness on structural surfaces; reserve high smoothness for organic forms.",
                 rounded_ids[:8],
             )
@@ -943,7 +880,7 @@ class SceneGraph:
                 "high" if len(candidates) >= 3 else "medium",
                 0.82,
                 f"{len(candidates)} sizeable lower-scene object(s) have no visible contact/depth shadow.",
-                "Call create_shadow(region_id, direction=90, distance=0.03, softness=5, sy=0.35) for grounded objects.",
+                "Call create_shadow(element_id, direction=90, distance=0.03, softness=5, sy=0.35) for grounded objects.",
                 candidates[:6],
             )
         elif len(candidates) >= 4 and len(shadows) < len(candidates) // 3:
@@ -951,7 +888,7 @@ class SceneGraph:
                 "missing_contact_shadows",
                 "medium",
                 0.68,
-                f"Only {len(shadows)} shadow-like region(s) for {len(candidates)} sizeable grounded object(s).",
+                f"Only {len(shadows)} shadow-like element(s) for {len(candidates)} sizeable grounded object(s).",
                 "Add depth shadows to the main foreground objects, or cast shadows onto the floor/table plane.",
                 candidates[:6],
             )
@@ -1013,7 +950,7 @@ class SceneGraph:
                         "dominant_blob_shape",
                         "medium",
                         min(0.9, largest_area / total_area),
-                        f"Region '{largest.id}' visually dominates the scene and may read as a single blob.",
+                        f"Element '{largest.id}' visually dominates the scene and may read as a single blob.",
                         "Break it into planes/details, add line hierarchy, or add material/shadow overlays.",
                         [largest.id],
                     )
@@ -1027,8 +964,8 @@ class SceneGraph:
         target_quad: list[Point2D],
         document_id: str | None = None,
         *,
-        region_id: str | None = None,
-        source_region_id: str | None = None,
+        element_id: str | None = None,
+        source_element_id: str | None = None,
         replace_source: bool = False,
         columns: int = 1,
         rows: int = 1,
@@ -1041,13 +978,13 @@ class SceneGraph:
         blend_mode: str | None = None,
         smoothness: float = 0.0,
         metadata: dict[str, Any] | None = None,
-    ) -> RegionNode:
+    ) -> ElementNode:
         """Create or warp geometry into a target quadrilateral.
 
         ``target_quad`` order is top-left, top-right, bottom-right,
-        bottom-left. When ``source_region_id`` is omitted, a rectangular panel
+        bottom-left. When ``source_element_id`` is omitted, a rectangular panel
         is created and optional perimeter divisions are sampled via
-        ``columns``/``rows``. When a source region is supplied, its outline is
+        ``columns``/``rows``. When a source element is supplied, its outline is
         normalized to its own bounds and projected into the target quad.
         """
         from avge_engine.geometry.perspective import (
@@ -1061,8 +998,8 @@ class SceneGraph:
             raise ValueError("target_quad must contain exactly four points")
 
         quad = [(float(x), float(y)) for x, y in target_quad]
-        if source_region_id:
-            source = self.get_region(source_region_id, doc_id)
+        if source_element_id:
+            source = self.get_element(source_element_id, doc_id)
             unit_points = normalize_points_to_unit(list(source.outline))
             outline = project_unit_points(unit_points, quad)
             base_style = source.style
@@ -1083,10 +1020,10 @@ class SceneGraph:
             out_layer = layer
             out_z = z_index
 
-        if source_region_id and replace_source:
-            rid = source_region_id
-            self.edit_region(
-                region_id=source_region_id,
+        if source_element_id and replace_source:
+            rid = source_element_id
+            self.edit_element(
+                element_id=source_element_id,
                 document_id=doc_id,
                 outline=outline,
                 smoothness=smoothness,
@@ -1099,10 +1036,10 @@ class SceneGraph:
                 layer=out_layer,
                 metadata=metadata,
             )
-            return self.get_region(rid, doc_id)
+            return self.get_element(rid, doc_id)
 
-        rid = region_id or f"quad_{uuid.uuid4().hex[:6]}"
-        region = RegionNode(
+        rid = element_id or f"quad_{uuid.uuid4().hex[:6]}"
+        element = ElementNode(
             id=rid,
             layer=out_layer,
             z_index=out_z,
@@ -1120,14 +1057,14 @@ class SceneGraph:
             ),
             metadata=metadata or {},
         )
-        regions = self._regions_for(doc_id)
-        if rid in regions:
-            raise ValueError(f"Region '{rid}' already exists in document '{doc_id}'")
-        regions[rid] = region
+        elements = self._elements_for(doc_id)
+        if rid in elements:
+            raise ValueError(f"Element '{rid}' already exists in document '{doc_id}'")
+        elements[rid] = element
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "project_quad", rid)
         self._persist(doc_id)
-        return region
+        return element
 
     def transform_objects(
         self,
@@ -1149,17 +1086,17 @@ class SceneGraph:
         mirror_x: bool = False,
         mirror_y: bool = False,
     ) -> list[str]:
-        """Move, scale (optionally non-uniform), and/or rotate existing regions.
+        """Move, scale (optionally non-uniform), and/or rotate existing elements.
 
         When ``group_name`` is set, it resolves the group's members as IDs.
-        When ``z_index`` is set, all affected regions get this z_index.
+        When ``z_index`` is set, all affected elements get this z_index.
         When ``mirror_x`` or ``mirror_y`` is True, the outline is flipped
-        around each region's center (or the group center in group_mode).
+        around each element's center (or the group center in group_mode).
         """
         import math
 
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         affected: list[str] = []
 
         # Resolve group_name to member IDs
@@ -1186,7 +1123,7 @@ class SceneGraph:
         if group_mode and ids:
             count = 0
             for rid in ids:
-                r = regions.get(rid)
+                r = elements.get(rid)
                 if r is None:
                     continue
                 for px, py in r.outline:
@@ -1197,33 +1134,33 @@ class SceneGraph:
                 gcx /= count
                 gcy /= count
 
-        # Pivot overrides both per-region and group center
+        # Pivot overrides both per-element and group center
         if pivot_x is not None and pivot_y is not None:
             gcx, gcy = pivot_x, pivot_y
         elif pivot_mode == "base":
-            pass  # handled per-region
+            pass  # handled per-element
 
         for rid in ids:
-            region = regions.get(rid)
-            if region is None:
+            element = elements.get(rid)
+            if element is None:
                 continue
             # Center for scaling/rotation
             if pivot_mode == "base":
-                b = region.bounds
+                b = element.bounds
                 cx = b["x"] + b["w"] / 2
                 cy = b["y"] + b["h"]
             elif pivot_mode == "center":
-                b = region.bounds
+                b = element.bounds
                 cx = b["x"] + b["w"] / 2
                 cy = b["y"] + b["h"] / 2
             elif group_mode or (pivot_x is not None and pivot_y is not None):
                 cx, cy = gcx, gcy
             else:
-                cx = sum(p[0] for p in region.outline) / len(region.outline)
-                cy = sum(p[1] for p in region.outline) / len(region.outline)
+                cx = sum(p[0] for p in element.outline) / len(element.outline)
+                cy = sum(p[1] for p in element.outline) / len(element.outline)
 
             new_outline = []
-            for x, y in region.outline:
+            for x, y in element.outline:
                 # Scale around center
                 lx = (x - cx) * scale_x
                 ly = (y - cy) * scale_y
@@ -1233,17 +1170,17 @@ class SceneGraph:
                 # Translate
                 new_outline.append((rx + cx + dx, ry + cy + dy))
 
-            region.outline = normalize_outline(new_outline)
-            # If the region has a primitive dict, update its coordinates instead
+            element.outline = normalize_outline(new_outline)
+            # If the element has a primitive dict, update its coordinates instead
             # of dropping it — this preserves clean SVG elements (ellipse, rect).
-            if region.primitive:
+            if element.primitive:
                 has_scale = (abs(scale_x - 1) > 0.001 or abs(scale_y - 1) > 0.001)
                 has_rotate = abs(rotate) > 0.001
-                ptype = region.primitive.get("type")
+                ptype = element.primitive.get("type")
 
                 if has_scale and not has_rotate and not mirror_x and not mirror_y:
                     # Scale-only: update primitive params in-place (preserves <ellipse>/<rect>)
-                    p = region.primitive
+                    p = element.primitive
                     if ptype == "ellipse":
                         p["cx"] = round((p["cx"] - cx) * scale_x + cx + dx, 6)
                         p["cy"] = round((p["cy"] - cy) * scale_y + cy + dy, 6)
@@ -1263,23 +1200,23 @@ class SceneGraph:
                     new_outline = [(
                         ((x - cx) * scale_x * cos_a - (y - cy) * scale_y * sin_a) + cx + dx,
                         ((x - cx) * scale_x * sin_a + (y - cy) * scale_y * cos_a) + cy + dy,
-                    ) for x, y in region.outline]
-                    region.outline = normalize_outline(new_outline)
+                    ) for x, y in element.outline]
+                    element.outline = normalize_outline(new_outline)
 
                 elif has_rotate and not mirror_x and not mirror_y:
-                    # Rotation only: set region.transform.rotate, keep primitive
+                    # Rotation only: set element.transform.rotate, keep primitive
                     rot_deg = rotate
-                    object.__setattr__(region.transform, "rotate",
-                                       region.transform.rotate + rot_deg)
+                    object.__setattr__(element.transform, "rotate",
+                                       element.transform.rotate + rot_deg)
                     new_outline = [(
                         ((x - cx) * math.cos(angle) - (y - cy) * math.sin(angle)) + cx + dx,
                         ((x - cx) * math.sin(angle) + (y - cy) * math.cos(angle)) + cy + dy,
-                    ) for x, y in region.outline]
-                    region.outline = normalize_outline(new_outline)
+                    ) for x, y in element.outline]
+                    element.outline = normalize_outline(new_outline)
 
                 elif abs(dx) > 0.001 or abs(dy) > 0.001:
                     # Pure translation: update primitive coords in-place
-                    p = region.primitive
+                    p = element.primitive
                     if p.get("type") == "ellipse":
                         p["cx"] += dx
                         p["cy"] += dy
@@ -1291,15 +1228,15 @@ class SceneGraph:
                         p["y1"] += dy
                         p["x2"] += dx
                         p["y2"] += dy
-            region.version += 1
+            element.version += 1
             affected.append(rid)
 
-        # Apply z_index to all affected regions
+        # Apply z_index to all affected elements
         if z_index is not None:
             for rid in affected:
-                region = regions.get(rid)
-                if region is not None:
-                    region.z_index = z_index
+                element = elements.get(rid)
+                if element is not None:
+                    element.z_index = z_index
 
         if affected:
             self.get_document(doc_id).version += 1
@@ -1323,15 +1260,15 @@ class SceneGraph:
         layer: str | None = None,
         tags: dict[str, str] | None = None,
     ) -> list[dict]:
-        """Query regions by visual properties, bounds, z-index, and metadata tags.
+        """Query elements by visual properties, bounds, z-index, and metadata tags.
 
         When ``tags`` is provided, all specified key/value pairs must match
-        the region's metadata (AND logic) for the region to be included.
+        the element's metadata (AND logic) for the element to be included.
         """
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         results: list[dict] = []
-        for r in regions.values():
+        for r in elements.values():
             if fill is not None and r.style.fill != fill:
                 continue
             if layer is not None and r.layer != layer:
@@ -1369,9 +1306,9 @@ class SceneGraph:
     def batch(self, ops: list[dict], document_id: str | None = None) -> list[dict]:
         """Execute multiple operations in sequence within one document.
 
-        Each op dict requires a "tool" key. Supported: create_region,
-        create_shape, create_primitive, create_curve, edit_region,
-        duplicate_region, delete_region, style_objects,
+        Each op dict requires a "tool" key. Supported: create_element,
+        create_shape, create_primitive, create_curve, edit_element,
+        duplicate_element, delete_element, style_objects,
         transform_objects, move_to_front, move_to_back.
 
         Returns list of result dicts, one per op in order.
@@ -1381,11 +1318,11 @@ class SceneGraph:
         for op in ops:
             tool = op.pop("tool", "")
             try:
-                if tool == "create_region":
+                if tool == "create_element":
                     fill_for_style = op.get("fill_gradient") or op.get("fill")
-                    r = self.create_region(
+                    r = self.create_element(
                         outline=op.pop("outline"),
-                        region_id=op.get("region_id"),
+                        element_id=op.get("element_id"),
                         document_id=doc_id,
                         layer=op.get("layer", "default"),
                         z_index=op.get("z_index", 0),
@@ -1405,7 +1342,7 @@ class SceneGraph:
                         ),
                         metadata=op.get("metadata"),
                     )
-                    results.append({"status": "ok", "region_id": r.id})
+                    results.append({"status": "ok", "element_id": r.id})
                 elif tool == "create_shape":
                     shape = op.pop("shape", {})
                     stype = shape.get("type")
@@ -1414,7 +1351,7 @@ class SceneGraph:
                             r = self.create_rect(
                                 shape["x"], shape["y"], shape["width"], shape["height"],
                                 rx=shape.get("rx", 0.0),
-                                document_id=doc_id, region_id=op.get("region_id"),
+                                document_id=doc_id, element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 fill=op.get("fill", "#CCCCCC"),
@@ -1424,12 +1361,12 @@ class SceneGraph:
                                 blend_mode=op.get("blend_mode"),
                                 taper=shape.get("taper", 0.0),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         elif stype == "ellipse":
                             r = self.create_ellipse(
                                 shape["cx"], shape["cy"], shape["rx"],
                                 ry=shape.get("ry"),
-                                document_id=doc_id, region_id=op.get("region_id"),
+                                document_id=doc_id, element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 fill=op.get("fill", "#CCCCCC"),
@@ -1438,7 +1375,7 @@ class SceneGraph:
                                 opacity=op.get("opacity", 1.0),
                                 blend_mode=op.get("blend_mode"),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         elif stype in ("line", "polyline"):
                             pts = shape.get("points")
                             if pts is not None:
@@ -1446,9 +1383,9 @@ class SceneGraph:
                                     raise ValueError("polyline requires at least 2 points")
                                 is_closed = bool(shape.get("closed", op.get("closed", False)))
                                 if is_closed:
-                                    r = self.create_region(
+                                    r = self.create_element(
                                         outline=[(float(p[0]), float(p[1])) for p in pts],
-                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        document_id=doc_id, element_id=op.get("element_id"),
                                         layer=op.get("layer", "default"),
                                         z_index=op.get("z_index", 0),
                                         constraints=CurveConstraints(
@@ -1468,7 +1405,7 @@ class SceneGraph:
                                 else:
                                     r = self.create_line(
                                         points=pts,
-                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        document_id=doc_id, element_id=op.get("element_id"),
                                         layer=op.get("layer", "default"),
                                         z_index=op.get("z_index", 0),
                                         stroke=op.get("stroke", "#333333"),
@@ -1483,7 +1420,7 @@ class SceneGraph:
                                 r = self.create_line(
                                     shape.get("x1", 0.0), shape.get("y1", 0.0),
                                     shape.get("x2", 0.5), shape.get("y2", 0.5),
-                                    document_id=doc_id, region_id=op.get("region_id"),
+                                    document_id=doc_id, element_id=op.get("element_id"),
                                     layer=op.get("layer", "default"),
                                     z_index=op.get("z_index", 0),
                                     stroke=op.get("stroke", "#333333"),
@@ -1493,7 +1430,7 @@ class SceneGraph:
                                     stroke_linecap=op.get("stroke_linecap"),
                                     stroke_dasharray=op.get("stroke_dasharray"),
                                 )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         elif stype in ("compound_path", "path"):
                             subpaths = shape.get("subpaths")
                             if subpaths is None and shape.get("points") is not None:
@@ -1503,7 +1440,7 @@ class SceneGraph:
                             r = self.create_compound_path(
                                 subpaths=subpaths,
                                 document_id=doc_id,
-                                region_id=op.get("region_id"),
+                                element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 fill=op.get("fill"),
@@ -1516,14 +1453,14 @@ class SceneGraph:
                                 smoothness=shape.get("smoothness", op.get("smoothness", 0.0)),
                                 closed=bool(shape.get("closed", op.get("closed", False))),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         else:
                             results.append({"status": "error", "message": f"Unknown shape type: {stype}"})
                     except (ValueError, RuntimeError, KeyError) as e:
                         results.append({"status": "error", "message": str(e)})
-                elif tool == "edit_region":
-                    self.edit_region(
-                        region_id=op.pop("region_id"),
+                elif tool == "edit_element":
+                    self.edit_element(
+                        element_id=op.pop("element_id"),
                         document_id=doc_id,
                         outline=op.get("outline"),
                         fill=op.get("fill"),
@@ -1539,10 +1476,10 @@ class SceneGraph:
                         stroke_linecap=op.get("stroke_linecap"),
                     )
                     results.append({"status": "ok"})
-                elif tool == "duplicate_region":
-                    d = self.duplicate_region(
-                        region_id=op.pop("region_id"),
-                        new_region_id=op.get("new_region_id"),
+                elif tool == "duplicate_element":
+                    d = self.duplicate_element(
+                        element_id=op.pop("element_id"),
+                        new_element_id=op.get("new_element_id"),
                         document_id=doc_id,
                         offset_x=op.get("offset_x", 0),
                         offset_y=op.get("offset_y", 0),
@@ -1557,16 +1494,16 @@ class SceneGraph:
                         scale=op.get("scale", 1.0),
                         rotate=op.get("rotate", 0.0),
                     )
-                    results.append({"status": "ok", "region_id": d.id})
+                    results.append({"status": "ok", "element_id": d.id})
                 elif tool == "create_shadow":
-                    receiver_id = op.get("onto_region_id")
+                    receiver_id = op.get("onto_element_id")
                     resolved_z_offset = op.get("z_offset")
                     if resolved_z_offset is None:
                         resolved_z_offset = 1 if receiver_id else -1
                     shadow = self.add_depth_shadow(
-                        op.pop("region_id"),
+                        op.pop("element_id"),
                         document_id=doc_id,
-                        new_region_id=op.get("new_region_id"),
+                        new_element_id=op.get("new_element_id"),
                         direction=op.get("direction", 45.0),
                         distance=op.get("distance", 0.03),
                         softness=op.get("softness", 4.0),
@@ -1577,14 +1514,14 @@ class SceneGraph:
                         sy=op.get("sy"),
                         z_offset=0 if receiver_id else resolved_z_offset,
                         clip_to=receiver_id,
-                        layer=self.get_region(receiver_id, doc_id).layer if receiver_id else None,
+                        layer=self.get_element(receiver_id, doc_id).layer if receiver_id else None,
                     )
                     if receiver_id:
-                        onto = self.get_region(receiver_id, doc_id)
+                        onto = self.get_element(receiver_id, doc_id)
                         shadow.z_index = onto.z_index + resolved_z_offset
                         self.get_document(doc_id).version += 1
                         self._persist(doc_id)
-                    results.append({"status": "ok", "region_id": shadow.id})
+                    results.append({"status": "ok", "element_id": shadow.id})
                 elif tool == "create_primitive":
                     # Alias — same logic as create_shape
                     shape = op.pop("shape", {})
@@ -1594,7 +1531,7 @@ class SceneGraph:
                             r = self.create_rect(
                                 shape["x"], shape["y"], shape["width"], shape["height"],
                                 rx=shape.get("rx", 0.0),
-                                document_id=doc_id, region_id=op.get("region_id"),
+                                document_id=doc_id, element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 fill=op.get("fill", "#CCCCCC"),
@@ -1604,12 +1541,12 @@ class SceneGraph:
                                 blend_mode=op.get("blend_mode"),
                                 taper=shape.get("taper", 0.0),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         elif stype == "ellipse":
                             r = self.create_ellipse(
                                 shape["cx"], shape["cy"], shape["rx"],
                                 ry=shape.get("ry"),
-                                document_id=doc_id, region_id=op.get("region_id"),
+                                document_id=doc_id, element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 fill=op.get("fill", "#CCCCCC"),
@@ -1618,7 +1555,7 @@ class SceneGraph:
                                 opacity=op.get("opacity", 1.0),
                                 blend_mode=op.get("blend_mode"),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         elif stype in ("line", "polyline"):
                             pts = shape.get("points")
                             if pts is not None:
@@ -1626,9 +1563,9 @@ class SceneGraph:
                                     raise ValueError("polyline requires at least 2 points")
                                 is_closed = bool(shape.get("closed", op.get("closed", False)))
                                 if is_closed:
-                                    r = self.create_region(
+                                    r = self.create_element(
                                         outline=[(float(p[0]), float(p[1])) for p in pts],
-                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        document_id=doc_id, element_id=op.get("element_id"),
                                         layer=op.get("layer", "default"),
                                         z_index=op.get("z_index", 0),
                                         constraints=CurveConstraints(
@@ -1648,7 +1585,7 @@ class SceneGraph:
                                 else:
                                     r = self.create_line(
                                         points=pts,
-                                        document_id=doc_id, region_id=op.get("region_id"),
+                                        document_id=doc_id, element_id=op.get("element_id"),
                                         layer=op.get("layer", "default"),
                                         z_index=op.get("z_index", 0),
                                         stroke=op.get("stroke", "#333333"),
@@ -1663,7 +1600,7 @@ class SceneGraph:
                                 r = self.create_line(
                                     shape.get("x1", 0.0), shape.get("y1", 0.0),
                                     shape.get("x2", 0.5), shape.get("y2", 0.5),
-                                    document_id=doc_id, region_id=op.get("region_id"),
+                                    document_id=doc_id, element_id=op.get("element_id"),
                                     layer=op.get("layer", "default"),
                                     z_index=op.get("z_index", 0),
                                     stroke=op.get("stroke", "#333333"),
@@ -1673,7 +1610,7 @@ class SceneGraph:
                                     stroke_linecap=op.get("stroke_linecap"),
                                     stroke_dasharray=op.get("stroke_dasharray"),
                                 )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         elif stype in ("compound_path", "path"):
                             subpaths = shape.get("subpaths")
                             if subpaths is None and shape.get("points") is not None:
@@ -1683,7 +1620,7 @@ class SceneGraph:
                             r = self.create_compound_path(
                                 subpaths=subpaths,
                                 document_id=doc_id,
-                                region_id=op.get("region_id"),
+                                element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 fill=op.get("fill"),
@@ -1696,7 +1633,7 @@ class SceneGraph:
                                 smoothness=shape.get("smoothness", op.get("smoothness", 0.0)),
                                 closed=bool(shape.get("closed", op.get("closed", False))),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         else:
                             results.append({"status": "error", "message": f"Unknown shape type: {stype}"})
                     except (ValueError, RuntimeError, KeyError) as e:
@@ -1709,7 +1646,7 @@ class SceneGraph:
                         try:
                             r = self.create_line(
                                 points=pts,
-                                document_id=doc_id, region_id=op.get("region_id"),
+                                document_id=doc_id, element_id=op.get("element_id"),
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
                                 stroke=op.get("stroke", "#333333"),
@@ -1720,11 +1657,11 @@ class SceneGraph:
                                 stroke_dasharray=op.get("stroke_dasharray"),
                                 smoothness=op.get("smoothness", 0.5),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         except (ValueError, RuntimeError) as e:
                             results.append({"status": "error", "message": str(e)})
-                elif tool == "delete_region":
-                    self.delete_region(region_id=op.pop("region_id"), document_id=doc_id)
+                elif tool == "delete_element":
+                    self.delete_element(element_id=op.pop("element_id"), document_id=doc_id)
                     results.append({"status": "ok"})
                 elif tool == "style_objects":
                     batch_ids = op.pop("ids", None)
@@ -1769,7 +1706,7 @@ class SceneGraph:
                             y=op.pop("y", 0.5),
                             text=op.pop("text", ""),
                             document_id=doc_id,
-                            region_id=op.get("region_id"),
+                            element_id=op.get("element_id"),
                             layer=op.get("layer", "default"),
                             z_index=op.get("z_index", 0),
                             fill=op.get("fill", "#333333"),
@@ -1779,7 +1716,7 @@ class SceneGraph:
                             font_weight=op.get("font_weight", "normal"),
                             rotate=op.get("rotate", 0.0),
                         )
-                        results.append({"status": "ok", "region_id": r.id})
+                        results.append({"status": "ok", "element_id": r.id})
                     except (ValueError, RuntimeError) as e:
                         results.append({"status": "error", "message": str(e)})
                 elif tool == "import_svg_path":
@@ -1791,9 +1728,9 @@ class SceneGraph:
                         )
                         if outline and len(outline) >= 2:
                             fill_for_style = op.get("fill_gradient") or op.get("fill", "#CCCCCC")
-                            r = self.create_region(
+                            r = self.create_element(
                                 outline=outline,
-                                region_id=op.get("region_id"),
+                                element_id=op.get("element_id"),
                                 document_id=doc_id,
                                 layer=op.get("layer", "default"),
                                 z_index=op.get("z_index", 0),
@@ -1807,7 +1744,7 @@ class SceneGraph:
                                     stroke_width=op.get("stroke_width", 0.005),
                                 ),
                             )
-                            results.append({"status": "ok", "region_id": r.id})
+                            results.append({"status": "ok", "element_id": r.id})
                         else:
                             results.append({"status": "error", "message": "Could not parse SVG path data"})
                     except (ValueError, RuntimeError) as e:
@@ -1819,14 +1756,14 @@ class SceneGraph:
                             width=op.pop("width", 0.5), height=op.pop("height", 0.5),
                             href=op.pop("href", ""),
                             document_id=doc_id,
-                            region_id=op.get("region_id"),
+                            element_id=op.get("element_id"),
                             layer=op.get("layer", "default"),
                             z_index=op.get("z_index", 0),
                             preserve_aspect_ratio=op.get("preserve_aspect_ratio", "xMidYMid meet"),
                             rotate=op.get("rotate", 0.0),
                             clip_to=op.get("clip_to"),
                         )
-                        results.append({"status": "ok", "region_id": r.id})
+                        results.append({"status": "ok", "element_id": r.id})
                     except (ValueError, RuntimeError) as e:
                         results.append({"status": "error", "message": str(e)})
                 elif tool == "generate_shape":
@@ -1835,26 +1772,26 @@ class SceneGraph:
                         pattern = op.pop("pattern", "")
                         params = op.pop("params", {})
                         if pattern == "offset_outline":
-                            region_id_g = params.get("region_id")
-                            if region_id_g and self.has_region(region_id_g, doc_id):
-                                region = self.get_region(region_id_g, doc_id)
-                                outline = geo.offset_outline(region.outline, distance=params.get("distance", 0.02))
+                            element_id_g = params.get("element_id")
+                            if element_id_g and self.has_element(element_id_g, doc_id):
+                                element = self.get_element(element_id_g, doc_id)
+                                outline = geo.offset_outline(element.outline, distance=params.get("distance", 0.02))
                                 if outline:
-                                    r = self.create_region(
+                                    r = self.create_element(
                                         outline=outline,
                                         document_id=doc_id,
-                                        constraints=CurveConstraints(smoothness=region.constraints.smoothness, closed=True),
+                                        constraints=CurveConstraints(smoothness=element.constraints.smoothness, closed=True),
                                         style=Style(
-                                            fill=params.get("fill", region.style.fill),
-                                            stroke=params.get("stroke", region.style.stroke),
-                                            stroke_width=params.get("stroke_width", region.style.stroke_width),
+                                            fill=params.get("fill", element.style.fill),
+                                            stroke=params.get("stroke", element.style.stroke),
+                                            stroke_width=params.get("stroke_width", element.style.stroke_width),
                                         ),
                                     )
-                                    results.append({"status": "ok", "region_id": r.id})
+                                    results.append({"status": "ok", "element_id": r.id})
                                 else:
                                     results.append({"status": "error", "message": "offset produced degenerate outline"})
                             else:
-                                results.append({"status": "error", "message": "region_id required for offset_outline"})
+                                results.append({"status": "error", "message": "element_id required for offset_outline"})
                         elif pattern == "distribute_linear":
                             pts = geo.distribute_linear(
                                 start=params.get("start", (0, 0)),
@@ -1863,30 +1800,30 @@ class SceneGraph:
                             )
                             results.append({"status": "ok", "points": pts})
                         elif pattern == "apex_from_edge":
-                            region_id_g = params.get("region_id")
-                            if region_id_g and self.has_region(region_id_g, doc_id):
-                                region = self.get_region(region_id_g, doc_id)
+                            element_id_g = params.get("element_id")
+                            if element_id_g and self.has_element(element_id_g, doc_id):
+                                element = self.get_element(element_id_g, doc_id)
                                 triangle = geo.apex_from_edge(
-                                    region.outline, edge=params.get("edge", "top"),
+                                    element.outline, edge=params.get("edge", "top"),
                                     apex_offset=params.get("apex_offset"),
                                     inset=params.get("inset", 0.0),
                                 )
                                 if triangle:
-                                    r = self.create_region(
+                                    r = self.create_element(
                                         outline=triangle,
                                         document_id=doc_id,
                                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                                         style=Style(
-                                            fill=params.get("fill", region.style.fill),
-                                            stroke=params.get("stroke", region.style.stroke),
-                                            stroke_width=params.get("stroke_width", region.style.stroke_width),
+                                            fill=params.get("fill", element.style.fill),
+                                            stroke=params.get("stroke", element.style.stroke),
+                                            stroke_width=params.get("stroke_width", element.style.stroke_width),
                                         ),
                                     )
-                                    results.append({"status": "ok", "region_id": r.id})
+                                    results.append({"status": "ok", "element_id": r.id})
                                 else:
                                     results.append({"status": "error", "message": "apex produced degenerate triangle"})
                             else:
-                                results.append({"status": "error", "message": "region_id required for apex_from_edge"})
+                                results.append({"status": "error", "message": "element_id required for apex_from_edge"})
                         else:
                             results.append({"status": "error", "message": f"Unsupported batch pattern: {pattern}"})
                     except (ValueError, RuntimeError, KeyError) as e:
@@ -1899,11 +1836,11 @@ class SceneGraph:
                 op["tool"] = tool  # restore
         return results
 
-    # ── Edit region ────────────────────────────────────────────────
+    # ── Edit element ────────────────────────────────────────────────
 
-    def edit_region(
+    def edit_element(
         self,
-        region_id: str,
+        element_id: str,
         document_id: str | None = None,
         *,
         outline: list[Point2D] | None = None,
@@ -1925,12 +1862,12 @@ class SceneGraph:
         stroke_dasharray: str | None = None,
         blur: float | None = None,
     ) -> bool:
-        """Modify an existing region's properties. Only provided fields are changed."""
+        """Modify an existing element's properties. Only provided fields are changed."""
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
-        region = regions.get(region_id)
-        if region is None:
-            raise ValueError(f"Region '{region_id}' not found")
+        elements = self._elements_for(doc_id)
+        element = elements.get(element_id)
+        if element is None:
+            raise ValueError(f"Element '{element_id}' not found")
         if shape is not None:
             # Update primitive shape and its surrogate outline
             stype = shape.get("type")
@@ -1939,28 +1876,28 @@ class SceneGraph:
                 w, h = shape["width"], shape["height"]
                 rx = shape.get("rx", 0.0)
                 max_rx = min(w, h) / 2
-                region.primitive = {"type": "rect", "x": x, "y": y, "width": w, "height": h, "rx": max(0.0, min(rx, max_rx))}
-                region.outline = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
+                element.primitive = {"type": "rect", "x": x, "y": y, "width": w, "height": h, "rx": max(0.0, min(rx, max_rx))}
+                element.outline = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)]
             elif stype == "ellipse":
                 cx, cy = shape["cx"], shape["cy"]
                 rx = shape["rx"]
                 ry = shape.get("ry", rx)
                 if rx <= 0 or ry <= 0:
                     raise ValueError("rx and ry must be positive")
-                region.primitive = {"type": "ellipse", "cx": cx, "cy": cy, "rx": rx, "ry": ry}
-                region.outline = [(cx - rx, cy - ry), (cx + rx, cy + ry)]
+                element.primitive = {"type": "ellipse", "cx": cx, "cy": cy, "rx": rx, "ry": ry}
+                element.outline = [(cx - rx, cy - ry), (cx + rx, cy + ry)]
             elif stype == "line":
                 x1, y1 = shape["x1"], shape["y1"]
                 x2, y2 = shape["x2"], shape["y2"]
-                region.primitive = {"type": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2}
-                region.outline = [(x1, y1), (x2, y2)]
+                element.primitive = {"type": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2}
+                element.outline = [(x1, y1), (x2, y2)]
             else:
                 raise ValueError(f"Unknown shape type: {stype}")
         if outline is not None:
-            region.outline = normalize_outline(outline)
+            element.outline = normalize_outline(outline)
         if smoothness is not None or tensions is not None or handle_in is not None or handle_out is not None:
-            old_c = region.constraints
-            region.constraints = CurveConstraints(
+            old_c = element.constraints
+            element.constraints = CurveConstraints(
                 smoothness=smoothness if smoothness is not None else old_c.smoothness,
                 closed=old_c.closed,
                 corner_style=old_c.corner_style,
@@ -1969,8 +1906,8 @@ class SceneGraph:
                 handle_out=handle_out if handle_out is not None else old_c.handle_out,
             )
         if fill is not None or stroke is not None or stroke_width is not None or opacity is not None or blend_mode is not None or stroke_linecap is not None or stroke_dasharray is not None or blur is not None:
-            old_s = region.style
-            region.style = Style(
+            old_s = element.style
+            element.style = Style(
                 fill=fill if fill is not None else old_s.fill,
                 stroke=stroke if stroke is not None else old_s.stroke,
                 stroke_width=stroke_width if stroke_width is not None else old_s.stroke_width,
@@ -1981,25 +1918,25 @@ class SceneGraph:
                 blur=blur if blur is not None else old_s.blur,
             )
         if z_index is not None:
-            region.z_index = z_index
+            element.z_index = z_index
         if clip_to is not None:
-            region.clip_to = clip_to
+            element.clip_to = clip_to
         if layer is not None:
-            region.layer = layer
+            element.layer = layer
         if metadata is not None:
-            region.metadata.update(metadata)
-        region.version += 1
+            element.metadata.update(metadata)
+        element.version += 1
         self.get_document(doc_id).version += 1
-        self._auto_checkpoint(doc_id, "edit_region", region_id)
+        self._auto_checkpoint(doc_id, "edit_element", element_id)
         self._persist(doc_id)
         return True
 
-    # ── Duplicate region ──────────────────────────────────────────────
+    # ── Duplicate element ──────────────────────────────────────────────
 
-    def duplicate_region(
+    def duplicate_element(
         self,
-        region_id: str,
-        new_region_id: str | None = None,
+        element_id: str,
+        new_element_id: str | None = None,
         document_id: str | None = None,
         *,
         offset_x: float = 0.0,
@@ -2018,15 +1955,15 @@ class SceneGraph:
         scale: float = 1.0,
         rotate: float = 0.0,
         shadow_mode: bool = False,
-    ) -> RegionNode:
-        """Duplicate a region with optional offset and overrides.
+    ) -> ElementNode:
+        """Duplicate a element with optional offset and overrides.
 
         When ``mirror_x`` or ``mirror_y`` is True, the outline is flipped
-        around the original region's center before offset is applied.
+        around the original element's center before offset is applied.
         ``mirror_axis_x`` overrides the mirror axis to a fixed x position
-        (e.g. 0.5 = canvas center) rather than the region's own center.
+        (e.g. 0.5 = canvas center) rather than the element's own center.
         ``scale`` and ``rotate`` apply uniform scale and rotation around
-        the original region's center before offset.
+        the original element's center before offset.
 
         When ``shadow_mode`` is True (default False), the copy is
         automatically styled as a cel-shadow: fill is darkened via HSL,
@@ -2035,13 +1972,13 @@ class SceneGraph:
         """
         import math
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
-        original = regions.get(region_id)
+        elements = self._elements_for(doc_id)
+        original = elements.get(element_id)
         if original is None:
-            raise ValueError(f"Region '{region_id}' not found")
-        rid = new_region_id or f"{region_id}_copy"
-        if rid in regions:
-            raise ValueError(f"Region '{rid}' already exists")
+            raise ValueError(f"Element '{element_id}' not found")
+        rid = new_element_id or f"{element_id}_copy"
+        if rid in elements:
+            raise ValueError(f"Element '{rid}' already exists")
 
         cx = sum(p[0] for p in original.outline) / len(original.outline)
         cy = sum(p[1] for p in original.outline) / len(original.outline)
@@ -2111,7 +2048,7 @@ class SceneGraph:
             if simple_transform and (mirror_x or mirror_y):
                 # Mirror ellipse/rect primitives by flipping their center point.
                 # offset_x/y must be applied so the primitive matches the outline
-                # after the offset that duplicate_region applies post-mirror.
+                # after the offset that duplicate_element applies post-mirror.
                 if copy_p.get("type") == "ellipse":
                     new_cx = copy_p["cx"]
                     new_cy = copy_p["cy"]
@@ -2165,7 +2102,7 @@ class SceneGraph:
                     copy_p["y"] += offset_y
                     new_primitive = copy_p
 
-        dup = RegionNode(
+        dup = ElementNode(
             id=rid,
             layer=layer if layer is not None else original.layer,
             z_index=new_z,
@@ -2175,18 +2112,18 @@ class SceneGraph:
             transform=original.transform,
             primitive=new_primitive,
         )
-        regions[rid] = dup
+        elements[rid] = dup
         self.get_document(doc_id).version += 1
-        self._auto_checkpoint(doc_id, "duplicate_region", f"{region_id}->{rid}")
+        self._auto_checkpoint(doc_id, "duplicate_element", f"{element_id}->{rid}")
         self._persist(doc_id)
         return dup
 
     def add_depth_shadow(
         self,
-        region_id: str,
+        element_id: str,
         *,
         document_id: str | None = None,
-        new_region_id: str | None = None,
+        new_element_id: str | None = None,
         direction: float = 45.0,
         distance: float = 0.03,
         softness: float = 4.0,
@@ -2198,19 +2135,19 @@ class SceneGraph:
         z_offset: int = -1,
         clip_to: str | None = None,
         layer: str | None = None,
-    ) -> RegionNode:
-        """Create a soft offset shadow derived from an existing region."""
+    ) -> ElementNode:
+        """Create a soft offset shadow derived from an existing element."""
         import math
         import uuid
 
         doc_id = self._resolve_doc(document_id)
-        source = self.get_region(region_id, doc_id)
+        source = self.get_element(element_id, doc_id)
         if not source.outline:
-            raise ValueError(f"Region '{region_id}' has no outline to shadow")
+            raise ValueError(f"Element '{element_id}' has no outline to shadow")
 
         bounds = source.bounds
         if not bounds:
-            raise ValueError(f"Region '{region_id}' has empty bounds")
+            raise ValueError(f"Element '{element_id}' has empty bounds")
         cx = bounds["x"] + bounds["w"] / 2
         cy = bounds["y"] + bounds["h"] / 2
         scale_x = sx if sx is not None else scale
@@ -2226,8 +2163,8 @@ class SceneGraph:
             )
             for x, y in source.outline
         ]
-        rid = new_region_id or f"{region_id}_depth_shadow_{uuid.uuid4().hex[:6]}"
-        shadow = RegionNode(
+        rid = new_element_id or f"{element_id}_depth_shadow_{uuid.uuid4().hex[:6]}"
+        shadow = ElementNode(
             id=rid,
             layer=layer if layer is not None else source.layer,
             z_index=source.z_index + z_offset,
@@ -2250,13 +2187,13 @@ class SceneGraph:
                 blur=max(0.0, min(64.0, softness)),
             ),
             metadata={
-                "shadow_source": region_id,
+                "shadow_source": element_id,
                 "shadow_kind": "depth" if clip_to is None else "cast",
             },
         )
-        self._regions_for(doc_id)[rid] = shadow
+        self._elements_for(doc_id)[rid] = shadow
         self.get_document(doc_id).version += 1
-        self._auto_checkpoint(doc_id, "add_depth_shadow", f"{region_id}->{rid}")
+        self._auto_checkpoint(doc_id, "add_depth_shadow", f"{element_id}->{rid}")
         self._persist(doc_id)
         return shadow
 
@@ -2269,7 +2206,7 @@ class SceneGraph:
         rx: float = 0.0,
         *,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | GradientDef | None = "#CCCCCC",
@@ -2279,16 +2216,16 @@ class SceneGraph:
         blend_mode: str | None = None,
         taper: float = 0.0,
         rotate: float = 0.0,
-    ) -> RegionNode:
-        """Create a rectangle (or rounded rect) region — renders as SVG <rect>.
+    ) -> ElementNode:
+        """Create a rectangle (or rounded rect) element — renders as SVG <rect>.
 
         When ``taper`` is non-zero, the rect becomes a trapezoid (rendered as
-        a path-based region rather than an SVG primitive). Positive taper =
+        a path-based element rather than an SVG primitive). Positive taper =
         top narrower than base (e.g. finger shape). Negative taper = top wider.
         """
         import uuid, math
         doc_id = self._resolve_doc(document_id)
-        rid = region_id or f"rect_{uuid.uuid4().hex[:6]}"
+        rid = element_id or f"rect_{uuid.uuid4().hex[:6]}"
         max_rx = min(width, height) / 2
         rx_clamped = max(0.0, min(rx, max_rx))
         cx = x + width / 2
@@ -2308,7 +2245,7 @@ class SceneGraph:
                 (cx, y - height * 0.08),        # top-center (slight dome)
                 (top_x1, y),                   # top-left
             ]
-            region = RegionNode(
+            element = ElementNode(
                 id=rid, layer=layer, z_index=z_index,
                 outline=surr,
                 constraints=CurveConstraints(smoothness=0.35, closed=True),
@@ -2318,7 +2255,7 @@ class SceneGraph:
             )
         else:
             surr = [(x, y), (x + width, y), (x + width, y + height), (x, y + height)]
-            region = RegionNode(
+            element = ElementNode(
                 id=rid, layer=layer, z_index=z_index,
                 outline=surr,
                 constraints=CurveConstraints(smoothness=0.0, closed=True),
@@ -2327,13 +2264,13 @@ class SceneGraph:
                 primitive={"type": "rect", "x": x, "y": y, "width": width, "height": height, "rx": rx_clamped},
             )
         if abs(rotate) > 0.001:
-            object.__setattr__(region.transform, "rotate", rotate)
-        self._regions_for(doc_id)[rid] = region
-        region.version += 1
+            object.__setattr__(element.transform, "rotate", rotate)
+        self._elements_for(doc_id)[rid] = element
+        element.version += 1
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_rect", rid)
         self._persist(doc_id)
-        return region
+        return element
 
     def create_ellipse(
         self,
@@ -2341,7 +2278,7 @@ class SceneGraph:
         rx: float, ry: float | None = None,
         *,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | GradientDef | None = "#CCCCCC",
@@ -2350,16 +2287,16 @@ class SceneGraph:
         opacity: float = 1.0,
         blend_mode: str | None = None,
         rotate: float = 0.0,
-    ) -> RegionNode:
-        """Create an ellipse (or circle) region — renders as SVG <ellipse>."""
+    ) -> ElementNode:
+        """Create an ellipse (or circle) element — renders as SVG <ellipse>."""
         import uuid
         doc_id = self._resolve_doc(document_id)
-        rid = region_id or f"ellipse_{uuid.uuid4().hex[:6]}"
+        rid = element_id or f"ellipse_{uuid.uuid4().hex[:6]}"
         ry_val = ry if ry is not None else rx
         if rx <= 0 or ry_val <= 0:
             raise ValueError("rx and ry must be positive")
         surr = [(cx - rx, cy - ry_val), (cx + rx, cy + ry_val)]
-        region = RegionNode(
+        element = ElementNode(
             id=rid, layer=layer, z_index=z_index,
             outline=surr,
             constraints=CurveConstraints(smoothness=0.0, closed=True),
@@ -2367,14 +2304,14 @@ class SceneGraph:
                         opacity=max(0.0, min(1.0, opacity)), blend_mode=blend_mode),
             primitive={"type": "ellipse", "cx": cx, "cy": cy, "rx": rx, "ry": ry_val},
         )
-        self._regions_for(doc_id)[rid] = region
-        region.version += 1
+        self._elements_for(doc_id)[rid] = element
+        element.version += 1
         if abs(rotate) > 0.001:
-            object.__setattr__(region.transform, "rotate", rotate)
+            object.__setattr__(element.transform, "rotate", rotate)
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_ellipse", rid)
         self._persist(doc_id)
-        return region
+        return element
 
     def create_line(
         self,
@@ -2383,7 +2320,7 @@ class SceneGraph:
         *,
         document_id: str | None = None,
         points: list[list[float]] | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         stroke: str | None = "#333333",
@@ -2394,8 +2331,8 @@ class SceneGraph:
         stroke_dasharray: str | None = None,
         smoothness: float | None = None,
         rotate: float = 0.0,
-    ) -> RegionNode:
-        """Create a line/stroke region — renders as SVG <line> or path-based polyline.
+    ) -> ElementNode:
+        """Create a line/stroke element — renders as SVG <line> or path-based polyline.
 
         Use ``points`` for multi-segment lines (3+ points) that curve through
         Catmull-Rom interpolation. When ``points`` has 2 entries, a simple
@@ -2403,7 +2340,7 @@ class SceneGraph:
         """
         import uuid
         doc_id = self._resolve_doc(document_id)
-        rid = region_id or f"line_{uuid.uuid4().hex[:6]}"
+        rid = element_id or f"line_{uuid.uuid4().hex[:6]}"
 
         if points is not None and len(points) < 2:
             raise ValueError("points must contain at least 2 coordinate pairs")
@@ -2412,7 +2349,7 @@ class SceneGraph:
             # Multi-point polyline — path-based with smoothness
             surr = [(float(p[0]), float(p[1])) for p in points]
             curve_smoothness = smoothness if smoothness is not None else 0.35
-            region = RegionNode(
+            element = ElementNode(
                 id=rid, layer=layer, z_index=z_index,
                 outline=surr,
                 constraints=CurveConstraints(smoothness=curve_smoothness, closed=False),
@@ -2426,7 +2363,7 @@ class SceneGraph:
                 x1, y1 = float(points[0][0]), float(points[0][1])
                 x2, y2 = float(points[1][0]), float(points[1][1])
             surr = [(x1, y1), (x2, y2)]
-            region = RegionNode(
+            element = ElementNode(
                 id=rid, layer=layer, z_index=z_index,
                 outline=surr,
                 constraints=CurveConstraints(smoothness=0.0, closed=False),
@@ -2435,21 +2372,21 @@ class SceneGraph:
                             stroke_linecap=stroke_linecap, stroke_dasharray=stroke_dasharray),
                 primitive={"type": "line", "x1": x1, "y1": y1, "x2": x2, "y2": y2},
             )
-        self._regions_for(doc_id)[rid] = region
-        region.version += 1
+        self._elements_for(doc_id)[rid] = element
+        element.version += 1
         if abs(rotate) > 0.001:
-            object.__setattr__(region.transform, "rotate", rotate)
+            object.__setattr__(element.transform, "rotate", rotate)
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_line", rid)
         self._persist(doc_id)
-        return region
+        return element
 
     def create_compound_path(
         self,
         subpaths: list[list[list[float]]],
         *,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | GradientDef | None = None,
@@ -2462,11 +2399,11 @@ class SceneGraph:
         smoothness: float = 0.0,
         closed: bool = False,
         rotate: float = 0.0,
-    ) -> RegionNode:
+    ) -> ElementNode:
         """Create one SVG path containing multiple subpaths."""
         import uuid
         doc_id = self._resolve_doc(document_id)
-        rid = region_id or f"path_{uuid.uuid4().hex[:6]}"
+        rid = element_id or f"path_{uuid.uuid4().hex[:6]}"
         if len(subpaths) < 1:
             raise ValueError("compound_path requires at least one subpath")
 
@@ -2480,7 +2417,7 @@ class SceneGraph:
             outline.extend(pts)
 
         smooth = max(0.0, min(1.0, smoothness))
-        region = RegionNode(
+        element = ElementNode(
             id=rid,
             layer=layer,
             z_index=z_index,
@@ -2502,14 +2439,14 @@ class SceneGraph:
                 "smoothness": smooth,
             },
         )
-        self._regions_for(doc_id)[rid] = region
-        region.version += 1
+        self._elements_for(doc_id)[rid] = element
+        element.version += 1
         if abs(rotate) > 0.001:
-            object.__setattr__(region.transform, "rotate", rotate)
+            object.__setattr__(element.transform, "rotate", rotate)
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_compound_path", rid)
         self._persist(doc_id)
-        return region
+        return element
 
     def create_text(
         self,
@@ -2517,7 +2454,7 @@ class SceneGraph:
         text: str,
         *,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | GradientDef | None = "#333333",
@@ -2531,7 +2468,7 @@ class SceneGraph:
         opacity: float = 1.0,
         skew_x: float = 0.0,
         skew_y: float = 0.0,
-    ) -> RegionNode:
+    ) -> ElementNode:
         """Create a text label — renders as SVG <text>.
 
         Coordinates are in normalized 0.0–1.0 space. ``y`` is the text
@@ -2540,9 +2477,9 @@ class SceneGraph:
         """
         import uuid
         doc_id = self._resolve_doc(document_id)
-        rid = region_id or f"text_{uuid.uuid4().hex[:6]}"
+        rid = element_id or f"text_{uuid.uuid4().hex[:6]}"
 
-        region = RegionNode(
+        element = ElementNode(
             id=rid, layer=layer, z_index=z_index,
             outline=[(x, y)],
             constraints=CurveConstraints(smoothness=0.0, closed=False),
@@ -2558,13 +2495,13 @@ class SceneGraph:
             },
         )
         if abs(rotate) > 0.001:
-            object.__setattr__(region.transform, "rotate", rotate)
-        self._regions_for(doc_id)[rid] = region
-        region.version += 1
+            object.__setattr__(element.transform, "rotate", rotate)
+        self._elements_for(doc_id)[rid] = element
+        element.version += 1
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_text", rid)
         self._persist(doc_id)
-        return region
+        return element
 
 
     def insert_image(
@@ -2574,32 +2511,32 @@ class SceneGraph:
         href: str,
         *,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         preserve_aspect_ratio: str = "xMidYMid meet",
         rotate: float = 0.0,
         clip_to: str | None = None,
-    ) -> RegionNode:
-        """Create an image region — renders as SVG <image>.
+    ) -> ElementNode:
+        """Create an image element — renders as SVG <image>.
 
         Args:
             x, y: Top-left corner in normalized space.
             width, height: Dimensions in normalized space.
             href: Image URL, data URI, or path.
             document_id: Document UUID.
-            region_id: Optional unique ID.
+            element_id: Optional unique ID.
             layer: Layer name.
             z_index: Paint order.
             preserve_aspect_ratio: SVG preserveAspectRatio value.
             rotate: Rotation in degrees around image center.
-            clip_to: Optional region ID used as an SVG clip path.
+            clip_to: Optional element ID used as an SVG clip path.
         """
         import uuid
         doc_id = self._resolve_doc(document_id)
-        rid = region_id or f"img_{uuid.uuid4().hex[:6]}"
+        rid = element_id or f"img_{uuid.uuid4().hex[:6]}"
 
-        region = RegionNode(
+        element = ElementNode(
             id=rid, layer=layer, z_index=z_index,
             outline=[(x, y), (x + width, y), (x + width, y + height), (x, y + height)],
             constraints=CurveConstraints(smoothness=0.0, closed=True),
@@ -2613,13 +2550,13 @@ class SceneGraph:
             },
         )
         if abs(rotate) > 0.001:
-            object.__setattr__(region.transform, "rotate", rotate)
-        self._regions_for(doc_id)[rid] = region
-        region.version += 1
+            object.__setattr__(element.transform, "rotate", rotate)
+        self._elements_for(doc_id)[rid] = element
+        element.version += 1
         self.get_document(doc_id).version += 1
         self._auto_checkpoint(doc_id, "create_image", rid)
         self._persist(doc_id)
-        return region
+        return element
 
     # ── Style operations ────────────────────────────────────────────
 
@@ -2641,16 +2578,16 @@ class SceneGraph:
         fill_hsl_offset: dict | None = None,
         stroke_hsl_offset: dict | None = None,
     ) -> list[str]:
-        """Update style on existing regions. Returns list of actually updated IDs."""
+        """Update style on existing elements. Returns list of actually updated IDs."""
         doc_id = self._resolve_doc(document_id)
         doc = self.get_document(doc_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         affected: list[str] = []
         for rid in ids:
-            region = regions.get(rid)
-            if region is None:
+            element = elements.get(rid)
+            if element is None:
                 continue
-            old = region.style
+            old = element.style
             # Resolve fill — explicit fill/fill_gradient takes precedence over HSL
             resolved_fill = fill
             if fill_gradient is not None:
@@ -2692,10 +2629,10 @@ class SceneGraph:
                 stroke_dasharray=stroke_dasharray if stroke_dasharray is not None else old.stroke_dasharray,
                 blur=blur if blur is not None else old.blur,
             )
-            region.style = new_style
+            element.style = new_style
             if clip_to is not None:
-                region.clip_to = clip_to
-            region.version += 1
+                element.clip_to = clip_to
+            element.version += 1
             affected.append(rid)
         doc.version += 1
         self._auto_checkpoint(doc_id, "style_objects", str(affected))
@@ -2712,10 +2649,10 @@ class SceneGraph:
     ) -> dict[str, Any]:
         doc_id = self._resolve_doc(document_id)
         doc = self.get_document(doc_id)
-        regions = self._regions_for(doc_id)
-        region_list: list[dict[str, Any]] = []
+        elements = self._elements_for(doc_id)
+        element_list: list[dict[str, Any]] = []
 
-        for r in regions.values():
+        for r in elements.values():
             if filter_layer and r.layer != filter_layer:
                 continue
             entry: dict[str, Any] = {
@@ -2740,7 +2677,7 @@ class SceneGraph:
             }
             if detail == "full":
                 entry["outline"] = r.outline
-            region_list.append(entry)
+            element_list.append(entry)
 
         warnings = self._compute_warnings(document_id)
         smoothness_notes = self._compute_smoothness_notes(document_id)
@@ -2748,7 +2685,7 @@ class SceneGraph:
         # Collect color palette — unique fill and stroke hex values
         fills: set[str] = set()
         strokes: set[str] = set()
-        for r in regions.values():
+        for r in elements.values():
             if isinstance(r.style.fill, str) and r.style.fill.startswith("#"):
                 fills.add(r.style.fill.upper())
             if isinstance(r.style.stroke, str) and r.style.stroke.startswith("#"):
@@ -2764,8 +2701,8 @@ class SceneGraph:
                 "background": doc.background,
                 "version": doc.version,
             },
-            "regions": region_list,
-            "region_count": len(region_list),
+            "elements": element_list,
+            "element_count": len(element_list),
             "palette": {
                 "fills": sorted(fills) if fills else [],
                 "strokes": sorted(strokes) if strokes else [],
@@ -2776,23 +2713,23 @@ class SceneGraph:
     def _compute_warnings(self, document_id: str) -> list[str]:
         doc_id = self._resolve_doc(document_id)
         doc = self.get_document(doc_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         warnings: list[str] = []
-        for r in regions.values():
+        for r in elements.values():
             b = r.bounds
             if b and (b["x"] + b["w"] < 0 or b["x"] > 1.0 or b["y"] + b["h"] < 0 or b["y"] > 1.0):
-                warnings.append(f"Region '{r.id}' is entirely off-canvas")
+                warnings.append(f"Element '{r.id}' is entirely off-canvas")
         return warnings
 
     def _compute_smoothness_notes(self, document_id: str | None = None) -> list[str]:
-        regions = self._regions_for(self._resolve_doc(document_id))
+        elements = self._elements_for(self._resolve_doc(document_id))
         notes: list[str] = []
-        for r in regions.values():
+        for r in elements.values():
             n = len(r.outline)
             s = r.constraints.smoothness
             if n >= 20 and s <= 0.1:
                 notes.append(
-                    f"Region '{r.id}': {n} points with smoothness={s:.1f} "
+                    f"Element '{r.id}': {n} points with smoothness={s:.1f} "
                     f"(many points + sharp corners may produce jagged output; "
                     f"consider increasing smoothness or reducing point count)"
                 )
@@ -2821,7 +2758,7 @@ class SceneGraph:
     def reset(self) -> None:
         """Clear all state."""
         self._docs.clear()
-        self._regions_by_doc.clear()
+        self._elements_by_doc.clear()
         self._checkpoints.clear()
         self._checkpoint_meta.clear()
         self._auto_counter = 0
@@ -2837,28 +2774,28 @@ class SceneGraph:
         ts = __import__("datetime").datetime.now().strftime("%H:%M:%S")
         name = f"auto_{self._auto_counter:03d}"
         doc = self._docs.get(doc_id)
-        regions = self._regions_by_doc.get(doc_id, {})
+        elements = self._elements_by_doc.get(doc_id, {})
         snap_key = f"{doc_id}::{name}"
-        self._checkpoints[snap_key] = (copy.deepcopy(doc), copy.deepcopy(regions))
+        self._checkpoints[snap_key] = (copy.deepcopy(doc), copy.deepcopy(elements))
         self._checkpoint_meta[snap_key] = {
             "name": name, "time": ts, "action": action,
-            "detail": detail, "region_count": str(len(regions)),
+            "detail": detail, "element_count": str(len(elements)),
         }
 
     def checkpoint(self, document_id: str, name: str = "default") -> str:
         """Save a snapshot of document state."""
         doc_id = self._resolve_doc(document_id)
         doc = self.get_document(doc_id)
-        regions = self._regions_for(doc_id)
+        elements = self._elements_for(doc_id)
         snap_key = f"{doc_id}::{name}"
-        self._checkpoints[snap_key] = (copy.deepcopy(doc), copy.deepcopy(regions))
+        self._checkpoints[snap_key] = (copy.deepcopy(doc), copy.deepcopy(elements))
         ts = __import__("datetime").datetime.now().strftime("%H:%M:%S")
         self._checkpoint_meta[snap_key] = {
             "name": name,
             "time": ts,
             "action": "manual_checkpoint",
             "detail": "",
-            "region_count": str(len(regions)),
+            "element_count": str(len(elements)),
         }
         return name
 
@@ -2868,9 +2805,9 @@ class SceneGraph:
         snap = self._checkpoints.get(snap_key)
         if snap is None:
             return False
-        restored_doc, restored_regions = copy.deepcopy(snap)
+        restored_doc, restored_elements = copy.deepcopy(snap)
         self._docs[document_id] = restored_doc
-        self._regions_by_doc[document_id] = restored_regions
+        self._elements_by_doc[document_id] = restored_elements
         self._persist(document_id)
         return True
 
@@ -2888,11 +2825,11 @@ class SceneGraph:
             entry.setdefault("time", "?")
             entry.setdefault("action", "?")
             entry.setdefault("detail", "")
-            entry.setdefault("region_count", "?")
+            entry.setdefault("element_count", "?")
             entries.append(entry)
         return entries[:limit] if limit is not None else entries
 
-    def checkpoint_snapshot(self, document_id: str, name: str) -> tuple[DocumentNode | None, dict[str, RegionNode]]:
+    def checkpoint_snapshot(self, document_id: str, name: str) -> tuple[DocumentNode | None, dict[str, ElementNode]]:
         """Return a deep-copied checkpoint snapshot."""
         snap_key = f"{document_id}::{name}"
         snap = self._checkpoints.get(snap_key)
@@ -2900,11 +2837,11 @@ class SceneGraph:
             raise KeyError(name)
         return copy.deepcopy(snap)
 
-    # ── Extrude region outline ────────────────────────────────────
+    # ── Extrude element outline ────────────────────────────────────
 
-    def extrude_region_outline(
+    def extrude_element_outline(
         self,
-        region_id: str,
+        element_id: str,
         document_id: str | None = None,
         *,
         segment_indices: list[int] | None = None,
@@ -2914,14 +2851,14 @@ class SceneGraph:
         direction: str = "outward",
         shape: str = "round",
     ) -> bool:
-        """Add protrusions or notches at specified segments of a region's outline.
+        """Add protrusions or notches at specified segments of a element's outline.
 
         Each segment index refers to the edge between ``outline[i]`` and
         ``outline[(i+1) % n]``. The extrusion adds points offset from the
         segment midpoint, controlled by direction and shape.
 
         Args:
-            region_id: Region to modify.
+            element_id: Element to modify.
             document_id: Document UUID.
             segment_indices: List of segment indices to extrude.
                 If None, every segment gets a slight extrusion (rough edge).
@@ -2934,15 +2871,15 @@ class SceneGraph:
         import math
 
         doc_id = self._resolve_doc(document_id)
-        regions = self._regions_for(doc_id)
-        region = regions.get(region_id)
-        if region is None:
-            raise ValueError(f"Region '{region_id}' not found")
+        elements = self._elements_for(doc_id)
+        element = elements.get(element_id)
+        if element is None:
+            raise ValueError(f"Element '{element_id}' not found")
 
-        pts = list(region.outline)
+        pts = list(element.outline)
         n = len(pts)
         if n < 3:
-            raise ValueError("Region must have at least 3 outline points")
+            raise ValueError("Element must have at least 3 outline points")
 
         indices = segment_indices if segment_indices is not None else list(range(n))
         angle_rad = math.radians(angle_offset)
@@ -2993,21 +2930,21 @@ class SceneGraph:
                 pts.insert(j, peak)        # centered peak
                 pts.insert(j, (p1x, p1y))  # left bevel
 
-        region.outline = normalize_outline(pts)
-        region.version += 1
+        element.outline = normalize_outline(pts)
+        element.version += 1
         self.get_document(doc_id).version += 1
-        self._auto_checkpoint(doc_id, "extrude_region_outline", region_id)
+        self._auto_checkpoint(doc_id, "extrude_element_outline", element_id)
         self._persist(doc_id)
         return True
 
-    # ── Create composite region ───────────────────────────────────
+    # ── Create composite element ───────────────────────────────────
 
-    def create_composite_region(
+    def create_composite_element(
         self,
         outline: list[Point2D],
         document_id: str | None = None,
         *,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         closed: bool = True,
@@ -3018,7 +2955,7 @@ class SceneGraph:
         opacity: float = 1.0,
         sub_parts: dict | None = None,
     ) -> dict[str, Any]:
-        """Create a base region with patterned sub-part protrusions in one call.
+        """Create a base element with patterned sub-part protrusions in one call.
 
         The ``sub_parts`` dict supports:
           count (int): Number of sub-parts (e.g. 5 fingers).
@@ -3037,12 +2974,12 @@ class SceneGraph:
 
         doc_id = self._resolve_doc(document_id)
 
-        # 1. Create base region
-        rid = region_id or f"composite_{uuid.uuid4().hex[:6]}"
-        base = self.create_region(
+        # 1. Create base element
+        rid = element_id or f"composite_{uuid.uuid4().hex[:6]}"
+        base = self.create_element(
             outline=outline,
             document_id=doc_id,
-            region_id=rid,
+            element_id=rid,
             layer=layer,
             z_index=z_index,
             constraints=CurveConstraints(smoothness=smoothness, closed=closed),
@@ -3176,7 +3113,7 @@ class SceneGraph:
         mid_w = half_w * (0.3 + 0.7 * taper)  # width at mid-point
 
         sub_rid = f"{base_id}_sub{index}"
-        sub = RegionNode(
+        sub = ElementNode(
             id=sub_rid,
             layer=layer,
             z_index=z_index,
@@ -3202,9 +3139,9 @@ class SceneGraph:
                 opacity=opacity,
             ),
         )
-        self._regions_for(doc_id)[sub_rid] = sub
+        self._elements_for(doc_id)[sub_rid] = sub
         sub.version += 1
         self.get_document(doc_id).version += 1
-        self._auto_checkpoint(doc_id, "create_composite_region", sub_rid)
+        self._auto_checkpoint(doc_id, "create_composite_element", sub_rid)
         self._persist(doc_id)
         sub_ids.append(sub_rid)

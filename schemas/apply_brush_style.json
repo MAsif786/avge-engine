@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/apply_brush_style/v1.json",
   "title": "apply_brush_style",
-  "description": "Apply a digital art brush preset to existing regions while keeping output editable vector art.",
+  "description": "Apply a digital art brush preset to existing elements while keeping output editable vector art.",
   "type": "object",
   "properties": {
     "selector": {

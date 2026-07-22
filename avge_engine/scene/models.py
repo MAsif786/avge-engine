@@ -1,7 +1,7 @@
 """
 Data models for the AVGE scene graph.
 
-ElementNode/RegionNode and DocumentNode are Pydantic models.
+ElementNode and DocumentNode are Pydantic models.
 ToolStats provides lightweight per-document call tracking.
 """
 from __future__ import annotations
@@ -63,7 +63,7 @@ class ElementNode(BaseModel):
     """A drawable element node in the scene graph."""
 
     id: str
-    type: str = "region"
+    type: str = "element"
     layer: str = "default"
     z_index: int = 0
     clip_to: str | None = None
@@ -104,10 +104,6 @@ class ElementNode(BaseModel):
     @cached_model_property
     def bounds(self) -> dict[str, float] | None:
         return compute_bounds(self.outline)
-
-
-class RegionNode(ElementNode):
-    """Backward-compatible name for drawable elements."""
 
 
 class DocumentNode(BaseModel):

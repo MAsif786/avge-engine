@@ -1,6 +1,6 @@
 """Compact persisted document format helpers.
 
-The public API and in-memory scene graph use the full RegionNode-compatible
+The public API and in-memory scene graph use the full ElementNode-compatible
 shape. Storage can use a smaller representation as long as load normalizes it
 back to the full shape before SceneGraph hydrates models.
 """
@@ -41,7 +41,7 @@ _DEFAULT_TRANSFORM = {
 }
 
 _DEFAULT_REGION = {
-    "type": "region",
+    "type": "element",
     "layer": "default",
     "z_index": 0,
     "clip_to": None,
@@ -56,14 +56,14 @@ def encode_snapshot(data: dict[str, Any]) -> dict[str, Any]:
     if _looks_compact(data):
         data = decode_snapshot(data)
 
-    regions = data.get("regions", {})
+    elements = data.get("elements", {})
     style_ids: dict[str, str] = {}
     styles: dict[str, dict[str, Any]] = {}
-    compact_regions: dict[str, dict[str, Any]] = {}
+    compact_elements: dict[str, dict[str, Any]] = {}
 
-    for rid, region in regions.items():
-        compact = _compact_region(region)
-        style = _compact_style(region.get("style", {}))
+    for rid, element in elements.items():
+        compact = _compact_element(element)
+        style = _compact_style(element.get("style", {}))
         if style:
             style_key = json.dumps(style, sort_keys=True, separators=(",", ":"), default=str)
             style_id = style_ids.get(style_key)
@@ -72,13 +72,13 @@ def encode_snapshot(data: dict[str, Any]) -> dict[str, Any]:
                 style_ids[style_key] = style_id
                 styles[style_id] = style
             compact["style_id"] = style_id
-        compact_regions[rid] = compact
+        compact_elements[rid] = compact
 
     metadata = dict(data.get("metadata", {}))
     metadata["storage_format"] = FORMAT_NAME
     compact_doc = {
         "document": data.get("document", {}),
-        "regions": compact_regions,
+        "elements": compact_elements,
         "metadata": metadata,
         "groups": data.get("groups", {}),
     }
@@ -90,11 +90,11 @@ def encode_snapshot(data: dict[str, Any]) -> dict[str, Any]:
 def decode_snapshot(data: dict[str, Any]) -> dict[str, Any]:
     """Normalize old or compact storage data into the full snapshot shape."""
     styles = data.get("styles", {})
-    regions: dict[str, dict[str, Any]] = {}
-    for rid, region in data.get("regions", {}).items():
-        regions[rid] = _expand_region(rid, region, styles)
+    elements: dict[str, dict[str, Any]] = {}
+    for rid, element in data.get("elements", {}).items():
+        elements[rid] = _expand_element(rid, element, styles)
     result = dict(data)
-    result["regions"] = regions
+    result["elements"] = elements
     result.pop("styles", None)
     return result
 
@@ -104,42 +104,42 @@ def _looks_compact(data: dict[str, Any]) -> bool:
         return True
     if data.get("metadata", {}).get("storage_format") == FORMAT_NAME:
         return True
-    return any("outline_q" in region for region in data.get("regions", {}).values())
+    return any("outline_q" in element for element in data.get("elements", {}).values())
 
 
-def _compact_region(region: dict[str, Any]) -> dict[str, Any]:
-    compact: dict[str, Any] = {"id": region.get("id")}
+def _compact_element(element: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {"id": element.get("id")}
 
     for key, default in _DEFAULT_REGION.items():
-        value = region.get(key, default)
+        value = element.get(key, default)
         if value != default:
             compact[key] = value
 
-    if region.get("outline_q"):
-        compact["outline_q"] = list(region["outline_q"])
-    elif (outline := region.get("outline") or []):
+    if element.get("outline_q"):
+        compact["outline_q"] = list(element["outline_q"])
+    elif (outline := element.get("outline") or []):
         compact["outline_q"] = encode_outline_q(outline)
 
-    constraints = _omit_defaults(region.get("constraints") or {}, _DEFAULT_CONSTRAINTS)
+    constraints = _omit_defaults(element.get("constraints") or {}, _DEFAULT_CONSTRAINTS)
     if constraints:
         compact["constraints"] = constraints
 
-    transform = _omit_defaults(_normalize_transform(region.get("transform") or {}), _DEFAULT_TRANSFORM)
+    transform = _omit_defaults(_normalize_transform(element.get("transform") or {}), _DEFAULT_TRANSFORM)
     if transform:
         compact["transform"] = transform
 
     return compact
 
 
-def _expand_region(
+def _expand_element(
     rid: str,
-    region: dict[str, Any],
+    element: dict[str, Any],
     styles: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     # Old documents already have the full shape. Normalize anyway so omitted
-    # defaults from compact documents are restored for RegionNode validation.
+    # defaults from compact documents are restored for ElementNode validation.
     expanded = dict(_DEFAULT_REGION)
-    expanded.update(region)
+    expanded.update(element)
     expanded["id"] = expanded.get("id") or rid
 
     if "outline_q" in expanded:

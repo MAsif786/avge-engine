@@ -21,15 +21,15 @@
       "items": { "type": "string" },
       "default": null
     },
-    "exclude_region_ids": {
+    "exclude_element_ids": {
       "type": ["array", "null"],
-      "description": "Region IDs to omit from the exported SVG.",
+      "description": "Element IDs to omit from the exported SVG.",
       "items": { "type": "string" },
       "default": null
     },
     "exclude_prefixes": {
       "type": ["array", "null"],
-      "description": "Region ID prefixes to omit from the exported SVG.",
+      "description": "Element ID prefixes to omit from the exported SVG.",
       "items": { "type": "string" },
       "default": null
     }

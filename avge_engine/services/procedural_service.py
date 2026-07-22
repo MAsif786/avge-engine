@@ -32,7 +32,7 @@ class ProceduralService(BaseService):
         *,
         pattern: str,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         points: list[list[float]] | None = None,
         bounds: list[float] | None = None,
         center: list[float] | None = None,
@@ -58,7 +58,7 @@ class ProceduralService(BaseService):
         smoothness: float = 0.45,
         role: str = "art",
     ) -> str:
-        """Create procedural linework and return the created region IDs."""
+        """Create procedural linework and return the created element IDs."""
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -69,7 +69,7 @@ class ProceduralService(BaseService):
         end_norm = stroke_width_to_norm(doc_id, end_width) or max(0.001, base_width * 0.25)
         resolved_opacity = role_opacity(role, opacity)
         resolved_dash = dash if dash is not None else role_dash(role, pattern)
-        prefix = region_id or f"line_pattern_{abs(hash((pattern, seed, count))) & 0xFFFF:x}"
+        prefix = element_id or f"line_pattern_{abs(hash((pattern, seed, count))) & 0xFFFF:x}"
 
         try:
             created: list[str] = []
@@ -80,7 +80,7 @@ class ProceduralService(BaseService):
                     r = self.graph.create_line(
                         points=path,
                         document_id=doc_id,
-                        region_id=prefix,
+                        element_id=prefix,
                         layer=layer,
                         z_index=z_index,
                         stroke=stroke,
@@ -93,10 +93,10 @@ class ProceduralService(BaseService):
                 else:
                     widths = width_profile_values(len(path), width_profile, start_norm, end_norm, base_width)
                     outline = ribbon_outline(path, widths)
-                    r = self.graph.create_region(
+                    r = self.graph.create_element(
                         outline=outline,
                         document_id=doc_id,
-                        region_id=prefix,
+                        element_id=prefix,
                         layer=layer,
                         z_index=z_index,
                         constraints=CurveConstraints(smoothness=smoothness, closed=True),
@@ -110,7 +110,7 @@ class ProceduralService(BaseService):
                 r = self.graph.create_compound_path(
                     subpaths=subpaths,
                     document_id=doc_id,
-                    region_id=prefix,
+                    element_id=prefix,
                     layer=layer,
                     z_index=z_index,
                     fill=None,
@@ -130,7 +130,7 @@ class ProceduralService(BaseService):
                     r = self.graph.create_line(
                         points=path,
                         document_id=doc_id,
-                        region_id=f"{prefix}_{i:02d}",
+                        element_id=f"{prefix}_{i:02d}",
                         layer=layer,
                         z_index=z_index,
                         stroke=stroke,
@@ -155,7 +155,7 @@ class ProceduralService(BaseService):
                         dot_w,
                         dot_w,
                         document_id=doc_id,
-                        region_id=f"{prefix}_{i:03d}",
+                        element_id=f"{prefix}_{i:03d}",
                         layer=layer,
                         z_index=z_index,
                         fill=stroke,
@@ -171,6 +171,6 @@ class ProceduralService(BaseService):
 
         self.graph._persist(doc_id)
         return (
-            f"Line pattern created: pattern={pattern}, regions={len(created)}, "
+            f"Line pattern created: pattern={pattern}, elements={len(created)}, "
             f"width_profile={width_profile}, role={role}, ids={', '.join(created[:6])}"
         )

@@ -71,7 +71,7 @@ def list_stored_documents() -> list[dict]:
     """List all persisted documents from storage.
 
     Returns:
-        List of summary dicts (id, name, version, region_count, updated).
+        List of summary dicts (id, name, version, element_count, updated).
         Empty list when no stored documents exist.
     """
     return get_graph().list_stored_documents()
@@ -149,18 +149,18 @@ TOOL_MAP = """📋 TOOL MAP (63 tools — all available in batch):
 
 🗂 Document:   create_document · list_documents · clone_document ·
                delete_document · set_background
-✏️  Create:     create_region · create_primitive · create_curve ·
+✏️  Create:     create_element · create_primitive · create_curve ·
                create_ellipse_band · generate_cloud · create_text ·
                insert_image · import_svg_path
-🔧 Edit:       edit_region · edit_regions · delete_region ·
-               refine_line · get_region · copy_element
-🔄 Transform:  transform_objects · warp_region · project_quad · create_perspective_grid ·
+🔧 Edit:       edit_element · edit_elements · delete_element ·
+               refine_line · get_element · copy_element
+🔄 Transform:  transform_objects · warp_element · project_quad · create_perspective_grid ·
                create_facade_grid · create_surface_stripes ·
                generate_background_asset · duplicate ·
                boolean_operation
 🕶 Depth:      create_shadow · add_shading
 🎨 Style:      restyle · list_brush_presets · apply_brush_style ·
-               mix_region_colors · apply_fx · set_layer_role ·
+               mix_element_colors · apply_fx · set_layer_role ·
                apply_texture_effect · apply_depth_haze · add_bumps ·
                generate_palette · define_gradient ·
                apply_line_hierarchy · compare_style_consistency
@@ -176,9 +176,9 @@ TOOL_MAP = """📋 TOOL MAP (63 tools — all available in batch):
 
 ⚠️ DEPRECATED — use new names:
   style_objects     → restyle(selector={...}, mode="exact")
-  group_regions     → edit_group(action="create", ...)
-  ungroup_regions   → edit_group(action="delete", ...)
-  duplicate_region  → duplicate(pattern="single", ...)
+  group_elements     → edit_group(action="create", ...)
+  ungroup_elements   → edit_group(action="delete", ...)
+  duplicate_element  → duplicate(pattern="single", ...)
   duplicate_grid    → duplicate(pattern="grid", ...)
   duplicate_radial  → duplicate(pattern="radial", ...)
 """
@@ -186,9 +186,9 @@ TOOL_MAP = """📋 TOOL MAP (63 tools — all available in batch):
 # ── Tool descriptions with §4.5d smoothness guidance ─────────────
 
 SMOOTHNESS_GUIDANCE = """
-Smoothness guidance (per-region):
+Smoothness guidance (per-element):
   - Geometric/polygonal (houses, stars, rectangles): smoothness=0.0–0.1
   - Mixed rigid/organic (cup body, tree trunk, saucer): smoothness=0.2–0.5
   - Organic/curved (foliage, faces, circles): smoothness=0.6–0.8
-  - Smoothness=0.5 is the default — adjust per-region per the above.
+  - Smoothness=0.5 is the default — adjust per-element per the above.
 """

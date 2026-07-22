@@ -3,7 +3,7 @@
 _Resource: `avge://skill/environment-guidelines`_
 _Sibling to `avge://skill/design-guidelines` (character/object work). This skill governs street scenes, building exteriors, interiors, and any scene where perspective, depth, and repeated architectural elements matter more than a single subject._
 
-_Tool names below are current as of `m0b-v27` (63 tools): `clone_document`, `create_perspective_grid`, `apply_depth_haze`, `create_facade_grid`, `create_surface_stripes`, `generate_background_asset`, `create_comic_panel_layout`, `apply_fx`, `mix_region_colors`, `warp_region`, `create_shadow`, `critique`, `generate_cloud`, `create_line_pattern`, `refine_line`, `list_brush_presets`, `apply_brush_style`, `set_layer_role`, `apply_texture_effect`, `insert_image(import_mode="embed"|"svg_paths", clip_to=...)`, region/primitive/curve `outline_pattern`/`fill_pattern`, `add_shading(mode="gradient")`, and `duplicate`'s `scale_falloff`/`spacing_falloff` params. Existing-region targeting uses the shared selector shape: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds`, `z_min`, `z_max`, `has_stroke`._
+_Tool names below are current as of `m0b-v27` (63 tools): `clone_document`, `create_perspective_grid`, `apply_depth_haze`, `create_facade_grid`, `create_surface_stripes`, `generate_background_asset`, `create_comic_panel_layout`, `apply_fx`, `mix_element_colors`, `warp_element`, `create_shadow`, `critique`, `generate_cloud`, `create_line_pattern`, `refine_line`, `list_brush_presets`, `apply_brush_style`, `set_layer_role`, `apply_texture_effect`, `insert_image(import_mode="embed"|"svg_paths", clip_to=...)`, element/primitive/curve `outline_pattern`/`fill_pattern`, `add_shading(mode="gradient")`, and `duplicate`'s `scale_falloff`/`spacing_falloff` params. Existing-element targeting uses the shared selector shape: `ids`, `group_name`, `layer`, `fill`, `tags`, `bounds`, `z_min`, `z_max`, `has_stroke`._
 
 _Implementation backlog for missing helpers: `docs/tool-improvement-backlog.md`._
 
@@ -13,16 +13,16 @@ _Implementation backlog for missing helpers: `docs/tool-improvement-backlog.md`.
 
 Environment scenes fail most often when detail is added before structure is locked. Follow this order and don't skip ahead:
 
-1. **Horizon + vanishing points.** Call `create_perspective_grid` first, before any region exists. Pass one entry in `vanishing_points` for a one-point scene, two for two-point (see §2), and set `horizon_y` deliberately before drawing anything. Leave `include_horizon: true` so the horizon line itself is visible as a reference while building.
+1. **Horizon + vanishing points.** Call `create_perspective_grid` first, before any element exists. Pass one entry in `vanishing_points` for a one-point scene, two for two-point (see §2), and set `horizon_y` deliberately before drawing anything. Leave `include_horizon: true` so the horizon line itself is visible as a reference while building.
 2. **Ground plane.** Road/floor surface, sized and positioned against the perspective grid's guide lines.
 3. **Building massing only.** Block in each building as a plain, single-fill silhouette — a `create_primitive` rect for simple boxes, or a `project_quad` panel (with `target_quad` corners read off the perspective grid) for angled faces. No windows, no signage, no shading yet. Confirm the skyline silhouette reads correctly — proportions, spacing, height variety (§4) — before investing in any single building.
 4. **Facade detail pass.** Now run `create_facade_grid` per building face — pass the same `target_quad` used for that building's massing panel, plus `rows`/`columns` and `lit_ratio`. This single call replaces individually placed windows. Add trim/structural lines with `create_curve`/`create_primitive` afterward if needed.
 5. **Signage & text.** Add last, with `skew_x`/`skew_y` on `create_text` (or routed through `project_quad`) to match each facade's angle (§5). Signage is the most detail-dense element and the easiest to over-invest in early at the expense of the rest of the scene.
 6. **Foreground props.** Streetlights, poles, wires, pedestrian markings — placed last since they sit in front of everything and are the easiest to get right once the rest of the scene's scale is confirmed. Use `duplicate`'s `linear` pattern with `scale_falloff`/`spacing_falloff` for receding rows (see §4 below).
-7. **Atmospheric/depth pass.** Run `apply_depth_haze` across all building/prop regions (via `selector`), with `near_y`/`far_y` set to the scene's foreground and horizon bounds. Always last for the first construction pass — it needs final geometry and final base colors to blend toward `haze_color` correctly.
+7. **Atmospheric/depth pass.** Run `apply_depth_haze` across all building/prop elements (via `selector`), with `near_y`/`far_y` set to the scene's foreground and horizon bounds. Always last for the first construction pass — it needs final geometry and final base colors to blend toward `haze_color` correctly.
 8. **Line hierarchy + QA pass.** `apply_line_hierarchy`, then the QA sequence in §9.
 9. **Densify pass.** Treat the completed sequence above as a draft, not the final. Run the second-pass workflow in §8 to add overlapping depth, secondary signage, wires, roof props, awnings, and facade clutter.
-10. **Final cleanup/export pass.** Delete or hide all construction guide regions/layers before export. No `create_perspective_grid` guide line, temporary sky patch, snap marker, or proportional guide may remain visible in the final render.
+10. **Final cleanup/export pass.** Delete or hide all construction guide elements/layers before export. No `create_perspective_grid` guide line, temporary sky patch, snap marker, or proportional guide may remain visible in the final render.
 
 Do not jump to step 4 or 5 for one building while others are still at step 3. Bring the whole scene up one step at a time — this is what prevents one over-detailed building next to flat, undeveloped neighbors. After step 10, the exported image must contain no construction scaffolding; if guides are useful while building, put them on a dedicated `guides` layer and delete that layer before export.
 
@@ -76,13 +76,13 @@ Real streets read as real because nothing is perfectly uniform. When using `dupl
 
 ## 6. Atmospheric depth pass
 
-- Run `apply_depth_haze` across all building/prop regions (via `selector`) once geometry and base colors are final — never before, since it needs real final colors to blend from.
+- Run `apply_depth_haze` across all building/prop elements (via `selector`) once geometry and base colors are final — never before, since it needs real final colors to blend from.
 - Set `near_y` to the scene's foreground edge and `far_y` to the horizon line (matching `create_perspective_grid`'s `horizon_y`) so the haze falloff tracks actual depth in the shot — for a street scene, distance correlates with vertical position between the horizon and the foreground.
 - Set `haze_color` to (or near) the sky's base color so distant buildings visually blend toward the sky rather than toward an unrelated gray — this is what sells the "melting into the horizon" look.
 - Keep `max_strength` moderate for near/mid-ground and let the `near_y`/`far_y` falloff do the work of making it more pronounced near the horizon — a `max_strength` that's too high will wash out too much of the scene's palette work from §3; too low is the more common failure and the one most responsible for flat-looking results.
 - Consider running `affect_stroke: true` alongside `affect_fill` so distant buildings lose contrast in their outlines too, not just their fills — pair this pass with `apply_line_hierarchy` (thinner strokes further back) rather than treating them as unrelated passes.
-- Re-run `apply_depth_haze` after the densify pass if new overlay regions were added on top of previously hazed buildings. A common failure is hazing the original `architecture` layer, then adding later correction panels/sign-adjacent facade details on another layer that bypasses the haze and restores flat saturation.
-- If far/center buildings still read equally saturated as foreground buildings, increase `max_strength` or target far-region IDs explicitly with `selector={"ids":[...]}`. Underdoing haze on the farthest buildings is more common than overdoing it.
+- Re-run `apply_depth_haze` after the densify pass if new overlay elements were added on top of previously hazed buildings. A common failure is hazing the original `architecture` layer, then adding later correction panels/sign-adjacent facade details on another layer that bypasses the haze and restores flat saturation.
+- If far/center buildings still read equally saturated as foreground buildings, increase `max_strength` or target far-element IDs explicitly with `selector={"ids":[...]}`. Underdoing haze on the farthest buildings is more common than overdoing it.
 
 ---
 
@@ -111,7 +111,7 @@ The construction order in §1 creates a correct scene, but correctness is not en
 
 Proposed tool improvements for this pass:
 
-- Use `generate_shape(pattern="cornice")` to create a thin decorative band along a region's top edge, with `depth` and `style` (`flat`, `stepped`, `molded`).
+- Use `generate_shape(pattern="cornice")` to create a thin decorative band along a element's top edge, with `depth` and `style` (`flat`, `stepped`, `molded`).
 - Use `generate_shape(pattern="awning")` to create an angled canopy over a door/window or facade edge, with `width`, `tilt_angle`, `stripe_count`, and stripe colors.
 - Use `generate_shape(pattern="rooftop_props")` to scatter rooftop silhouettes such as tanks, vents, antennae, and AC units along a roof edge with `count`, `seed`, `prop_types`, and `density`.
 
@@ -124,11 +124,11 @@ Do not skip this pass because the first checklist technically completed. "Sparse
 Run this sequence, not just a single check at the end:
 
 1. **After massing (step 3):** `critique(mode="rules")` — catches off-canvas objects, gross proportion problems, and stroke-uniformity issues while they're still cheap to fix, before any facade detail is invested.
-2. **After each building's facade pass (step 4), before moving to the next building:** `render_preview` with `region_id` cropped to that building, to inspect window density/alignment up close — small facade errors are easy to miss in a full-canvas view.
+2. **After each building's facade pass (step 4), before moving to the next building:** `render_preview` with `element_id` cropped to that building, to inspect window density/alignment up close — small facade errors are easy to miss in a full-canvas view.
 3. **After signage (step 5):** re-check that skew/perspective on text matches its facade — a quick `render_preview` crop on any building with signage.
 4. **After the atmospheric pass (step 7):** `critique(mode="visual")` — this is the tool that flags `too_flat`, `bad_perspective`, and similar visual-read issues, and it's most meaningful once color/depth work is actually complete.
 5. **After the densify pass (§8):** run `render_preview` crops around overlapping signs, facade grids, and road markings. Check that all new elements still obey perspective and layering.
-6. **Before final export:** confirm no region on `guides` layer or named like `guide_*` remains visible; then use `compare_style_consistency` if this is one scene among a multi-panel/sequential set.
+6. **Before final export:** confirm no element on `guides` layer or named like `guide_*` remains visible; then use `compare_style_consistency` if this is one scene among a multi-panel/sequential set.
 
 Don't defer all QA to the end — per `critique(mode="rules")` guidance, catching a perspective or grounding mismatch after one building is far cheaper than discovering it once ten buildings share the same mistake.
 

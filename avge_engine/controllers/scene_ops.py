@@ -19,7 +19,7 @@ WARP_MODES = Literal["bend", "bulge", "pinch", "wave", "handle_shift"]
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.scene_construction_service import SceneConstructionService
-from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
+from avge_engine.services.selector_service import select_element_ids, selector_from_legacy
 from avge_engine.services.shadow_service import ShadowService
 from avge_engine.utils.math_utils import clamp01
 
@@ -29,15 +29,15 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="boolean_operation",
-        description="Perform boolean geometry on regions using shapely/GEOS. "
+        description="Perform boolean geometry on elements using shapely/GEOS. "
         "Operations: union, intersect, subtract, xor. "
         "Use for cutouts (windows, mug handle hole) and compound shapes "
         "without hand-tracing the result.",
     )
     def boolean_operation(
         operation: Literal["union", "intersect", "subtract", "xor"],
-        region_ids: list[str],
-        new_region_id: str | None = None,
+        element_ids: list[str],
+        new_element_id: str | None = None,
         document_id: str | None = None,
         keep_originals: bool = False,
         fill: str | None = None,
@@ -46,18 +46,18 @@ def create_tools(mcp):
         opacity: float | None = None,
         simplify_tolerance: float | None = None,
     ) -> str:
-        """Perform a boolean operation on two or more regions.
+        """Perform a boolean operation on two or more elements.
 
         Args:
             operation: "union", "intersect", "subtract", or "xor".
-            region_ids: IDs of at least 2 regions to combine.
-            new_region_id: Optional ID for the result region (auto-generated if omitted).
+            element_ids: IDs of at least 2 elements to combine.
+            new_element_id: Optional ID for the result element (auto-generated if omitted).
             document_id: Document UUID (omit to use active document).
-            keep_originals: If True, keep input regions (default False — they are deleted).
-            fill: Fill color for the result region.
-            stroke: Stroke color for the result region.
-            stroke_width: Stroke width in canvas pixels for the result region.
-            opacity: Opacity for the result region.
+            keep_originals: If True, keep input elements (default False — they are deleted).
+            fill: Fill color for the result element.
+            stroke: Stroke color for the result element.
+            stroke_width: Stroke width in canvas pixels for the result element.
+            opacity: Opacity for the result element.
         """
         scene = get_graph()
         try:
@@ -65,8 +65,8 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document — call create_document first"
 
-        if len(region_ids) < 2:
-            return "Error: Need at least 2 region IDs for boolean operation"
+        if len(element_ids) < 2:
+            return "Error: Need at least 2 element IDs for boolean operation"
 
         valid_ops = ("union", "intersect", "subtract", "xor", "difference", "sym_diff")
         if operation not in valid_ops:
@@ -77,8 +77,8 @@ def create_tools(mcp):
         try:
             result = scene.boolean_operation(
                 operation=operation,
-                region_ids=region_ids,
-                new_region_id=new_region_id,
+                element_ids=element_ids,
+                new_element_id=new_element_id,
                 document_id=doc_id,
                 keep_originals=keep_originals,
                 fill=fill,
@@ -101,17 +101,17 @@ def create_tools(mcp):
 
         delete_note = ""
         if not keep_originals:
-            delete_note = f" (input regions {', '.join(region_ids)} removed)"
+            delete_note = f" (input elements {', '.join(element_ids)} removed)"
         return (
-            f"Boolean {operation} → region '{result.id}' "
+            f"Boolean {operation} → element '{result.id}' "
             f"({len(result.outline)} boundary points){delete_note}"
         )
 
     @mcp.tool(
         name="transform_objects",
-        description="Move, scale, rotate, mirror, or align existing regions. "
+        description="Move, scale, rotate, mirror, or align existing elements. "
         "Use to reposition/resize objects after creation, or set mode='align' "
-        "to align/distribute regions. "
+        "to align/distribute elements. "
         "💡 For multi-part objects, use group_name to transform all members. "
         "Or layer='sky' to transform everything in a layer without listing IDs.",
     )
@@ -137,7 +137,7 @@ def create_tools(mcp):
         mirror_x: bool = False,
         mirror_y: bool = False,
     ) -> str:
-        """Move, scale, rotate, mirror, or align existing regions.
+        """Move, scale, rotate, mirror, or align existing elements.
 
         Prefer ``selector`` for targeting. Legacy ``ids``, ``group_name``,
         and ``layer`` are converted into the same selector path.
@@ -147,7 +147,7 @@ def create_tools(mcp):
         Args:
             selector: Shared selector. Keys: ids, group_name, layer, fill,
                 tags, bounds, z_min, z_max, has_stroke.
-            ids: Legacy region IDs to transform.
+            ids: Legacy element IDs to transform.
             document_id: Document UUID (omit to use active document).
             mode: "transform" (default) or "align". In align mode,
                 ignores dx/dy/scale/rotate and applies ``alignment`` instead.
@@ -164,7 +164,7 @@ def create_tools(mcp):
                 tilts a flower from its stem base.
             mirror_x: Mirror horizontally (flip around center).
             mirror_y: Mirror vertically (flip around center).
-            layer: Layer name — transforms all regions in that layer.
+            layer: Layer name — transforms all elements in that layer.
                 💡 transform_objects(layer='sky', dy=0.02) shifts whole skyline.
         """
         scene = get_graph()
@@ -173,23 +173,23 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
         resolved_selector = selector or selector_from_legacy(ids=ids, group_name=group_name, layer=layer)
-        target_ids = select_region_ids(scene, doc_id, resolved_selector)
+        target_ids = select_element_ids(scene, doc_id, resolved_selector)
 
         # ── Align mode ──
         if mode == "align":
             if not target_ids:
-                return "Error: No region IDs provided"
+                return "Error: No element IDs provided"
             bounds_list = []
             for rid in target_ids:
                 try:
-                    r = scene.get_region(rid, doc_id)
+                    r = scene.get_element(rid, doc_id)
                     b = r.bounds
                     if b:
                         bounds_list.append({"id": rid, "bounds": b})
                 except ValueError:
                     continue
             if len(bounds_list) < 2:
-                return "Error: Need at least 2 valid regions"
+                return "Error: Need at least 2 valid elements"
             a = alignment or "center_h"
             if a == "top":
                 t = min(b["bounds"]["y"] for b in bounds_list)
@@ -239,11 +239,11 @@ def create_tools(mcp):
                     cursor += b["bounds"][dim] + gap
             else:
                 return f"Error: Unknown alignment '{a}'"
-            return f"Aligned {len(bounds_list)} region(s): '{a}'"
+            return f"Aligned {len(bounds_list)} element(s): '{a}'"
 
         # ── Transform mode ──
         if not target_ids:
-            return "Error: No region IDs provided"
+            return "Error: No element IDs provided"
 
         try:
             affected = scene.transform_objects(
@@ -280,10 +280,10 @@ def create_tools(mcp):
             parts.append("mirror_y")
         if group_mode:
             parts.append("group_mode")
-        # Include new bounds for first affected region
+        # Include new bounds for first affected element
         bounds_info = ""
         if affected:
-            r = scene.get_region(affected[0], doc_id)
+            r = scene.get_element(affected[0], doc_id)
             b = r.bounds
             if b:
                 bounds_info = (
@@ -292,18 +292,18 @@ def create_tools(mcp):
                     f"w={b['w']:.4f} h={b['h']:.4f}"
                 )
         return (
-            f"Transformed {len(affected)} region(s): {', '.join(affected)} "
+            f"Transformed {len(affected)} element(s): {', '.join(affected)} "
             f"({', '.join(parts)}){bounds_info}"
             )
 
     @mcp.tool(
-        name="warp_region",
-        description="Apply non-affine vector outline deformation to one region. "
+        name="warp_element",
+        description="Apply non-affine vector outline deformation to one element. "
         "Modes: bend, bulge, pinch, wave, handle_shift. Use transform_objects for move/scale/rotate; "
-        "use project_quad for rectangular perspective projection; use warp_region for organic or freeform deformation.",
+        "use project_quad for rectangular perspective projection; use warp_element for organic or freeform deformation.",
     )
-    def warp_region(
-        region_id: str,
+    def warp_element(
+        element_id: str,
         mode: WARP_MODES = "bend",
         document_id: str | None = None,
         strength: float = 0.15,
@@ -317,7 +317,7 @@ def create_tools(mcp):
         preserve_corners: bool = False,
         smoothness: float | None = None,
     ) -> str:
-        """Warp a region outline in normalized coordinates."""
+        """Warp a element outline in normalized coordinates."""
         import math
 
         scene = get_graph()
@@ -326,22 +326,22 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
         try:
-            region = scene.get_region(region_id, doc_id)
+            element = scene.get_element(element_id, doc_id)
         except ValueError as exc:
             return f"Error: {exc}"
-        if len(region.outline) < 2:
-            return "Error: warp_region requires a region with at least 2 points"
-        bounds = region.bounds
+        if len(element.outline) < 2:
+            return "Error: warp_element requires a element with at least 2 points"
+        bounds = element.bounds
         if not bounds or bounds["w"] <= 0 or bounds["h"] <= 0:
-            return "Error: Cannot warp degenerate region"
+            return "Error: Cannot warp degenerate element"
 
         strength = max(-2.0, min(2.0, float(strength)))
         falloff = max(0.05, min(8.0, float(falloff)))
         radius = max(0.001, min(4.0, float(radius)))
         cx = float(center[0]) if center and len(center) >= 2 else bounds["x"] + bounds["w"] / 2
         cy = float(center[1]) if center and len(center) >= 2 else bounds["y"] + bounds["h"] / 2
-        corner_indices = {0, len(region.outline) - 1}
-        if len(region.outline) == 4:
+        corner_indices = {0, len(element.outline) - 1}
+        if len(element.outline) == 4:
             corner_indices = {0, 1, 2, 3}
 
         def normalized(x: float, y: float) -> tuple[float, float]:
@@ -355,7 +355,7 @@ def create_tools(mcp):
             return max(0.0, 1.0 - dist / radius) ** falloff
 
         new_outline: list[tuple[float, float]] = []
-        for idx, (x, y) in enumerate(region.outline):
+        for idx, (x, y) in enumerate(element.outline):
             if preserve_corners and idx in corner_indices:
                 new_outline.append((x, y))
                 continue
@@ -399,34 +399,34 @@ def create_tools(mcp):
                 return f"Error: Unknown warp mode '{mode}'"
             new_outline.append((round(nx, 6), round(ny, 6)))
 
-        region.outline = new_outline
-        region.primitive = None
+        element.outline = new_outline
+        element.primitive = None
         if smoothness is not None:
-            region.constraints.smoothness = max(0.0, min(1.0, float(smoothness)))
-        region.metadata.update({
-            "tool": "warp_region",
+            element.constraints.smoothness = max(0.0, min(1.0, float(smoothness)))
+        element.metadata.update({
+            "tool": "warp_element",
             "warp_mode": mode,
             "warp_strength": strength,
             "warp_axis": axis,
         })
-        region.version += 1
+        element.version += 1
         scene.get_document(doc_id).version += 1
-        scene._auto_checkpoint(doc_id, "warp_region", region_id)
+        scene._auto_checkpoint(doc_id, "warp_element", element_id)
         scene._persist(doc_id)
-        return f"Warped region '{region_id}': mode={mode}, points={len(new_outline)}"
+        return f"Warped element '{element_id}': mode={mode}, points={len(new_outline)}"
 
     @mcp.tool(
         name="project_quad",
-        description="Create or perspective-warp a rectangular/panel region into a target quadrilateral. "
+        description="Create or perspective-warp a rectangular/panel element into a target quadrilateral. "
         "Use for realistic tables, windows, floor tiles, wall panels, screens, and signs. "
         "target_quad order is top-left, top-right, bottom-right, bottom-left. "
-        "Pass source_region_id to warp an existing region; omit it to create a projected panel.",
+        "Pass source_element_id to warp an existing element; omit it to create a projected panel.",
     )
     def project_quad(
         target_quad: list[list[float]],
         document_id: str | None = None,
-        region_id: str | None = None,
-        source_region_id: str | None = None,
+        element_id: str | None = None,
+        source_element_id: str | None = None,
         replace_source: bool = False,
         columns: int = 1,
         rows: int = 1,
@@ -441,18 +441,18 @@ def create_tools(mcp):
         group_name: str | None = None,
         inherit_style: bool = False,
     ) -> str:
-        """Create or warp a region through a unit-square homography.
+        """Create or warp a element through a unit-square homography.
 
         Args:
             target_quad: Four normalized points in order: top-left, top-right,
                 bottom-right, bottom-left.
-            source_region_id: Existing region to warp. If omitted, creates a
+            source_element_id: Existing element to warp. If omitted, creates a
                 projected rectangle/panel using target_quad.
-            replace_source: If True with source_region_id, updates the source
-                region in place. Otherwise creates a new projected copy.
+            replace_source: If True with source_element_id, updates the source
+                element in place. Otherwise creates a new projected copy.
             columns, rows: Optional edge subdivisions for newly-created panels,
                 useful when later adding seams or tile grids.
-            inherit_style: When warping a source region, copy its style unless
+            inherit_style: When warping a source element, copy its style unless
                 explicit style values are supplied.
         """
         scene = get_graph()
@@ -464,7 +464,7 @@ def create_tools(mcp):
         if len(target_quad) != 4:
             return "Error: target_quad must contain exactly four [x,y] points"
 
-        if source_region_id and inherit_style:
+        if source_element_id and inherit_style:
             fill = None
             stroke = None
             stroke_width = None
@@ -474,11 +474,11 @@ def create_tools(mcp):
             stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         try:
-            region = scene.project_quad(
+            element = scene.project_quad(
                 target_quad=[(float(p[0]), float(p[1])) for p in target_quad],
                 document_id=doc_id,
-                region_id=region_id,
-                source_region_id=source_region_id,
+                element_id=element_id,
+                source_element_id=source_element_id,
                 replace_source=replace_source,
                 columns=columns,
                 rows=rows,
@@ -493,24 +493,24 @@ def create_tools(mcp):
                 metadata={"projection": "quad"},
             )
             if group_name:
-                scene.add_to_group(group_name, [region.id], doc_id)
+                scene.add_to_group(group_name, [element.id], doc_id)
         except (ValueError, RuntimeError, TypeError) as e:
             return f"Error: {e}"
 
-        action = "Warped" if source_region_id else "Projected"
-        return f"{action} quad region: id={region.id}, points={len(region.outline)}"
+        action = "Warped" if source_element_id else "Projected"
+        return f"{action} quad element: id={element.id}, points={len(element.outline)}"
 
     @mcp.tool(
         name="create_perspective_grid",
         description="Create two-point perspective construction guides from shared vanishing points. "
         "Use before project_quad/create_facade_grid so building edges, signs, rails, and street objects "
-        "converge to the same off-canvas vanishing points. Emits editable compound-path guide regions.",
+        "converge to the same off-canvas vanishing points. Emits editable compound-path guide elements.",
     )
     def create_perspective_grid(
         vanishing_points: list[list[float]],
         horizon_y: float = 0.5,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         verticals: int = 9,
         horizontals: int = 9,
         bounds: list[float] | None = None,
@@ -537,7 +537,7 @@ def create_tools(mcp):
                 vanishing_points=vanishing_points,
                 horizon_y=horizon_y,
                 document_id=document_id,
-                region_id=region_id,
+                element_id=element_id,
                 verticals=verticals,
                 horizontals=horizontals,
                 bounds=bounds,
@@ -568,7 +568,7 @@ def create_tools(mcp):
         rows: int,
         columns: int,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "architecture",
         z_index: int = 0,
         facade_fill: str = "#2C3542",
@@ -585,7 +585,7 @@ def create_tools(mcp):
         seed: int = 1,
         create_base: bool = True,
     ) -> str:
-        """Create a facade panel plus individually editable window regions.
+        """Create a facade panel plus individually editable window elements.
 
         Args:
             target_quad: Four facade corners, top-left/top-right/bottom-right/bottom-left.
@@ -600,7 +600,7 @@ def create_tools(mcp):
                 rows=rows,
                 columns=columns,
                 document_id=document_id,
-                region_id=region_id,
+                element_id=element_id,
                 layer=layer,
                 z_index=z_index,
                 facade_fill=facade_fill,
@@ -624,31 +624,31 @@ def create_tools(mcp):
 
         return (
             f"Facade grid created: {result.prefix} with {result.windows} window(s), "
-            f"lit_ratio={result.lit_ratio:.2f}, regions={result.region_count}"
+            f"lit_ratio={result.lit_ratio:.2f}, elements={result.element_count}"
         )
 
     @mcp.tool(
         name="edit_group",
         description="Unified group operation tool. Use one action per call: "
-        "'create' — create or replace a group with the given region IDs. "
-        "'add' — add regions to an existing group (creates if missing). "
-        "'remove' — remove specific regions from a group (doesn't delete regions). "
-        "'delete' — delete an entire named group (regions are not deleted). "
+        "'create' — create or replace a group with the given element IDs. "
+        "'add' — add elements to an existing group (creates if missing). "
+        "'remove' — remove specific elements from a group (doesn't delete elements). "
+        "'delete' — delete an entire named group (elements are not deleted). "
         "💡 Use 'create' once to set up a group, then 'add' incrementally "
-        "as you add more regions to the object.",
+        "as you add more elements to the object.",
     )
     def edit_group(
         action: Literal["create", "add", "remove", "delete"],
         group_name: str,
-        region_ids: list[str] | None = None,
+        element_ids: list[str] | None = None,
         document_id: str | None = None,
     ) -> str:
-        """Manage named region groups — create, add to, remove from, or delete.
+        """Manage named element groups — create, add to, remove from, or delete.
 
         Args:
             action: "create" (set or replace), "add" (append), "remove" (remove members), "delete" (remove group).
             group_name: Name of the group.
-            region_ids: Region IDs for create/add/remove actions (omit for delete).
+            element_ids: Element IDs for create/add/remove actions (omit for delete).
             document_id: Document UUID (omit to use active document).
         """
         scene = get_graph()
@@ -658,34 +658,34 @@ def create_tools(mcp):
             return "Error: No active document — call create_document first"
 
         if action == "delete":
-            result = scene.ungroup_regions(group_name, doc_id)
+            result = scene.ungroup_elements(group_name, doc_id)
             if result:
                 return f"Group '{group_name}' deleted"
             return f"Error: Group '{group_name}' not found"
 
-        if not region_ids:
-            return "Error: No region IDs provided"
+        if not element_ids:
+            return "Error: No element IDs provided"
 
         if action == "create":
-            members = scene.group_regions(
-                group_name=group_name, region_ids=region_ids,
+            members = scene.group_elements(
+                group_name=group_name, element_ids=element_ids,
                 document_id=doc_id, replace=True,
             )
         elif action == "add":
             members = scene.add_to_group(
-                group_name=group_name, region_ids=region_ids,
+                group_name=group_name, element_ids=element_ids,
                 document_id=doc_id,
             )
         elif action == "remove":
             try:
                 removed = scene.remove_from_group(
-                    group_name=group_name, region_ids=region_ids,
+                    group_name=group_name, element_ids=element_ids,
                     document_id=doc_id,
                 )
             except ValueError as e:
                 return f"Error: {e}"
             return (
-                f"Removed {len(removed)} region(s) from '{group_name}': "
+                f"Removed {len(removed)} element(s) from '{group_name}': "
                 f"{', '.join(removed)}"
             )
         else:
@@ -701,7 +701,7 @@ def create_tools(mcp):
         description="List all named groups and their member counts.",
     )
     def list_groups(document_id: str | None = None) -> str:
-        """List all region groups in the current document."""
+        """List all element groups in the current document."""
         scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
@@ -714,12 +714,12 @@ def create_tools(mcp):
 
         lines = [f"Groups ({len(groups)}):"]
         for g in groups:
-            lines.append(f"  {g['name']}: {g['count']} region(s)")
+            lines.append(f"  {g['name']}: {g['count']} element(s)")
         return "\n".join(lines)
 
     @mcp.tool(
         name="create_comic_panel_layout",
-        description="Create grouped editable comic/page panel regions with gutters and reading-order metadata. "
+        description="Create grouped editable comic/page panel elements with gutters and reading-order metadata. "
         "Layouts: grid, feature_top, feature_left, vertical_stack, horizontal_strip. "
         "Use the generated panels as clip_to targets for artwork instead of manually aligning panel rectangles.",
     )
@@ -743,7 +743,7 @@ def create_tools(mcp):
         z_index: int = 0,
         clip_content: bool = True,
     ) -> str:
-        """Create page/comic panels as editable regions."""
+        """Create page/comic panels as editable elements."""
         from avge_engine.scene import CurveConstraints, Style
 
         scene = get_graph()
@@ -817,10 +817,10 @@ def create_tools(mcp):
         for idx, (px, py, pw, ph) in enumerate(rects):
             rid = f"{panel_prefix}_{idx + 1:02d}"
             outline = [(px, py), (px + pw, py), (px + pw, py + ph), (px, py + ph)]
-            region = scene.create_region(
+            element = scene.create_element(
                 outline=outline,
                 document_id=doc_id,
-                region_id=rid,
+                element_id=rid,
                 layer=layer,
                 z_index=z_index + idx,
                 constraints=CurveConstraints(smoothness=0.0, closed=True),
@@ -834,22 +834,22 @@ def create_tools(mcp):
                     "clip_content": clip_content,
                 },
             )
-            created.append(region.id)
+            created.append(element.id)
 
-        scene.group_regions(group_name, created, doc_id, replace=True)
+        scene.group_elements(group_name, created, doc_id, replace=True)
         scene._persist(doc_id)
         return f"Comic panel layout created: layout={layout}, panels={len(created)}, group={group_name}, ids={', '.join(created)}"
 
     @mcp.tool(
         name="add_bumps",
         description="Add small protrusions (bumps/knuckles/jagged edges) at specified "
-        "segments of a region's outline. Good for knuckle bumps on fingers, "
+        "segments of a element's outline. Good for knuckle bumps on fingers, "
         "serrated leaf edges, or spiky hair details. Extrudes outward from "
         "each segment midpoint. Process segments from last to first so "
         "indices remain valid.",
     )
     def add_bumps(
-        region_id: str,
+        element_id: str,
         document_id: str | None = None,
         segment_indices: list[int] | None = None,
         extrusion_length: float = 0.03,
@@ -858,11 +858,11 @@ def create_tools(mcp):
         direction: Literal["outward", "inward", "extrude"] = "outward",
         shape: Literal["round", "sharp", "bevel"] = "round",
     ) -> str:
-        """Extrude segments of a region's outline, with direction and shape control.
+        """Extrude segments of a element's outline, with direction and shape control.
         Use inward direction for notches/indentations, shape=sharp for knuckle ridges.
 
         Args:
-            region_id: Region to modify.
+            element_id: Element to modify.
             document_id: Document UUID.
             segment_indices: List of segment indices to extrude (e.g. [0, 2, 4]).
                 Omit to extrude all segments evenly (rough edge effect).
@@ -878,8 +878,8 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
         try:
-            scene.extrude_region_outline(
-                region_id=region_id,
+            scene.extrude_element_outline(
+                element_id=element_id,
                 document_id=doc_id,
                 segment_indices=segment_indices,
                 extrusion_length=extrusion_length,
@@ -890,7 +890,7 @@ def create_tools(mcp):
             )
             idx_str = str(segment_indices) if segment_indices else "all"
             return (
-                f"Extruded region '{region_id}' at segments {idx_str} "
+                f"Extruded element '{element_id}' at segments {idx_str} "
                 f"(length={extrusion_length}, width={extrusion_width}, "
                 f"direction={direction}, shape={shape})"
             )
@@ -899,20 +899,20 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="duplicate",
-        description="Make copies of a region or group according to a placement "
-        "pattern. Consolidates duplicate_region, duplicate_grid, duplicate_radial, "
+        description="Make copies of a element or group according to a placement "
+        "pattern. Consolidates duplicate_element, duplicate_grid, duplicate_radial, "
         "and duplicate_group into one configurable tool.\n"
         "Patterns:\n"
-        "  single — one copy with offset/mirror/scale. Params: region_id, dx, dy, mirror_x, mirror_axis_x, scale\n"
-        "  linear — N copies in a row. Params: region_id, count, dx, dy, spacing_falloff, scale_falloff\n"
-        "  grid — N×M grid. Params: region_id, columns, rows, spacing_x, spacing_y\n"
-        "  radial — circular array. Params: region_id, count, center_x, center_y, radius\n"
-        "  scatter — random copies in bounds. Params: region_id, count, bounds, seed, scale\n"
+        "  single — one copy with offset/mirror/scale. Params: element_id, dx, dy, mirror_x, mirror_axis_x, scale\n"
+        "  linear — N copies in a row. Params: element_id, count, dx, dy, spacing_falloff, scale_falloff\n"
+        "  grid — N×M grid. Params: element_id, columns, rows, spacing_x, spacing_y\n"
+        "  radial — circular array. Params: element_id, count, center_x, center_y, radius\n"
+        "  scatter — random copies in bounds. Params: element_id, count, bounds, seed, scale\n"
         "  group — duplicate group with transforms. Params: group_name, dx, dy, scale, rotate",
     )
     def duplicate(
         pattern: str,
-        region_id: str | None = None,
+        element_id: str | None = None,
         group_name: str | None = None,
         document_id: str | None = None,
         count: int = 1,
@@ -943,11 +943,11 @@ def create_tools(mcp):
         spacing_falloff: float = 1.0,
         scale_falloff: float = 1.0,
     ) -> str:
-        """Make copies of a region or group.
+        """Make copies of a element or group.
 
         Args:
             pattern: "single", "linear", "grid", "radial", "scatter", or "group".
-            region_id: Source region (required for single/linear/grid/radial/scatter).
+            element_id: Source element (required for single/linear/grid/radial/scatter).
             group_name: Source group (required for group pattern).
             document_id: Document UUID.
             count: Number of copies (linear/radial).
@@ -960,7 +960,7 @@ def create_tools(mcp):
             rotate_copies: Rotate copies to face center (radial pattern).
             mirror_x, mirror_y: Mirror across axis.
             mirror_axis_x: Fixed X position for mirror axis (e.g. 0.5 = canvas center).
-                Defaults to the region's own center if omitted.
+                Defaults to the element's own center if omitted.
             mirror_axis_y: Fixed Y position for mirror axis.
             scale: Uniform scale.
             rotate: Rotation degrees.
@@ -1000,22 +1000,22 @@ def create_tools(mcp):
                     prefix = new_prefix or f"{group_name}_copy"
                     for orig_id, props in variations.items():
                         cid = f"{prefix}_{orig_id}"
-                        if scene.has_region(cid, doc_id):
+                        if scene.has_element(cid, doc_id):
                             try:
-                                scene.edit_region(region_id=cid, document_id=doc_id, **props)
+                                scene.edit_element(element_id=cid, document_id=doc_id, **props)
                             except (ValueError, RuntimeError):
                                 pass
                 return f"Duplicated group '{group_name}' ({len(new_ids)} copies)"
             except (ValueError, RuntimeError) as e:
                 return f"Error: {e}"
 
-        # ── Single/Linear/Grid/Radial/Scatter — require region_id ──
-        if not region_id:
-            return f"Error: region_id required for pattern '{pattern}'"
+        # ── Single/Linear/Grid/Radial/Scatter — require element_id ──
+        if not element_id:
+            return f"Error: element_id required for pattern '{pattern}'"
         try:
-            orig = scene.get_region(region_id, doc_id)
+            orig = scene.get_element(element_id, doc_id)
         except ValueError:
-            return f"Error: Region '{region_id}' not found"
+            return f"Error: Element '{element_id}' not found"
 
         ox = min(p[0] for p in orig.outline)
         oy = min(p[1] for p in orig.outline)
@@ -1028,10 +1028,10 @@ def create_tools(mcp):
         resolved_z = z_index
 
         if pattern == "single":
-            new_id = new_prefix or f"{region_id}_copy"
+            new_id = new_prefix or f"{element_id}_copy"
             try:
-                dup = scene.duplicate_region(
-                    region_id=region_id, document_id=doc_id,
+                dup = scene.duplicate_element(
+                    element_id=element_id, document_id=doc_id,
                     offset_x=dx, offset_y=dy,
                     scale=scale, rotate=rotate,
                     mirror_x=mirror_x, mirror_y=mirror_y,
@@ -1050,11 +1050,11 @@ def create_tools(mcp):
                 cur_x += dx * step_scale
                 cur_y += dy * step_scale
                 copy_scale = scale * (scale_falloff ** i)
-                new_id = f"{new_prefix or region_id}_copy_{i}"
+                new_id = f"{new_prefix or element_id}_copy_{i}"
                 try:
-                    dup = scene.duplicate_region(
-                        region_id=region_id, document_id=doc_id,
-                        new_region_id=new_id,
+                    dup = scene.duplicate_element(
+                        element_id=element_id, document_id=doc_id,
+                        new_element_id=new_id,
                         offset_x=cur_x, offset_y=cur_y,
                         scale=copy_scale, rotate=rotate,
                         mirror_x=mirror_x, mirror_y=mirror_y,
@@ -1072,11 +1072,11 @@ def create_tools(mcp):
                         continue
                     off_x = col * (ow + spacing_x)
                     off_y = row * (oh + spacing_y)
-                    new_id = f"{new_prefix or region_id}_g{row}_{col}"
+                    new_id = f"{new_prefix or element_id}_g{row}_{col}"
                     try:
-                        dup = scene.duplicate_region(
-                            region_id=region_id, document_id=doc_id,
-                            new_region_id=new_id,
+                        dup = scene.duplicate_element(
+                            element_id=element_id, document_id=doc_id,
+                            new_element_id=new_id,
                             offset_x=off_x, offset_y=off_y,
                             z_index=resolved_z,
                         )
@@ -1094,11 +1094,11 @@ def create_tools(mcp):
             for i in range(count):
                 tx = bx + rng.random() * bw
                 ty = by + rng.random() * bh
-                new_id = f"{new_prefix or region_id}_scatter_{i}"
+                new_id = f"{new_prefix or element_id}_scatter_{i}"
                 try:
-                    dup = scene.duplicate_region(
-                        region_id=region_id, document_id=doc_id,
-                        new_region_id=new_id,
+                    dup = scene.duplicate_element(
+                        element_id=element_id, document_id=doc_id,
+                        new_element_id=new_id,
                         offset_x=tx - ocx, offset_y=ty - ocy,
                         scale=scale, rotate=rotate,
                         mirror_x=mirror_x, mirror_y=mirror_y,
@@ -1116,11 +1116,11 @@ def create_tools(mcp):
                 off_x = tx - ox
                 off_y = ty - oy
                 rotation = math.degrees(angle) if rotate_copies else 0.0
-                new_id = f"{new_prefix or region_id}_rad_{i}"
+                new_id = f"{new_prefix or element_id}_rad_{i}"
                 try:
-                    dup = scene.duplicate_region(
-                        region_id=region_id, document_id=doc_id,
-                        new_region_id=new_id,
+                    dup = scene.duplicate_element(
+                        element_id=element_id, document_id=doc_id,
+                        new_element_id=new_id,
                         offset_x=off_x, offset_y=off_y,
                         rotate=rotation, scale=scale,
                         z_index=resolved_z,
@@ -1141,7 +1141,7 @@ def create_tools(mcp):
             r_max = float(jitter.get("rotation", 0))
             for cid in created:
                 try:
-                    r = scene.get_region(cid, doc_id)
+                    r = scene.get_element(cid, doc_id)
                     if r is None:
                         continue
                     kw = {}
@@ -1152,23 +1152,23 @@ def create_tools(mcp):
                         )
                     if h_max and r.style.fill and isinstance(r.style.fill, str) and r.style.fill.startswith("#"):
                         from avge_engine.effects.color import apply_hsl_offset
-                        scene.edit_region(region_id=cid, document_id=doc_id,
+                        scene.edit_element(element_id=cid, document_id=doc_id,
                             fill=apply_hsl_offset(r.style.fill, h_offset=_r.uniform(-h_max, h_max)),
                         )
                 except (ValueError, RuntimeError):
                     pass
 
-        return f"Duplicated '{region_id}' ({pattern}): {len(created)} copy(ies), ids: {', '.join(created[:5])}{'...' if len(created) > 5 else ''}"
+        return f"Duplicated '{element_id}' ({pattern}): {len(created)} copy(ies), ids: {', '.join(created[:5])}{'...' if len(created) > 5 else ''}"
 
     @mcp.tool(
         name="add_shading",
-        description="Add directional shading to one region or a shared selector of regions. "
+        description="Add directional shading to one element or a shared selector of elements. "
         "mode='two_tone' creates highlight + shadow copies; mode='gradient' "
-        "applies a soft gradient fill across existing regions for architecture. "
+        "applies a soft gradient fill across existing elements for architecture. "
         "Selector keys: ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke.",
     )
     def add_shading(
-        region_id: str | None = None,
+        element_id: str | None = None,
         selector: dict[str, object] | None = None,
         light_direction: float = 135,
         document_id: str | None = None,
@@ -1178,24 +1178,24 @@ def create_tools(mcp):
         mid_color: str | None = None,
         shadow_color: str | None = None,
     ) -> str:
-        """Add directional shading to a region.
+        """Add directional shading to a element.
 
         Args:
-            region_id: Legacy single region to shade.
+            element_id: Legacy single element to shade.
             selector: Shared selector. Keys: ids, group_name, layer, fill,
                 tags, bounds, z_min, z_max, has_stroke.
             light_direction: Angle in degrees (0=right, 90=top).
             document_id: Document UUID.
             intensity: 0.0–1.0 contrast strength.
             mode: "two_tone" for highlight/shadow copies, "gradient" for
-                continuous plane shading on the existing region.
+                continuous plane shading on the existing element.
             highlight_color: Optional explicit highlight stop color.
             mid_color: Optional explicit middle stop color.
             shadow_color: Optional explicit shadow stop color.
         """
         try:
             result = ShadowService().add_shading(
-                region_id=region_id,
+                element_id=element_id,
                 selector=selector,
                 light_direction=light_direction,
                 document_id=document_id,
@@ -1208,13 +1208,13 @@ def create_tools(mcp):
         except RuntimeError:
             return "Error: No active document"
         except LookupError:
-            return "Error: No matching regions found via selector"
+            return "Error: No matching elements found via selector"
         except ValueError as e:
             return f"Error: {e}"
         if result.mode == "gradient":
-            return f"Gradient shading applied to {result.target_count} region(s), light={result.light_direction:.0f}deg"
+            return f"Gradient shading applied to {result.target_count} element(s), light={result.light_direction:.0f}deg"
         return (
-            f"Shading added to {result.target_count} region(s), "
+            f"Shading added to {result.target_count} element(s), "
             f"overlays={result.overlay_count}, light={result.light_direction:.0f}deg"
         )
 
@@ -1230,7 +1230,7 @@ def create_tools(mcp):
         width: float,
         height: float,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         puff_count: int = 7,
         puff_variance: float = 0.28,
         shade_direction: float = 135.0,
@@ -1267,7 +1267,7 @@ def create_tools(mcp):
             return "Error: width and height must be positive"
         puff_count = max(2, min(32, int(puff_count)))
         rng = random.Random(seed)
-        prefix = region_id or f"cloud_{abs(hash((cx, cy, width, height, seed))) & 0xFFFF:x}"
+        prefix = element_id or f"cloud_{abs(hash((cx, cy, width, height, seed))) & 0xFFFF:x}"
         angle = math.radians(shade_direction + 180.0)
         shade_dx = math.cos(angle) * width * 0.035
         shade_dy = abs(math.sin(angle)) * height * 0.12 + height * 0.08
@@ -1288,9 +1288,9 @@ def create_tools(mcp):
                     rx = width / max(3.2, puff_count * 0.72) * (0.9 + rng.random() * puff_variance)
                     ry = height * (0.25 + rng.random() * 0.22)
                     outline = [(px - rx, py - ry), (px + rx, py - ry), (px + rx, py + ry), (px - rx, py + ry)]
-                    r = scene.create_region(
+                    r = scene.create_element(
                         outline=outline,
-                        region_id=f"{prefix}_{pass_name}_{i:02d}",
+                        element_id=f"{prefix}_{pass_name}_{i:02d}",
                         document_id=doc_id,
                         layer=layer,
                         z_index=z,
@@ -1300,7 +1300,7 @@ def create_tools(mcp):
                     )
                     created.append(r.id)
             # A broad low-opacity body fill ties the lobes together.
-            body = scene.create_region(
+            body = scene.create_element(
                 outline=[
                     (cx - width * 0.46, cy + height * 0.05),
                     (cx - width * 0.20, cy - height * 0.28),
@@ -1309,7 +1309,7 @@ def create_tools(mcp):
                     (cx + width * 0.22, cy + height * 0.22),
                     (cx - width * 0.28, cy + height * 0.20),
                 ],
-                region_id=f"{prefix}_body",
+                element_id=f"{prefix}_body",
                 document_id=doc_id,
                 layer=layer,
                 z_index=z_index,
@@ -1320,7 +1320,7 @@ def create_tools(mcp):
             created.append(body.id)
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
-        return f"Cloud generated: {prefix}, puffs={puff_count}, regions={len(created)}"
+        return f"Cloud generated: {prefix}, puffs={puff_count}, elements={len(created)}"
 
     @mcp.tool(
         name="generate_background_asset",
@@ -1333,7 +1333,7 @@ def create_tools(mcp):
         mode: BACKGROUND_ASSET_MODES,
         bounds: list[float],
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         count: int = 12,
         density: float = 1.0,
         seed: int = 1,
@@ -1361,14 +1361,14 @@ def create_tools(mcp):
 
         rng = random.Random(seed)
         safe_count = max(1, min(400, int(count * max(0.1, density))))
-        prefix = region_id or f"bg_{mode}_{seed}"
+        prefix = element_id or f"bg_{mode}_{seed}"
         created: list[str] = []
 
         def add_line(name: str, pts, stroke: str, sw: float, op: float, smooth: float = 0.0):
             r = scene.create_line(
                 points=pts,
                 document_id=doc_id,
-                region_id=f"{prefix}_{name}_{len(created):03d}",
+                element_id=f"{prefix}_{name}_{len(created):03d}",
                 layer=layer,
                 z_index=z_index + len(created),
                 stroke=stroke,
@@ -1382,11 +1382,11 @@ def create_tools(mcp):
             created.append(r.id)
             return r
 
-        def add_region(name: str, outline, fill: str, stroke: str | None, sw: float, op: float, smooth: float = 0.2):
-            r = scene.create_region(
+        def add_element(name: str, outline, fill: str, stroke: str | None, sw: float, op: float, smooth: float = 0.2):
+            r = scene.create_element(
                 outline=outline,
                 document_id=doc_id,
-                region_id=f"{prefix}_{name}_{len(created):03d}",
+                element_id=f"{prefix}_{name}_{len(created):03d}",
                 layer=layer,
                 z_index=z_index + len(created),
                 clip_to=clip_to,
@@ -1423,7 +1423,7 @@ def create_tools(mcp):
                     add_line("pipe", [(px, y), (px + wobble, y + h)], stroke, 2.0, 0.65, 0.35)
             if "cornice" in enabled:
                 ch = h * 0.05
-                add_region("cornice", [(x, y), (x + w, y), (x + w * 0.96, y + ch), (x + w * 0.04, y + ch)], accent, stroke, 1.0, 0.85)
+                add_element("cornice", [(x, y), (x + w, y), (x + w * 0.96, y + ch), (x + w * 0.04, y + ch)], accent, stroke, 1.0, 0.85)
         elif mode == "tree_cluster":
             trunk = secondary_color or "#5A3A25"
             leaf = color or "#3F7A43"
@@ -1437,7 +1437,7 @@ def create_tools(mcp):
                     ry = h * rng.uniform(0.035, 0.075)
                     pcx = cx + rng.uniform(-0.04, 0.04) * w
                     pcy = base - th + rng.uniform(-0.035, 0.035) * h
-                    add_region("leaf", [(pcx, pcy - ry), (pcx + rx, pcy), (pcx, pcy + ry), (pcx - rx, pcy)], leaf, None, 0.5, rng.uniform(0.65, 0.92), 0.75)
+                    add_element("leaf", [(pcx, pcy - ry), (pcx + rx, pcy), (pcx, pcy + ry), (pcx - rx, pcy)], leaf, None, 0.5, rng.uniform(0.65, 0.92), 0.75)
         elif mode == "cloud_bank":
             fill = color or "#FFFFFF"
             shadow = secondary_color or "#BFD4E2"
@@ -1446,8 +1446,8 @@ def create_tools(mcp):
                 cy = y + h * rng.uniform(0.2, 0.78)
                 rx = w * rng.uniform(0.04, 0.12)
                 ry = h * rng.uniform(0.10, 0.26)
-                add_region("cloud_shadow", [(cx - rx, cy), (cx, cy - ry * 0.7), (cx + rx, cy), (cx, cy + ry * 0.42)], shadow, None, 0.5, 0.24, 0.82)
-                add_region("cloud_puff", [(cx - rx * 0.9, cy), (cx, cy - ry), (cx + rx * 0.9, cy), (cx, cy + ry * 0.55)], fill, None, 0.5, 0.55, 0.85)
+                add_element("cloud_shadow", [(cx - rx, cy), (cx, cy - ry * 0.7), (cx + rx, cy), (cx, cy + ry * 0.42)], shadow, None, 0.5, 0.24, 0.82)
+                add_element("cloud_puff", [(cx - rx * 0.9, cy), (cx, cy - ry), (cx + rx * 0.9, cy), (cx, cy + ry * 0.55)], fill, None, 0.5, 0.55, 0.85)
         elif mode == "water_ripples":
             stroke = color or "#A8F7FF"
             accent = secondary_color or "#FFFFFF"
@@ -1465,7 +1465,7 @@ def create_tools(mcp):
                 cy = y + rng.random() * h
                 rw = w * rng.uniform(0.015, 0.055)
                 rh = h * rng.uniform(0.025, 0.08)
-                add_region("rock", [(cx - rw, cy + rh * 0.2), (cx - rw * 0.3, cy - rh), (cx + rw * 0.75, cy - rh * 0.55), (cx + rw, cy + rh * 0.45), (cx, cy + rh)], fill, stroke, 0.8, rng.uniform(0.65, 0.95), 0.18)
+                add_element("rock", [(cx - rw, cy + rh * 0.2), (cx - rw * 0.3, cy - rh), (cx + rw * 0.75, cy - rh * 0.55), (cx + rw, cy + rh * 0.45), (cx, cy + rh)], fill, stroke, 0.8, rng.uniform(0.65, 0.95), 0.18)
         elif mode == "grass_patch":
             stroke = color or "#3F7F3F"
             accent = secondary_color or "#A8D26B"
@@ -1478,9 +1478,9 @@ def create_tools(mcp):
         else:
             return f"Error: Unknown background asset mode '{mode}'"
 
-        scene.group_regions(prefix, created, doc_id, replace=True)
+        scene.group_elements(prefix, created, doc_id, replace=True)
         scene._persist(doc_id)
-        return f"Background asset generated: mode={mode}, regions={len(created)}, group={prefix}, ids={', '.join(created[:6])}"
+        return f"Background asset generated: mode={mode}, elements={len(created)}, group={prefix}, ids={', '.join(created[:6])}"
 
     @mcp.tool(
         name="create_surface_stripes",
@@ -1492,7 +1492,7 @@ def create_tools(mcp):
         target_quad: list[list[float]],
         count: int,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         orientation: Literal["u", "v"] = "u",
         start: float = 0.08,
         end: float = 0.92,
@@ -1522,7 +1522,7 @@ def create_tools(mcp):
                 target_quad=target_quad,
                 count=count,
                 document_id=document_id,
-                region_id=region_id,
+                element_id=element_id,
                 orientation=orientation,
                 start=start,
                 end=end,
@@ -1547,15 +1547,15 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="create_shadow",
-        description="Create a soft shadow from a region outline. "
-        "Omit onto_region_id for a grounding/depth shadow, or pass onto_region_id "
-        "to clip the shadow onto another region for a cast shadow. "
+        description="Create a soft shadow from a element outline. "
+        "Omit onto_element_id for a grounding/depth shadow, or pass onto_element_id "
+        "to clip the shadow onto another element for a cast shadow. "
         "direction is degrees (0=right, 90=down); distance is normalized canvas units; "
         "softness is blur radius in pixels.",
     )
     def create_shadow(
-        region_id: str,
-        onto_region_id: str | None = None,
+        element_id: str,
+        onto_element_id: str | None = None,
         document_id: str | None = None,
         direction: float = 45.0,
         distance: float = 0.03,
@@ -1566,14 +1566,14 @@ def create_tools(mcp):
         sx: float | None = None,
         sy: float | None = None,
         z_offset: int | None = None,
-        new_region_id: str | None = None,
+        new_element_id: str | None = None,
     ) -> str:
-        """Create a blurred, low-opacity shadow derived from a region.
+        """Create a blurred, low-opacity shadow derived from a element.
 
         Args:
-            region_id: Source region.
-            onto_region_id: Optional receiver region. When provided, the shadow
-                is clipped to this region and layered relative to the receiver.
+            element_id: Source element.
+            onto_element_id: Optional receiver element. When provided, the shadow
+                is clipped to this element and layered relative to the receiver.
             document_id: Document UUID.
             direction: Offset angle in degrees. 0=right, 90=down.
             distance: Offset distance in normalized canvas units.
@@ -1583,12 +1583,12 @@ def create_tools(mcp):
             scale, sx, sy: Scale the shadow around the source center. Use
                 ``sy=0.35`` for ground shadows.
             z_offset: Relative z-index from the source, usually negative.
-            new_region_id: Optional explicit shadow ID.
+            new_element_id: Optional explicit shadow ID.
         """
         try:
             result = ShadowService().create_shadow(
-                region_id=region_id,
-                onto_region_id=onto_region_id,
+                element_id=element_id,
+                onto_element_id=onto_element_id,
                 document_id=document_id,
                 direction=direction,
                 distance=distance,
@@ -1599,19 +1599,19 @@ def create_tools(mcp):
                 sx=sx,
                 sy=sy,
                 z_offset=z_offset,
-                new_region_id=new_region_id,
+                new_element_id=new_element_id,
             )
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
         if result.clipped:
             return (
                 f"Shadow created: id='{result.shadow.id}', source='{result.source_id}', "
-                f"onto='{result.onto_region_id}', clipped=true, softness={result.softness:g}"
+                f"onto='{result.onto_element_id}', clipped=true, softness={result.softness:g}"
             )
         return (
             f"Shadow created: id='{result.shadow.id}', source='{result.source_id}', "
             f"direction={result.direction:g}, distance={result.distance:g}, softness={result.softness:g}"
         )
 
-    # Individual z-ordering: use edit_region(region_id, z_index=N)
+    # Individual z-ordering: use edit_element(element_id, z_index=N)
     # Layer z-ordering: use shift_layer_z

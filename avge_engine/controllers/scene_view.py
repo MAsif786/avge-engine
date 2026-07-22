@@ -44,13 +44,13 @@ def create_tools(mcp):
         d = desc["document"]
         lines.append(f"Document: {d['id']}  |  Version: {d['version']}")
         lines.append(f"Canvas: {d['width']}x{d['height']} {d['unit']}, bg={d['background']}")
-        lines.append(f"Regions: {desc['region_count']}")
+        lines.append(f"Elements: {desc['element_count']}")
         lines.append("")
 
-        if not desc["regions"]:
-            lines.append("(No regions on canvas)")
+        if not desc["elements"]:
+            lines.append("(No elements on canvas)")
         else:
-            for r in desc["regions"]:
+            for r in desc["elements"]:
                 b = r.get("bounds")
                 bs = (
                     f"x={b['x']:.4f} y={b['y']:.4f} w={b['w']:.4f} h={b['h']:.4f}"
@@ -81,21 +81,21 @@ def create_tools(mcp):
         return "\n".join(lines)
 
     @mcp.tool(
-        name="get_region",
-        description="Get a region's full outline coordinates, style, and primitive "
+        name="get_element",
+        description="Get a element's full outline coordinates, style, and primitive "
         "data. Use this when you need exact point positions for editing — "
         "e.g. adding a border to an isometric box face requires knowing its "
         "actual parallelogram vertices, not just bounding boxes.",
     )
-    def get_region(
-        region_id: str,
+    def get_element(
+        element_id: str,
         document_id: str | None = None,
         decimals: int = 4,
     ) -> str:
-        """Get a region's outline coordinates and properties.
+        """Get a element's outline coordinates and properties.
 
         Args:
-            region_id: ID of the region to inspect.
+            element_id: ID of the element to inspect.
             document_id: Document UUID (omit for active doc).
             decimals: Rounding for coordinate output (default 4).
         """
@@ -104,11 +104,11 @@ def create_tools(mcp):
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
-        r = scene.get_region(region_id, doc_id)
+        r = scene.get_element(element_id, doc_id)
         if r is None:
-            return f"Error: Region '{region_id}' not found"
+            return f"Error: Element '{element_id}' not found"
 
-        lines = [f"Region: {region_id}"]
+        lines = [f"Element: {element_id}"]
         lines.append(f"  Layer: {r.layer}  |  Z: {r.z_index}")
 
         # Style
@@ -135,13 +135,13 @@ def create_tools(mcp):
     @mcp.tool(
         name="render_preview",
         description="Get a visual PNG preview URL for the current canvas. "
-        "💡 Pass region_id to render just one region for inspection.\n"
+        "💡 Pass element_id to render just one element for inspection.\n"
         "Also: /preview/{doc_id}.png (PNG) and /preview/{doc_id}.svg (SVG).",
     )
     def render_preview(
         scale: float = 1.0,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         bbox: dict | None = None,
     ) -> str:
         """Get a visual PNG preview URL for the current canvas.
@@ -152,7 +152,7 @@ def create_tools(mcp):
         Args:
             scale: Render scale factor (0.25–2.0, default 1.0).
             document_id: Document UUID (omit to use active document).
-            region_id: Optional — crop preview to this region's bounding box.
+            element_id: Optional — crop preview to this element's bounding box.
             bbox: Optional — explicit crop area {x, y, w, h} in normalized coords.
                 💡 Combine with scale=4 for a detail zoom on a face or hand.
         """
@@ -163,15 +163,15 @@ def create_tools(mcp):
             return "Error: No active document — call create_document first"
 
         # If cropping requested, render SVG inline with modified viewBox
-        if region_id or bbox:
+        if element_id or bbox:
             from avge_engine.renderer.svg import svg_serialize
             from avge_engine.renderer.raster import render_preview_base64
             svg = svg_serialize(scene, doc_id)
             import re
-            if region_id:
-                r = scene.get_region(region_id, doc_id)
+            if element_id:
+                r = scene.get_element(element_id, doc_id)
                 if not r:
-                    return f"Error: Region '{region_id}' not found"
+                    return f"Error: Element '{element_id}' not found"
                 b = r.bounds
                 margin = 0.05
                 crop = {"x": b["x"] - margin, "y": b["y"] - margin,
@@ -205,7 +205,7 @@ def create_tools(mcp):
         filepath: str = "output/scene.svg",
         document_id: str | None = None,
         exclude_layers: list[str] | None = None,
-        exclude_region_ids: list[str] | None = None,
+        exclude_element_ids: list[str] | None = None,
         exclude_prefixes: list[str] | None = None,
     ) -> str:
         """Export the current canvas as an SVG file on disk.
@@ -216,7 +216,7 @@ def create_tools(mcp):
             document_id: Document UUID (omit to use active document).
             exclude_layers: Optional layer names to omit from final export.
                 Use ["guides"] to keep construction guides out of final art.
-            exclude_region_ids: Optional exact region IDs to omit.
+            exclude_element_ids: Optional exact element IDs to omit.
             exclude_prefixes: Optional ID prefixes to omit, e.g. ["guide_"].
         """
         scene = get_graph()
@@ -229,7 +229,7 @@ def create_tools(mcp):
             scene,
             doc_id,
             exclude_layers=exclude_layers,
-            exclude_region_ids=exclude_region_ids,
+            exclude_element_ids=exclude_element_ids,
             exclude_prefixes=exclude_prefixes,
         )
 
@@ -242,7 +242,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="checkpoint_diff",
         description="Compare the current scene against a named checkpoint. "
-        "Shows which regions were added, removed, or changed since the checkpoint. "
+        "Shows which elements were added, removed, or changed since the checkpoint. "
         "💡 Use checkpoint before a risky edit, then checkpoint_diff to review "
         "what actually changed.",
     )
@@ -268,12 +268,12 @@ def create_tools(mcp):
         if not cps:
             return f"No checkpoints found for document '{doc_id}'"
 
-        # Get current region IDs
+        # Get current element IDs
         current_ids = set()
-        current_regions = {}
-        for r in scene.get_all_regions(doc_id):
+        current_elements = {}
+        for r in scene.get_all_elements(doc_id):
             current_ids.add(r.id)
-            current_regions[r.id] = {
+            current_elements[r.id] = {
                 "fill": r.style.fill, "stroke": r.style.stroke,
                 "stroke_width": r.style.stroke_width,
                 "z_index": r.z_index, "layer": r.layer, "version": r.version,
@@ -282,14 +282,14 @@ def create_tools(mcp):
             }
 
         try:
-            _doc_snap, regions_snap = scene.checkpoint_snapshot(doc_id, name)
+            _doc_snap, elements_snap = scene.checkpoint_snapshot(doc_id, name)
         except KeyError:
             return f"Checkpoint '{name}' not found (available: {cps})"
 
-        checkpoint_ids = set(regions_snap.keys())
-        checkpoint_regions = {}
-        for rid, r in regions_snap.items():
-            checkpoint_regions[rid] = {
+        checkpoint_ids = set(elements_snap.keys())
+        checkpoint_elements = {}
+        for rid, r in elements_snap.items():
+            checkpoint_elements[rid] = {
                 "fill": r.style.fill, "stroke": r.style.stroke,
                 "stroke_width": r.style.stroke_width,
                 "z_index": r.z_index, "layer": r.layer, "version": r.version,
@@ -304,8 +304,8 @@ def create_tools(mcp):
 
         modified = []
         for rid in sorted(common_ids):
-            cur = current_regions[rid]
-            chk = checkpoint_regions[rid]
+            cur = current_elements[rid]
+            chk = checkpoint_elements[rid]
             changes = []
             if cur["fill"] != chk["fill"]:
                 changes.append(f"fill: {chk['fill']} → {cur['fill']}")
@@ -328,7 +328,7 @@ def create_tools(mcp):
             f"Checkpoint: '{name}'",
             f"Added: {sorted(added_ids)}" if added_ids else "Added: (none)",
             f"Removed: {sorted(removed_ids)}" if removed_ids else "Removed: (none)",
-            f"Modified: {len(modified)} region(s)",
+            f"Modified: {len(modified)} element(s)",
         ]
         if not added_ids and not removed_ids and not modified:
             lines.append("  (no changes since checkpoint)")
@@ -341,7 +341,7 @@ def create_tools(mcp):
         name="render_diff",
         description="Render a visual diff PNG comparing current state against "
         "a named checkpoint. Shows added (green), removed (red), and modified "
-        "(yellow) regions. 💡 Use after checkpoint/restore to verify changes "
+        "(yellow) elements. 💡 Use after checkpoint/restore to verify changes "
         "visually. Returns a data URI that can be opened in a browser.",
     )
     def render_diff(
@@ -367,12 +367,12 @@ def create_tools(mcp):
             return f"No checkpoints found for '{doc_id}'"
 
         try:
-            _doc_snap, checkpoint_regions = scene.checkpoint_snapshot(doc_id, name)
+            _doc_snap, checkpoint_elements = scene.checkpoint_snapshot(doc_id, name)
         except KeyError:
             return f"Checkpoint '{name}' not found"
 
-        # Get current regions
-        current_regions = {r.id: r for r in scene.get_all_regions(doc_id)}
+        # Get current elements
+        current_elements = {r.id: r for r in scene.get_all_elements(doc_id)}
         doc = scene.get_document(doc_id)
 
         # Build diff SVG overlay
@@ -385,8 +385,8 @@ def create_tools(mcp):
             f'    Diff vs checkpoint "{name}" — green=added, red=removed, yellow=modified</text>',
         ]
 
-        cp_ids = set(checkpoint_regions.keys())
-        cur_ids = set(current_regions.keys())
+        cp_ids = set(checkpoint_elements.keys())
+        cur_ids = set(current_elements.keys())
 
         added = cur_ids - cp_ids
         removed = cp_ids - cur_ids
@@ -394,7 +394,7 @@ def create_tools(mcp):
 
         # Checkpoint state (gray ghosts)
         for rid in sorted(cp_ids):
-            r = checkpoint_regions[rid]
+            r = checkpoint_elements[rid]
             if not r.outline:
                 continue
             pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
@@ -405,7 +405,7 @@ def create_tools(mcp):
 
         # Current state (color overlay on top)
         for rid in sorted(cur_ids):
-            r = current_regions[rid]
+            r = current_elements[rid]
             if not r.outline:
                 continue
             if rid in added:
@@ -414,7 +414,7 @@ def create_tools(mcp):
                 continue  # already shown in red above
             else:
                 # Check if modified
-                chk = checkpoint_regions.get(rid)
+                chk = checkpoint_elements.get(rid)
                 if chk:
                     cur_fill = str(r.style.fill)
                     chk_fill = str(chk.style.fill)
@@ -427,7 +427,7 @@ def create_tools(mcp):
 
         # Special handling for removed — red X marks
         for rid in sorted(removed):
-            r = checkpoint_regions[rid]
+            r = checkpoint_elements[rid]
             if not r.outline:
                 continue
             pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)

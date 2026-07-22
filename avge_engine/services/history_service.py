@@ -17,7 +17,7 @@ class HistoryService(BaseService):
         doc = self.graph.get_document(doc_id)
         return {
             "checkpoint": name,
-            "region_count": self.graph.region_count(doc_id),
+            "element_count": self.graph.element_count(doc_id),
             "version": doc.version,
         }
 
@@ -28,7 +28,7 @@ class HistoryService(BaseService):
         doc = self.graph.get_document(doc_id)
         return {
             "checkpoint": name,
-            "region_count": self.graph.region_count(doc_id),
+            "element_count": self.graph.element_count(doc_id),
             "version": doc.version,
         }
 
@@ -48,7 +48,7 @@ class HistoryService(BaseService):
             "label": f"Current - v{doc.version}",
             "current": True,
             "version": doc.version,
-            "region_count": self.graph.region_count(doc_id),
+            "element_count": self.graph.element_count(doc_id),
         }]
         for entry in self.graph.checkpoint_entries(doc_id):
             versions.append({
@@ -59,25 +59,25 @@ class HistoryService(BaseService):
                 "time": entry["time"],
                 "action": entry["action"],
                 "detail": entry["detail"],
-                "region_count": entry["region_count"],
+                "element_count": entry["element_count"],
             })
         return versions
 
     def snapshot_graph(self, *, document_id: str, checkpoint_name: str) -> SceneGraph:
         doc_id = self._load_existing_doc(document_id)
-        doc, regions = self.graph.checkpoint_snapshot(doc_id, checkpoint_name)
-        return SceneGraph.from_snapshot(doc_id, doc, regions)
+        doc, elements = self.graph.checkpoint_snapshot(doc_id, checkpoint_name)
+        return SceneGraph.from_snapshot(doc_id, doc, elements)
 
     @staticmethod
     def version_label(entry: HistoryEntry | dict[str, str]) -> str:
         name = entry.get("name", "")
         action = entry.get("action") or "checkpoint"
         detail = entry.get("detail") or ""
-        region_count = entry.get("region_count") or "?"
+        element_count = entry.get("element_count") or "?"
         suffix = f" - {action}"
         if detail:
             suffix += f" {detail}"
-        return f"{name}{suffix} ({region_count} regions)"
+        return f"{name}{suffix} ({element_count} elements)"
 
     def _resolve_existing_doc(self, document_id: str | None) -> str:
         doc_id = resolve_doc(document_id)

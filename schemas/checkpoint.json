@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/checkpoint/v1.json",
   "title": "checkpoint",
-  "description": "Save a snapshot of the current document state. The checkpoint deep-copies all regions so it survives subsequent edits.",
+  "description": "Save a snapshot of the current document state. The checkpoint deep-copies all elements so it survives subsequent edits.",
   "type": "object",
   "properties": {
     "name": {

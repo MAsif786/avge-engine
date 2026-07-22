@@ -1,4 +1,4 @@
-"""Region outline and fill pattern generation service."""
+"""Element outline and fill pattern generation service."""
 
 from __future__ import annotations
 
@@ -16,10 +16,10 @@ from avge_engine.geometry.line_patterns import (
 from avge_engine.scene import CurveConstraints, Style
 
 
-def sample_region_outline(region, samples_per_segment: int = 8) -> list[list[float]]:
+def sample_element_outline(element, samples_per_segment: int = 8) -> list[list[float]]:
     """Return a dense closed outline suitable for patterned primitive borders."""
-    if region.primitive:
-        p = region.primitive
+    if element.primitive:
+        p = element.primitive
         ptype = p.get("type")
         if ptype == "rect":
             x, y, w, h = p["x"], p["y"], p["width"], p["height"]
@@ -31,8 +31,8 @@ def sample_region_outline(region, samples_per_segment: int = 8) -> list[list[flo
                 [cx + math.cos(math.tau * i / n) * rx, cy + math.sin(math.tau * i / n) * ry]
                 for i in range(n + 1)
             ]
-    pts = [[float(x), float(y)] for x, y in region.outline]
-    if pts and region.constraints.closed and pts[0] != pts[-1]:
+    pts = [[float(x), float(y)] for x, y in element.outline]
+    if pts and element.constraints.closed and pts[0] != pts[-1]:
         pts.append(list(pts[0]))
     return pts
 
@@ -40,7 +40,7 @@ def sample_region_outline(region, samples_per_segment: int = 8) -> list[list[flo
 def apply_primitive_patterns(
     scene,
     doc_id: str,
-    base_region,
+    base_element,
     outline_pattern: str | None,
     fill_pattern: str | None,
     pattern_density: int,
@@ -60,11 +60,11 @@ def apply_primitive_patterns(
 
     if outline_pattern in ("dashed", "dotted"):
         dash = "1,5" if outline_pattern == "dotted" else "7,5"
-        sampled = sample_region_outline(base_region)
+        sampled = sample_element_outline(base_element)
         r = scene.create_line(
             points=sampled,
             document_id=doc_id,
-            region_id=f"{base_region.id}_{outline_pattern}_outline",
+            element_id=f"{base_element.id}_{outline_pattern}_outline",
             layer=layer,
             z_index=z_index + 2,
             stroke=color,
@@ -74,10 +74,10 @@ def apply_primitive_patterns(
             stroke_dasharray=dash,
             smoothness=0.0 if len(sampled) <= 6 else 0.65,
         )
-        r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
+        r.metadata.update({"tool": "create_element_pattern", "pattern": outline_pattern, "base": base_element.id})
         created.append(r.id)
     elif outline_pattern in ("wavy", "zigzag", "rough", "sketch", "tapered", "pressure"):
-        sampled = sample_region_outline(base_region)
+        sampled = sample_element_outline(base_element)
         rng = random.Random(pattern_seed)
         if outline_pattern in ("rough", "sketch"):
             repeats = 2 if outline_pattern == "sketch" else 1
@@ -86,7 +86,7 @@ def apply_primitive_patterns(
                 r = scene.create_line(
                     points=pts,
                     document_id=doc_id,
-                    region_id=f"{base_region.id}_{outline_pattern}_outline_{i:02d}",
+                    element_id=f"{base_element.id}_{outline_pattern}_outline_{i:02d}",
                     layer=layer,
                     z_index=z_index + 2 + i,
                     stroke=color,
@@ -95,7 +95,7 @@ def apply_primitive_patterns(
                     stroke_linecap="round",
                     smoothness=0.55,
                 )
-                r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
+                r.metadata.update({"tool": "create_element_pattern", "pattern": outline_pattern, "base": base_element.id})
                 created.append(r.id)
         elif outline_pattern in ("tapered", "pressure"):
             widths = width_profile_values(
@@ -106,15 +106,15 @@ def apply_primitive_patterns(
                 pattern_width,
             )
             ribbon = ribbon_outline(sampled, widths)
-            r = scene.create_region(
+            r = scene.create_element(
                 outline=ribbon,
                 document_id=doc_id,
-                region_id=f"{base_region.id}_{outline_pattern}_outline",
+                element_id=f"{base_element.id}_{outline_pattern}_outline",
                 layer=layer,
                 z_index=z_index + 2,
                 constraints=CurveConstraints(smoothness=0.55, closed=True),
                 style=Style(fill=color, stroke=None, opacity=opacity if opacity is not None else 0.85),
-                metadata={"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id},
+                metadata={"tool": "create_element_pattern", "pattern": outline_pattern, "base": base_element.id},
             )
             created.append(r.id)
         else:
@@ -133,7 +133,7 @@ def apply_primitive_patterns(
             r = scene.create_compound_path(
                 subpaths=subpaths,
                 document_id=doc_id,
-                region_id=f"{base_region.id}_{outline_pattern}_outline",
+                element_id=f"{base_element.id}_{outline_pattern}_outline",
                 layer=layer,
                 z_index=z_index + 2,
                 fill=None,
@@ -144,11 +144,11 @@ def apply_primitive_patterns(
                 smoothness=0.65 if outline_pattern == "wavy" else 0.0,
                 closed=False,
             )
-            r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
+            r.metadata.update({"tool": "create_element_pattern", "pattern": outline_pattern, "base": base_element.id})
             created.append(r.id)
 
-    if base_region.constraints.closed and fill_pattern in ("hatch", "cross_hatch", "contour_hatch", "scribble", "stipple"):
-        b = base_region.bounds
+    if base_element.constraints.closed and fill_pattern in ("hatch", "cross_hatch", "contour_hatch", "scribble", "stipple"):
+        b = base_element.bounds
         if b:
             bounds = [b["x"], b["y"], b["w"], b["h"]]
             rng = random.Random(pattern_seed)
@@ -159,7 +159,7 @@ def apply_primitive_patterns(
                 r = scene.create_compound_path(
                     subpaths=subpaths,
                     document_id=doc_id,
-                    region_id=f"{base_region.id}_{fill_pattern}_fill",
+                    element_id=f"{base_element.id}_{fill_pattern}_fill",
                     layer=layer,
                     z_index=z_index + 1,
                     fill=None,
@@ -170,15 +170,15 @@ def apply_primitive_patterns(
                     smoothness=0.55 if fill_pattern == "contour_hatch" else 0.0,
                     closed=False,
                 )
-                r.clip_to = base_region.id
-                r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
+                r.clip_to = base_element.id
+                r.metadata.update({"tool": "create_element_pattern", "pattern": fill_pattern, "base": base_element.id})
                 created.append(r.id)
             elif fill_pattern == "scribble":
                 for i, pts in enumerate(scribble_paths(bounds, pattern_density, pattern_jitter, rng)):
                     r = scene.create_line(
                         points=pts,
                         document_id=doc_id,
-                        region_id=f"{base_region.id}_{fill_pattern}_{i:02d}",
+                        element_id=f"{base_element.id}_{fill_pattern}_{i:02d}",
                         layer=layer,
                         z_index=z_index + 1,
                         stroke=color,
@@ -187,8 +187,8 @@ def apply_primitive_patterns(
                         stroke_linecap="round",
                         smoothness=0.65,
                     )
-                    r.clip_to = base_region.id
-                    r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
+                    r.clip_to = base_element.id
+                    r.metadata.update({"tool": "create_element_pattern", "pattern": fill_pattern, "base": base_element.id})
                     created.append(r.id)
             elif fill_pattern == "stipple":
                 total = max(1, min(600, int(pattern_density)))
@@ -200,15 +200,15 @@ def apply_primitive_patterns(
                         dot_w,
                         dot_w,
                         document_id=doc_id,
-                        region_id=f"{base_region.id}_{fill_pattern}_{i:03d}",
+                        element_id=f"{base_element.id}_{fill_pattern}_{i:03d}",
                         layer=layer,
                         z_index=z_index + 1,
                         fill=color,
                         stroke=None,
                         opacity=opacity if opacity is not None else rng.uniform(0.25, 0.65),
                     )
-                    r.clip_to = base_region.id
-                    r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
+                    r.clip_to = base_element.id
+                    r.metadata.update({"tool": "create_element_pattern", "pattern": fill_pattern, "base": base_element.id})
                     created.append(r.id)
 
     if created:

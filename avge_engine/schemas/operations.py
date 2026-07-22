@@ -30,7 +30,7 @@ class TransformObjectsRequest(BaseModel):
 class ManageGroupRequest(BaseModel):
     action: GROUP_ACTION = "create"
     group_name: str
-    region_ids: list[str] | None = None
+    element_ids: list[str] | None = None
     document_id: str
 
 
@@ -49,7 +49,7 @@ class DuplicateGroupRequest(BaseModel):
 
 
 class ExtrudeOutlineRequest(BaseModel):
-    region_id: str
+    element_id: str
     document_id: str
     segment_indices: list[int] | None = None
     extrusion_length: float = 0.03
@@ -85,7 +85,7 @@ class PreviewRequest(BaseModel):
     scale: float = Field(default=1.0, ge=0.25, le=2.0)
     document_id: str | None = None
     exclude_layers: list[str] | None = None
-    exclude_region_ids: list[str] | None = None
+    exclude_element_ids: list[str] | None = None
     exclude_prefixes: list[str] | None = None
 
 
@@ -93,7 +93,7 @@ class ExportSvgRequest(BaseModel):
     filepath: str = "output/scene.svg"
     document_id: str
     exclude_layers: list[str] | None = None
-    exclude_region_ids: list[str] | None = None
+    exclude_element_ids: list[str] | None = None
     exclude_prefixes: list[str] | None = None
 
 

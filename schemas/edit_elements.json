@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avge.dev/schemas/edit_regions/v1.json",
-  "title": "edit_regions",
-  "description": "Edit multiple regions with per-item content/style updates. Use transform_objects for move/scale/rotate/mirror/align.",
+  "$id": "https://avge.dev/schemas/edit_elements/v1.json",
+  "title": "edit_elements",
+  "description": "Edit multiple elements with per-item content/style updates. Use transform_objects for move/scale/rotate/mirror/align.",
   "type": "object",
   "properties": {
     "document_id": {"type": ["string", "null"]},

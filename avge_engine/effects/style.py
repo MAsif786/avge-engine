@@ -123,7 +123,7 @@ def _gradient_id(g: GradientDef) -> str:
 
 @dataclass(frozen=True)
 class Style:
-    """Visual style for a region.
+    """Visual style for a element.
 
     Fill may be:
     - None (transparent / no fill)

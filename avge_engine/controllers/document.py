@@ -13,7 +13,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="create_document",
         description="Create a new canvas. Must be called first — call once per scene, "
-        "then use create_region/restyle to edit the same document "
+        "then use create_element/restyle to edit the same document "
         "incrementally. Never rebuild from scratch.",
     )
     def create_document(
@@ -55,7 +55,7 @@ def create_tools(mcp):
                 f"background={doc.background}\n\n"
                 f"📌 Use this document_id=\"{doc.id}\" in subsequent tool calls.\n"
                 f"💡 Tip: before styling, see resource avge://skill/design-guidelines "
-                f"— flat single-tone fills on every region is a common miss. "
+                f"— flat single-tone fills on every element is a common miss. "
                 f"For streets, interiors, and architecture, see "
                 f"avge://skill/environment-guidelines."
             )
@@ -67,7 +67,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="get_document",
         description="Get metadata for a document. "
-        "Returns document ID, name, canvas size, region count, version, "
+        "Returns document ID, name, canvas size, element count, version, "
         "and a preview URL (open in browser to view). "
         "Omit document_id to use the active document.",
     )
@@ -90,7 +90,7 @@ def create_tools(mcp):
             f"Name: {doc_info.get('name', '') or '(unnamed)'}",
             f"Canvas: {doc_info['width']}x{doc_info['height']}",
             f"Background: {doc_info['background']}",
-            f"Regions: {summary.region_count}",
+            f"Elements: {summary.element_count}",
             f"Version: {doc_info['version']}",
             f"Preview: http://localhost:8000/preview/{doc_info['id']}.png",
         ]
@@ -99,7 +99,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="list_documents",
         description="List all saved documents on disk. Returns ID, name, version, "
-        "and region count for each. Pass document_id directly to edit/view tools.",
+        "and element count for each. Pass document_id directly to edit/view tools.",
     )
     def list_documents() -> str:
         """List all persisted documents."""
@@ -114,14 +114,14 @@ def create_tools(mcp):
             updated = d.get("updated_at", "")[:16] if d.get("updated_at") else "?"
             lines.append(
                 f"  [{d['id']}] {name} | v{d['version']} | "
-                f"{d['region_count']} regions | created {created} | updated {updated}"
+                f"{d['element_count']} elements | created {created} | updated {updated}"
             )
         return "\n".join(lines)
 
     @mcp.tool(
         name="clone_document",
         description="Clone an existing document into a new document ID, including canvas metadata, "
-        "named gradients, regions, styles, layers, groups, and editable geometry. "
+        "named gradients, elements, styles, layers, groups, and editable geometry. "
         "Omit source_document_id to clone the active document.",
     )
     def clone_document(
@@ -137,7 +137,7 @@ def create_tools(mcp):
             set_active: If True, make the clone the active document.
         """
         try:
-            clone, source_id, region_count = DocumentService().clone_document(
+            clone, source_id, element_count = DocumentService().clone_document(
                 source_document_id=source_document_id,
                 name=name,
                 set_active=set_active,
@@ -145,7 +145,7 @@ def create_tools(mcp):
             return (
                 f"Document cloned: source={source_id} clone={clone.id} "
                 f"name='{clone.name}' {clone.width}x{clone.height} "
-                f"regions={region_count}"
+                f"elements={element_count}"
             )
         except RuntimeError:
             return "Error: No active document. Call create_document first."
@@ -158,7 +158,7 @@ def create_tools(mcp):
         "Call with confirm=False first to preview what will be deleted, "
         "then call with confirm=True to execute. "
         "Use list_documents to see available documents. "
-        "⚠️ This permanently removes the document and all its regions.",
+        "⚠️ This permanently removes the document and all its elements.",
     )
     def delete_document(
         ids: list[str],
@@ -185,7 +185,7 @@ def create_tools(mcp):
             for d in result.found:
                 doc_id = d["id"]
                 name = d.get("name", "") or "(unnamed)"
-                lines.append(f"    [{doc_id}] {name} | v{d['version']} | {d['region_count']} regions")
+                lines.append(f"    [{doc_id}] {name} | v{d['version']} | {d['element_count']} elements")
             if result.missing:
                 lines.append(f"  Not found (skipped): {', '.join(result.missing)}")
             return "\n".join(lines)

@@ -1,4 +1,4 @@
-from avge_engine.controllers import region, style
+from avge_engine.controllers import element, style
 from avge_engine.services.engine import reset_graph
 
 
@@ -15,15 +15,15 @@ class _FakeMCP:
 
 def _setup_scene():
     reset_graph()
-    region_mcp = _FakeMCP()
+    element_mcp = _FakeMCP()
     style_mcp = _FakeMCP()
-    region.create_tools(region_mcp)
+    element.create_tools(element_mcp)
     style.create_tools(style_mcp)
-    graph = region.get_graph()
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="panel",
+        element_id="panel",
         outline=[(0.2, 0.2), (0.8, 0.2), (0.8, 0.7), (0.2, 0.7)],
     )
     return graph, doc, style_mcp
@@ -38,16 +38,16 @@ def test_restyle_material_applies_base_style_and_details():
         material="glass",
     )
 
-    panel = graph.get_region("panel", doc.id)
-    detail_regions = [
-        r for r in graph.get_all_regions(doc.id)
+    panel = graph.get_element("panel", doc.id)
+    detail_elements = [
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("material_source") == "panel"
     ]
     assert "Material 'glass' applied" in result
     assert isinstance(panel.style.fill, dict)
     assert panel.style.opacity == 0.58
-    assert len(detail_regions) == 2
-    assert all(r.clip_to == "panel" for r in detail_regions)
+    assert len(detail_elements) == 2
+    assert all(r.clip_to == "panel" for r in detail_elements)
 
 
 def test_restyle_material_detail_can_be_disabled():
@@ -60,11 +60,11 @@ def test_restyle_material_detail_can_be_disabled():
         material_detail=False,
     )
 
-    detail_regions = [
-        r for r in graph.get_all_regions(doc.id)
+    detail_elements = [
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("material_source") == "panel"
     ]
-    assert detail_regions == []
+    assert detail_elements == []
 
 
 def test_restyle_material_replaces_previous_details():
@@ -76,7 +76,7 @@ def test_restyle_material_replaces_previous_details():
         material="glass",
     )
     first_detail_ids = {
-        r.id for r in graph.get_all_regions(doc.id)
+        r.id for r in graph.get_all_elements(doc.id)
         if r.metadata.get("material_source") == "panel"
     }
 
@@ -86,7 +86,7 @@ def test_restyle_material_replaces_previous_details():
         material="wood",
     )
     second_detail_ids = {
-        r.id for r in graph.get_all_regions(doc.id)
+        r.id for r in graph.get_all_elements(doc.id)
         if r.metadata.get("material_source") == "panel"
     }
 

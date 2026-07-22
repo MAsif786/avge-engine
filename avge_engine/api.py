@@ -28,7 +28,7 @@ from avge_engine.services.creation_service import CreationService
 from avge_engine.services.document_load_service import DocumentLoadService
 from avge_engine.services.document_service import DocumentService
 from avge_engine.services.history_service import HistoryService
-from avge_engine.services.region_service import RegionService
+from avge_engine.services.element_service import ElementService
 from avge_engine.services.tool_execution_service import ToolExecutionService
 from avge_engine.schema_registry import list_tool_names
 from avge_engine.renderer import (
@@ -47,15 +47,15 @@ from avge_engine.schemas import (
     CreateEllipseRequest,
     CreateLineRequest,
     CreateRectRequest,
-    CreateRegionRequest,
+    CreateElementRequest,
     CritiqueRequest,
     DeleteDocumentRequest,
-    DeleteRegionRequest,
+    DeleteElementRequest,
     DescribeSceneRequest,
     DocIdBody,
     DocIdLimitBody,
     DuplicateGroupRequest,
-    EditRegionRequest,
+    EditElementRequest,
     ExportSvgRequest,
     ExtrudeOutlineRequest,
     FindObjectsRequest,
@@ -124,8 +124,8 @@ async def list_documents_viewer(search: str = "", sort: str = "updated", order: 
     reverse = order.lower() != "asc"
     if sort == "name":
         key = lambda d: (d.get("name") or "").lower()
-    elif sort in {"regions", "region_count"}:
-        key = lambda d: int(d.get("region_count") or 0)
+    elif sort in {"elements", "element_count"}:
+        key = lambda d: int(d.get("element_count") or 0)
     elif sort == "version":
         key = lambda d: int(d.get("version") or 0)
     else:
@@ -226,7 +226,7 @@ async def delete_document(req: DeleteDocumentRequest):
 @app.post("/tools/clone_document", response_model=ToolResponse)
 async def clone_document(req: CloneDocumentRequest):
     try:
-        doc, source_id, region_count = DocumentService().clone_document(
+        doc, source_id, element_count = DocumentService().clone_document(
             source_document_id=req.source_document_id,
             name=req.name,
             set_active=req.set_active,
@@ -237,7 +237,7 @@ async def clone_document(req: CloneDocumentRequest):
             "name": doc.name or "",
             "width": doc.width,
             "height": doc.height,
-            "region_count": region_count,
+            "element_count": element_count,
         })
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -261,21 +261,21 @@ async def get_document_info(document_id: str | None = None):
         raise HTTPException(status_code=404, detail=f"Document '{document_id}' not found")
     return {
         "document": summary.document,
-        "regions": summary.regions,
-        "region_count": summary.region_count,
+        "elements": summary.elements,
+        "element_count": summary.element_count,
         "preview_url": f"/preview/{document_id}.png",
     }
 
 
-# ── Region Endpoints ───────────────────────────────────────────────
+# ── Element Endpoints ───────────────────────────────────────────────
 
-@app.post("/tools/create_region", response_model=ToolResponse)
-async def create_region(req: CreateRegionRequest):
+@app.post("/tools/create_element", response_model=ToolResponse)
+async def create_element(req: CreateElementRequest):
     try:
-        result = CreationService().create_region(
+        result = CreationService().create_element(
             outline=req.outline,
             document_id=req.document_id,
-            region_id=req.region_id,
+            element_id=req.element_id,
             layer=req.layer,
             closed=req.closed,
             smoothness=req.smoothness,
@@ -293,7 +293,7 @@ async def create_region(req: CreateRegionRequest):
         )
         return ToolResponse(
             data={
-                "region_id": result.region_id,
+                "element_id": result.element_id,
                 "bounds": result.bounds,
                 "outline_point_count": result.outline_point_count,
             },
@@ -303,11 +303,11 @@ async def create_region(req: CreateRegionRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/tools/edit_region", response_model=ToolResponse)
-async def edit_region(req: EditRegionRequest):
+@app.post("/tools/edit_element", response_model=ToolResponse)
+async def edit_element(req: EditElementRequest):
     try:
-        RegionService().edit_region(
-            region_id=req.region_id,
+        ElementService().edit_element(
+            element_id=req.element_id,
             document_id=req.document_id,
             outline=req.outline,
             smoothness=req.smoothness,
@@ -319,17 +319,17 @@ async def edit_region(req: EditRegionRequest):
             tags=req.tags,
             blur=req.blur,
         )
-        return ToolResponse(data={"region_id": req.region_id})
+        return ToolResponse(data={"element_id": req.element_id})
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/tools/delete_region", response_model=ToolResponse)
-async def delete_region(req: DeleteRegionRequest):
+@app.post("/tools/delete_element", response_model=ToolResponse)
+async def delete_element(req: DeleteElementRequest):
     try:
-        deleted = RegionService().delete_regions(document_id=req.document_id, ids=req.ids)
+        deleted = ElementService().delete_elements(document_id=req.document_id, ids=req.ids)
     except RuntimeError:
         raise HTTPException(status_code=404, detail="No active document")
     return ToolResponse(data={"affected": deleted, "count": len(deleted)})
@@ -339,12 +339,12 @@ async def delete_region(req: DeleteRegionRequest):
 @app.post("/tools/copy_element", response_model=ToolResponse, tags=["copy_element"])
 async def copy_element(req: CopyElementRequest):
     try:
-        result = RegionService().copy_element(
+        result = ElementService().copy_element(
             source_document_id=req.source_document_id,
             target_document_id=req.target_document_id,
-            region_id=req.region_id,
+            element_id=req.element_id,
             group_name=req.group,
-            new_region_id=req.new_region_id,
+            new_element_id=req.new_element_id,
             offset_x=req.offset_x,
             offset_y=req.offset_y,
             skip_existing=True,
@@ -357,7 +357,7 @@ async def copy_element(req: CopyElementRequest):
         raise HTTPException(status_code=400, detail=str(e))
     if result.group_name:
         return ToolResponse(data={"copied": result.copied_ids, "count": len(result.copied_ids)})
-    return ToolResponse(data={"region_id": result.copied_ids[0] if result.copied_ids else None, "source": req.region_id})
+    return ToolResponse(data={"element_id": result.copied_ids[0] if result.copied_ids else None, "source": req.element_id})
 
 
 @app.post("/tools/create_rect", response_model=ToolResponse)
@@ -370,7 +370,7 @@ async def create_rect(req: CreateRectRequest):
             height=req.height,
             rx=req.rx,
             document_id=req.document_id,
-            region_id=req.region_id,
+            element_id=req.element_id,
             layer=req.layer,
             z_index=req.z_index,
             fill=req.fill,
@@ -379,7 +379,7 @@ async def create_rect(req: CreateRectRequest):
             opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
-        return ToolResponse(data={"region_id": result.region_id})
+        return ToolResponse(data={"element_id": result.element_id})
     except RuntimeError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -395,7 +395,7 @@ async def create_ellipse(req: CreateEllipseRequest):
             rx=req.rx,
             ry=req.ry,
             document_id=req.document_id,
-            region_id=req.region_id,
+            element_id=req.element_id,
             layer=req.layer,
             z_index=req.z_index,
             fill=req.fill,
@@ -404,7 +404,7 @@ async def create_ellipse(req: CreateEllipseRequest):
             opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
-        return ToolResponse(data={"region_id": result.region_id})
+        return ToolResponse(data={"element_id": result.element_id})
     except RuntimeError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -420,7 +420,7 @@ async def create_line(req: CreateLineRequest):
             x2=req.x2,
             y2=req.y2,
             document_id=req.document_id,
-            region_id=req.region_id,
+            element_id=req.element_id,
             layer=req.layer,
             z_index=req.z_index,
             stroke=req.stroke,
@@ -428,7 +428,7 @@ async def create_line(req: CreateLineRequest):
             opacity=req.opacity,
             blend_mode=req.blend_mode,
         )
-        return ToolResponse(data={"region_id": result.region_id})
+        return ToolResponse(data={"element_id": result.element_id})
     except RuntimeError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -443,7 +443,7 @@ async def create_curve(req: CreateCurveRequest):
         result = CreationService().create_curve(
             points=req.points,
             document_id=req.document_id,
-            region_id=req.region_id,
+            element_id=req.element_id,
             layer=req.layer,
             z_index=req.z_index,
             stroke=req.stroke,
@@ -454,7 +454,7 @@ async def create_curve(req: CreateCurveRequest):
             stroke_linecap=req.stroke_linecap,
         )
         return ToolResponse(data={
-            "region_id": result.region_id,
+            "element_id": result.element_id,
             "points": result.points,
             "smoothness": result.smoothness,
         })
@@ -467,8 +467,8 @@ async def boolean_operation(req: BooleanOpRequest):
     try:
         result = CreationService().boolean_operation(
             operation=req.operation,
-            region_ids=req.region_ids,
-            new_region_id=req.new_region_id,
+            element_ids=req.element_ids,
+            new_element_id=req.new_element_id,
             document_id=req.document_id,
             keep_originals=req.keep_originals,
             fill=req.fill,
@@ -476,7 +476,7 @@ async def boolean_operation(req: BooleanOpRequest):
             stroke_width=req.stroke_width,
             opacity=req.opacity,
         )
-        return ToolResponse(data={"region_id": result.region_id, "outline_points": result.outline_points})
+        return ToolResponse(data={"element_id": result.element_id, "outline_points": result.outline_points})
     except RuntimeError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -497,7 +497,7 @@ async def transform_objects(req: TransformObjectsRequest):
             raise HTTPException(status_code=404, detail=f"Group '{req.group_name}' not found")
         ids = [m["id"] for m in members]
     elif not ids:
-        raise HTTPException(status_code=400, detail="No region IDs provided")
+        raise HTTPException(status_code=400, detail="No element IDs provided")
 
     try:
         affected = graph.transform_objects(
@@ -522,21 +522,21 @@ async def edit_group(req: ManageGroupRequest):
         raise HTTPException(status_code=404, detail="No active document")
 
     if req.action == "delete":
-        result = graph.ungroup_regions(req.group_name, doc_id)
+        result = graph.ungroup_elements(req.group_name, doc_id)
         if not result:
             raise HTTPException(status_code=404, detail=f"Group '{req.group_name}' not found")
         return ToolResponse(data={"group": req.group_name, "deleted": True})
 
-    if not req.region_ids:
-        raise HTTPException(status_code=400, detail="No region IDs provided")
+    if not req.element_ids:
+        raise HTTPException(status_code=400, detail="No element IDs provided")
 
     try:
         if req.action == "create":
-            members = graph.group_regions(req.group_name, req.region_ids, doc_id, replace=True)
+            members = graph.group_elements(req.group_name, req.element_ids, doc_id, replace=True)
         elif req.action == "add":
-            members = graph.add_to_group(req.group_name, req.region_ids, doc_id)
+            members = graph.add_to_group(req.group_name, req.element_ids, doc_id)
         elif req.action == "remove":
-            removed = graph.remove_from_group(req.group_name, req.region_ids, doc_id)
+            removed = graph.remove_from_group(req.group_name, req.element_ids, doc_id)
             return ToolResponse(data={"group": req.group_name, "removed": removed})
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
@@ -583,8 +583,8 @@ async def add_bumps(req: ExtrudeOutlineRequest):
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
-        graph.extrude_region_outline(
-            region_id=req.region_id, document_id=doc_id,
+        graph.extrude_element_outline(
+            element_id=req.element_id, document_id=doc_id,
             segment_indices=req.segment_indices,
             extrusion_length=req.extrusion_length,
             extrusion_width=req.extrusion_width,
@@ -592,7 +592,7 @@ async def add_bumps(req: ExtrudeOutlineRequest):
             direction=req.direction,
             shape=req.shape,
         )
-        return ToolResponse(data={"region_id": req.region_id})
+        return ToolResponse(data={"element_id": req.element_id})
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -608,8 +608,8 @@ async def describe_scene(req: DescribeSceneRequest):
     desc = graph.describe_scene(detail=req.detail, filter_layer=req.filter_layer, document_id=doc_id)
     return {
         "document": desc["document"],
-        "regions": desc["regions"],
-        "region_count": desc["region_count"],
+        "elements": desc["elements"],
+        "element_count": desc["element_count"],
         "warnings": desc.get("warnings", []),
     }
 
@@ -680,7 +680,7 @@ async def render_preview(req: PreviewRequest):
         graph,
         doc_id,
         exclude_layers=req.exclude_layers,
-        exclude_region_ids=req.exclude_region_ids,
+        exclude_element_ids=req.exclude_element_ids,
         exclude_prefixes=req.exclude_prefixes,
     )
     try:
@@ -701,7 +701,7 @@ async def export_svg(req: ExportSvgRequest):
         graph,
         doc_id,
         exclude_layers=req.exclude_layers,
-        exclude_region_ids=req.exclude_region_ids,
+        exclude_element_ids=req.exclude_element_ids,
         exclude_prefixes=req.exclude_prefixes,
     )
     path = Path(req.filepath)

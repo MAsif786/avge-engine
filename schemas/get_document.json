@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/get_document/v1.json",
   "title": "get_document",
-  "description": "Get metadata and render preview for a document. Returns document ID, name, canvas size, region count, and base64 PNG preview.",
+  "description": "Get metadata and render preview for a document. Returns document ID, name, canvas size, element count, and base64 PNG preview.",
   "type": "object",
   "properties": {
     "document_id": {

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/apply_depth_haze/v1.json",
   "title": "apply_depth_haze",
-  "description": "Blend selected regions toward a haze color based on vertical depth to create atmospheric perspective.",
+  "description": "Blend selected elements toward a haze color based on vertical depth to create atmospheric perspective.",
   "type": "object",
   "properties": {
     "document_id": { "type": ["string", "null"], "default": null },

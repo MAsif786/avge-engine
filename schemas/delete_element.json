@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avge.dev/schemas/delete_region/v1.json",
-  "title": "delete_region",
-  "description": "Delete one or more regions by ID. Returns the list of actually deleted IDs.",
+  "$id": "https://avge.dev/schemas/delete_element/v1.json",
+  "title": "delete_element",
+  "description": "Delete one or more elements by ID. Returns the list of actually deleted IDs.",
   "type": "object",
   "properties": {
     "ids": {
       "type": "array",
-      "description": "List of region IDs to delete.",
+      "description": "List of element IDs to delete.",
       "items": { "type": "string" },
       "minItems": 1,
       "maxItems": 200

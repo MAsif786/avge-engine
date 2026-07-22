@@ -1,7 +1,7 @@
 """
 Color utility — hex ↔ HSL conversions and relative color transforms.
 
-Used by shadow auto-mode (duplicate_region) and HSL offset styling (style_objects)
+Used by shadow auto-mode (duplicate_element) and HSL offset styling (style_objects)
 for cel-shading: "make this 20% darker" without knowing the hex value.
 """
 

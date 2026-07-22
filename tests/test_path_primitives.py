@@ -1,4 +1,4 @@
-from avge_engine.controllers import region
+from avge_engine.controllers import element
 from avge_engine.renderer.svg import svg_serialize
 from avge_engine.scene import SceneGraph
 from avge_engine.services.engine import reset_graph
@@ -33,20 +33,20 @@ def test_create_line_uses_two_point_points_argument():
 def test_create_primitive_polyline_supports_dasharray_and_smoothness():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_primitive"](
         document_id=doc.id,
-        region_id="route",
+        element_id="route",
         shape={"type": "polyline", "points": [[0.1, 0.2], [0.4, 0.25], [0.8, 0.55]], "smoothness": 0.4},
         stroke="#224466",
         stroke_dasharray="4,2",
         fill="none",
     )
 
-    route = graph.get_region("route", doc.id)
+    route = graph.get_element("route", doc.id)
     assert "Polyline created" in result
     assert route.constraints.closed is False
     assert route.constraints.smoothness == 0.4
@@ -64,7 +64,7 @@ def test_compound_path_renders_as_single_svg_path_with_subpaths():
             [[0.1, 0.6], [0.9, 0.6]],
         ],
         document_id=doc.id,
-        region_id="seams",
+        element_id="seams",
         stroke="#333333",
         stroke_dasharray="2,2",
     )
@@ -82,7 +82,7 @@ def test_batch_create_primitive_compound_path():
     result = scene.batch([
         {
             "tool": "create_primitive",
-            "region_id": "wires",
+            "element_id": "wires",
             "shape": {
                 "type": "compound_path",
                 "subpaths": [
@@ -95,19 +95,19 @@ def test_batch_create_primitive_compound_path():
     ], document_id=doc.id)
 
     assert result[0]["status"] == "ok"
-    assert scene.get_region("wires", doc.id).primitive["type"] == "compound_path"
+    assert scene.get_element("wires", doc.id).primitive["type"] == "compound_path"
 
 
 def test_create_primitive_rect_supports_wavy_outline_pattern():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
-    result = mcp.tools["create_region"](
+    result = mcp.tools["create_element"](
         document_id=doc.id,
-        region_id="box",
+        element_id="box",
         shape={"type": "rect", "x": 0.2, "y": 0.2, "width": 0.4, "height": 0.25},
         fill="#E5E7EB",
         stroke="#111827",
@@ -117,8 +117,8 @@ def test_create_primitive_rect_supports_wavy_outline_pattern():
         pattern_stroke_width=2,
     )
 
-    overlay = graph.get_region("box_wavy_outline", doc.id)
-    assert "pattern_regions=1" in result
+    overlay = graph.get_element("box_wavy_outline", doc.id)
+    assert "pattern_elements=1" in result
     assert overlay.primitive["type"] == "compound_path"
     assert overlay.metadata["base"] == "box"
     assert overlay.metadata["pattern"] == "wavy"
@@ -127,13 +127,13 @@ def test_create_primitive_rect_supports_wavy_outline_pattern():
 def test_create_primitive_ellipse_supports_clipped_hatch_fill_pattern():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
-    result = mcp.tools["create_region"](
+    result = mcp.tools["create_element"](
         document_id=doc.id,
-        region_id="badge",
+        element_id="badge",
         shape={"type": "ellipse", "cx": 0.5, "cy": 0.45, "rx": 0.2, "ry": 0.12},
         fill="#F8FAFC",
         stroke="#334155",
@@ -143,8 +143,8 @@ def test_create_primitive_ellipse_supports_clipped_hatch_fill_pattern():
         pattern_opacity=0.4,
     )
 
-    fill = graph.get_region("badge_cross_hatch_fill", doc.id)
-    assert "pattern_regions=1" in result
+    fill = graph.get_element("badge_cross_hatch_fill", doc.id)
+    assert "pattern_elements=1" in result
     assert fill.primitive["type"] == "compound_path"
     assert fill.clip_to == "badge"
     assert fill.style.opacity == 0.4
@@ -153,13 +153,13 @@ def test_create_primitive_ellipse_supports_clipped_hatch_fill_pattern():
 def test_create_primitive_polygon_supports_dotted_outline_pattern():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
-    mcp.tools["create_region"](
+    mcp.tools["create_element"](
         document_id=doc.id,
-        region_id="hex",
+        element_id="hex",
         shape={"type": "polygon", "cx": 0.5, "cy": 0.5, "r": 0.2, "sides": 6},
         fill="#FFFFFF",
         stroke="#0F172A",
@@ -167,21 +167,21 @@ def test_create_primitive_polygon_supports_dotted_outline_pattern():
         pattern_stroke_width=2,
     )
 
-    dotted = graph.get_region("hex_dotted_outline", doc.id)
+    dotted = graph.get_element("hex_dotted_outline", doc.id)
     assert dotted.style.stroke_dasharray == "1,5"
     assert dotted.style.stroke_linecap == "round"
 
 
-def test_create_region_outline_supports_patterned_outline_and_fill():
+def test_create_element_outline_supports_patterned_outline_and_fill():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
-    result = mcp.tools["create_region"](
+    result = mcp.tools["create_element"](
         document_id=doc.id,
-        region_id="blob",
+        element_id="blob",
         outline=[[0.2, 0.2], [0.55, 0.18], [0.62, 0.52], [0.28, 0.58]],
         fill="#EEF2FF",
         stroke="#3730A3",
@@ -191,9 +191,9 @@ def test_create_region_outline_supports_patterned_outline_and_fill():
         pattern_stroke_width=1,
     )
 
-    rough = graph.get_region("blob_rough_outline_00", doc.id)
-    hatch = graph.get_region("blob_hatch_fill", doc.id)
-    assert "pattern_regions=2" in result
+    rough = graph.get_element("blob_rough_outline_00", doc.id)
+    hatch = graph.get_element("blob_hatch_fill", doc.id)
+    assert "pattern_elements=2" in result
     assert rough.metadata["base"] == "blob"
     assert hatch.clip_to == "blob"
 
@@ -201,21 +201,21 @@ def test_create_region_outline_supports_patterned_outline_and_fill():
 def test_create_curve_supports_outline_pattern_without_closing_curve():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_curve"](
         document_id=doc.id,
-        region_id="motion",
+        element_id="motion",
         points=[[0.1, 0.8], [0.35, 0.45], [0.8, 0.55]],
         outline_pattern="sketch",
         pattern_jitter=0.01,
         pattern_stroke_width=2,
     )
 
-    sketch = graph.get_region("motion_sketch_outline_00", doc.id)
-    assert "pattern_regions=2" in result
+    sketch = graph.get_element("motion_sketch_outline_00", doc.id)
+    assert "pattern_elements=2" in result
     assert sketch.constraints.closed is False
     assert sketch.outline[0] != sketch.outline[-1]
 
@@ -223,13 +223,13 @@ def test_create_curve_supports_outline_pattern_without_closing_curve():
 def test_create_ellipse_band_supports_dotted_outline_pattern():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_ellipse_band"](
         document_id=doc.id,
-        region_id="ring",
+        element_id="ring",
         cx=0.5,
         cy=0.5,
         rx=0.22,
@@ -239,21 +239,21 @@ def test_create_ellipse_band_supports_dotted_outline_pattern():
         pattern_stroke_width=2,
     )
 
-    dotted = graph.get_region("ring_dotted_outline", doc.id)
-    assert "pattern_regions=1" in result
+    dotted = graph.get_element("ring_dotted_outline", doc.id)
+    assert "pattern_elements=1" in result
     assert dotted.style.stroke_dasharray == "1,5"
 
 
 def test_create_primitive_supports_pattern_options_directly():
     reset_graph()
     mcp = _FakeMCP()
-    region.create_tools(mcp)
-    graph = region.get_graph()
+    element.create_tools(mcp)
+    graph = element.get_graph()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_primitive"](
         document_id=doc.id,
-        region_id="tile",
+        element_id="tile",
         shape={"type": "rect", "x": 0.15, "y": 0.15, "width": 0.3, "height": 0.2},
         fill="#FFFFFF",
         stroke="#111827",
@@ -263,8 +263,8 @@ def test_create_primitive_supports_pattern_options_directly():
         pattern_stroke_width=1.5,
     )
 
-    outline = graph.get_region("tile_zigzag_outline", doc.id)
-    dots = [r for r in graph.get_all_regions(doc.id) if r.metadata.get("base") == "tile" and r.metadata.get("pattern") == "stipple"]
-    assert "pattern_regions=11" in result
+    outline = graph.get_element("tile_zigzag_outline", doc.id)
+    dots = [r for r in graph.get_all_elements(doc.id) if r.metadata.get("base") == "tile" and r.metadata.get("pattern") == "stipple"]
+    assert "pattern_elements=11" in result
     assert outline.primitive["type"] == "compound_path"
     assert len(dots) == 10

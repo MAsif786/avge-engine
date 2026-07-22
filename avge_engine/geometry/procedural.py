@@ -34,7 +34,7 @@ def ellipse_band(
     """Generate a filled elliptical or partial-arc band outline.
 
     The returned outline walks the outer arc, then the inner arc in reverse,
-    creating a single closed polygon suitable for ``SceneGraph.create_region``.
+    creating a single closed polygon suitable for ``SceneGraph.create_element``.
 
     Args:
         cx, cy: Center of the band in normalized canvas coordinates.
@@ -649,7 +649,7 @@ def speech_bubble(
         rx: Corner radius (default 0.03, match edge of canvas).
 
     Returns:
-        Closed outline suitable for create_region.
+        Closed outline suitable for create_element.
     """
     left = cx - width / 2
     top = cy - height / 2

@@ -117,13 +117,13 @@ class TestDocument:
             "name": "source",
         })
         source_id = created.json()["data"]["document_id"]
-        region = await client.post("/tools/create_region", json={
+        element = await client.post("/tools/create_element", json={
             "document_id": source_id,
-            "region_id": "panel",
+            "element_id": "panel",
             "outline": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4], [0.1, 0.4]],
             "fill": "#336699",
         })
-        assert region.status_code == 200
+        assert element.status_code == 200
 
         cloned = await client.post("/tools/clone_document", json={
             "source_document_id": source_id,
@@ -135,7 +135,7 @@ class TestDocument:
         assert data["document_id"] != source_id
         assert data["name"] == "copy"
         assert data["width"] == 800
-        assert data["region_count"] == 1
+        assert data["element_count"] == 1
 
     async def test_viewer_documents_search_and_sort(self, client):
         unique_name = f"ViewerSearchUniqueApiDoc-{uuid4().hex}"
@@ -175,9 +175,9 @@ class TestDocument:
         created = await client.post("/tools/create_document", json={"name": "versions"})
         document_id = created.json()["data"]["document_id"]
 
-        await client.post("/tools/create_region", json={
+        await client.post("/tools/create_element", json={
             "document_id": document_id,
-            "region_id": "before_panel",
+            "element_id": "before_panel",
             "outline": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4], [0.1, 0.4]],
             "fill": "#336699",
         })
@@ -187,9 +187,9 @@ class TestDocument:
         })
         assert saved.status_code == 200
 
-        await client.post("/tools/create_region", json={
+        await client.post("/tools/create_element", json={
             "document_id": document_id,
-            "region_id": "after_panel",
+            "element_id": "after_panel",
             "outline": [[0.6, 0.1], [0.8, 0.1], [0.8, 0.3], [0.6, 0.3]],
             "fill": "#993333",
         })
@@ -282,51 +282,51 @@ class TestDocument:
         assert r.content.startswith(b"\x89PNG")
 
 
-class TestRegion:
-    async def test_create_region_no_document(self, client):
-        r = await client.post("/tools/create_region", json={
+class TestElement:
+    async def test_create_element_no_document(self, client):
+        r = await client.post("/tools/create_element", json={
             "outline": [[0.1, 0.1], [0.5, 0.8], [0.9, 0.1]],
         })
         assert r.status_code == 400
 
-    async def test_create_region(self, client, doc_id):
-        r = await client.post("/tools/create_region", json={
+    async def test_create_element(self, client, doc_id):
+        r = await client.post("/tools/create_element", json={
             "outline": [[0.1, 0.1], [0.5, 0.8], [0.9, 0.1]],
-            "region_id": "tri",
+            "element_id": "tri",
             "document_id": doc_id,
             "fill": "#FF0000",
         })
         assert r.status_code == 200
         data = r.json()
-        assert data["data"]["region_id"] == "tri"
+        assert data["data"]["element_id"] == "tri"
 
-    async def test_create_region_missing_outline(self, client, doc_id):
-        r = await client.post("/tools/create_region", json={"document_id": doc_id})
+    async def test_create_element_missing_outline(self, client, doc_id):
+        r = await client.post("/tools/create_element", json={"document_id": doc_id})
         assert r.status_code == 422  # validation error
 
 
 class TestDescribe:
     async def test_describe_scene(self, client, doc_id):
-        await client.post("/tools/create_region", json={
+        await client.post("/tools/create_element", json={
             "outline": [[0, 0], [1, 0], [1, 1]],
-            "region_id": "r1",
+            "element_id": "r1",
             "document_id": doc_id,
         })
         r = await client.post("/tools/describe_scene", json={"detail": "summary", "document_id": doc_id})
         assert r.status_code == 200
         data = r.json()
-        assert data["region_count"] == 1
-        assert data["regions"][0]["id"] == "r1"
+        assert data["element_count"] == 1
+        assert data["elements"][0]["id"] == "r1"
 
     async def test_describe_scene_empty(self, client, doc_id):
         r = await client.post("/tools/describe_scene", json={"document_id": doc_id})
         assert r.status_code == 200
-        assert r.json()["region_count"] == 0
+        assert r.json()["element_count"] == 0
 
 
 class TestPreview:
     async def test_render_preview(self, client, doc_id):
-        await client.post("/tools/create_region", json={
+        await client.post("/tools/create_element", json={
             "outline": [[0, 0], [1, 0], [1, 1], [0, 1]],
             "fill": "#FF0000",
             "document_id": doc_id,

@@ -28,7 +28,7 @@ def test_scene_project_quad_creates_panel():
     r = scene.project_quad(
         target_quad=[(0.1, 0.2), (0.8, 0.1), (0.72, 0.62), (0.18, 0.7)],
         document_id=did,
-        region_id="panel",
+        element_id="panel",
         columns=2,
         rows=2,
         fill="#ABCDEF",
@@ -41,20 +41,20 @@ def test_scene_project_quad_creates_panel():
     assert r.style.stroke is None
 
 
-def test_scene_project_quad_warps_source_region_copy():
+def test_scene_project_quad_warps_source_element_copy():
     scene = SceneGraph()
     did = scene.create_document().id
-    scene.create_region(
+    scene.create_element(
         document_id=did,
-        region_id="src",
+        element_id="src",
         outline=[(0.2, 0.2), (0.5, 0.2), (0.5, 0.5), (0.2, 0.5)],
         style=Style(fill="#112233", stroke="#445566"),
     )
     r = scene.project_quad(
         target_quad=[(0.1, 0.1), (0.7, 0.2), (0.8, 0.7), (0.2, 0.8)],
         document_id=did,
-        source_region_id="src",
-        region_id="warped",
+        source_element_id="src",
+        element_id="warped",
         fill=None,
         stroke=None,
         stroke_width=None,
@@ -62,7 +62,7 @@ def test_scene_project_quad_warps_source_region_copy():
     )
 
     assert r.id == "warped"
-    assert scene.has_region("src", did)
+    assert scene.has_element("src", did)
     assert r.style.fill == "#112233"
     assert r.style.stroke == "#445566"
 
@@ -70,24 +70,24 @@ def test_scene_project_quad_warps_source_region_copy():
 def test_scene_project_quad_replace_source():
     scene = SceneGraph()
     did = scene.create_document().id
-    scene.create_region(
+    scene.create_element(
         document_id=did,
-        region_id="src",
+        element_id="src",
         outline=[(0.2, 0.2), (0.5, 0.2), (0.5, 0.5), (0.2, 0.5)],
     )
     r = scene.project_quad(
         target_quad=[(0.1, 0.1), (0.7, 0.2), (0.8, 0.7), (0.2, 0.8)],
         document_id=did,
-        source_region_id="src",
+        source_element_id="src",
         replace_source=True,
     )
 
     assert r.id == "src"
-    assert scene.region_count(did) == 1
+    assert scene.element_count(did) == 1
     assert r.outline[0] == (0.1, 0.1)
 
 
-def test_project_quad_controller_tool_creates_region():
+def test_project_quad_controller_tool_creates_element():
     reset_graph()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
@@ -96,11 +96,11 @@ def test_project_quad_controller_tool_creates_region():
 
     result = mcp.tools["project_quad"](
         document_id=doc.id,
-        region_id="tile",
+        element_id="tile",
         target_quad=[[0.1, 0.2], [0.8, 0.12], [0.72, 0.62], [0.16, 0.72]],
         fill="#DDDDEE",
         stroke="none",
     )
 
-    assert "Projected quad region: id=tile" in result
-    assert graph.has_region("tile", doc.id)
+    assert "Projected quad element: id=tile" in result
+    assert graph.has_element("tile", doc.id)

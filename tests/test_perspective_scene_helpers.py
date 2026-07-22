@@ -27,14 +27,14 @@ def test_create_perspective_grid_clips_off_canvas_vanishing_points():
         horizon_y=0.42,
         verticals=3,
         horizontals=4,
-        region_id="street_guides",
+        element_id="street_guides",
     )
 
     assert "Perspective grid created" in result
-    grid = graph.get_region("street_guides", doc.id)
+    grid = graph.get_element("street_guides", doc.id)
     assert grid.primitive["type"] == "compound_path"
     assert all(0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 for x, y in grid.outline)
-    assert graph.has_region("street_guides_horizon", doc.id)
+    assert graph.has_element("street_guides_horizon", doc.id)
 
 
 def test_create_facade_grid_creates_base_and_windows_with_lit_ratio():
@@ -46,7 +46,7 @@ def test_create_facade_grid_creates_base_and_windows_with_lit_ratio():
 
     result = mcp.tools["create_facade_grid"](
         document_id=doc.id,
-        region_id="tower",
+        element_id="tower",
         target_quad=[[0.2, 0.1], [0.5, 0.15], [0.55, 0.75], [0.18, 0.7]],
         rows=4,
         columns=3,
@@ -55,14 +55,14 @@ def test_create_facade_grid_creates_base_and_windows_with_lit_ratio():
     )
 
     assert "Facade grid created: tower" in result
-    assert graph.has_region("tower", doc.id)
-    windows = [r for r in graph.get_all_regions(doc.id) if r.metadata.get("facade") == "tower"]
+    assert graph.has_element("tower", doc.id)
+    windows = [r for r in graph.get_all_elements(doc.id) if r.metadata.get("facade") == "tower"]
     assert len(windows) == 12
     assert any(r.metadata.get("lit") for r in windows)
     assert any(not r.metadata.get("lit") for r in windows)
 
 
-def test_apply_depth_haze_blends_far_region_toward_haze_color():
+def test_apply_depth_haze_blends_far_element_toward_haze_color():
     reset_graph()
     scene_mcp = _FakeMCP()
     style_mcp = _FakeMCP()
@@ -70,9 +70,9 @@ def test_apply_depth_haze_blends_far_region_toward_haze_color():
     style.create_tools(style_mcp)
     graph = scene_ops.get_graph()
     doc = graph.create_document()
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="far_building",
+        element_id="far_building",
         outline=[(0.1, 0.1), (0.3, 0.1), (0.3, 0.25), (0.1, 0.25)],
     )
 
@@ -85,8 +85,8 @@ def test_apply_depth_haze_blends_far_region_toward_haze_color():
         max_strength=0.5,
     )
 
-    assert "Depth haze applied to 1 region" in result
-    assert graph.get_region("far_building", doc.id).style.fill != "#CCCCCC"
+    assert "Depth haze applied to 1 element" in result
+    assert graph.get_element("far_building", doc.id).style.fill != "#CCCCCC"
 
 
 def test_duplicate_linear_supports_spacing_and_scale_falloff():
@@ -95,16 +95,16 @@ def test_duplicate_linear_supports_spacing_and_scale_falloff():
     scene_ops.create_tools(mcp)
     graph = scene_ops.get_graph()
     doc = graph.create_document()
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="pole",
+        element_id="pole",
         outline=[(0.1, 0.7), (0.12, 0.7), (0.12, 0.9), (0.1, 0.9)],
     )
 
     result = mcp.tools["duplicate"](
         document_id=doc.id,
         pattern="linear",
-        region_id="pole",
+        element_id="pole",
         count=3,
         dx=0.1,
         dy=-0.05,
@@ -113,8 +113,8 @@ def test_duplicate_linear_supports_spacing_and_scale_falloff():
     )
 
     assert "Duplicated" in result
-    first = graph.get_region("pole_copy_0", doc.id)
-    second = graph.get_region("pole_copy_1", doc.id)
+    first = graph.get_element("pole_copy_0", doc.id)
+    second = graph.get_element("pole_copy_1", doc.id)
     assert first.outline[0][0] == 0.2
     assert second.outline[0][0] < 0.3
 
@@ -125,16 +125,16 @@ def test_duplicate_scatter_places_copies_inside_bounds_by_center():
     scene_ops.create_tools(mcp)
     graph = scene_ops.get_graph()
     doc = graph.create_document()
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="leaf",
+        element_id="leaf",
         outline=[(0.1, 0.1), (0.12, 0.1), (0.12, 0.12), (0.1, 0.12)],
     )
 
     result = mcp.tools["duplicate"](
         document_id=doc.id,
         pattern="scatter",
-        region_id="leaf",
+        element_id="leaf",
         count=5,
         bounds=[0.4, 0.3, 0.2, 0.1],
         seed=7,
@@ -142,7 +142,7 @@ def test_duplicate_scatter_places_copies_inside_bounds_by_center():
 
     assert "Duplicated" in result
     for i in range(5):
-        copy = graph.get_region(f"leaf_scatter_{i}", doc.id)
+        copy = graph.get_element(f"leaf_scatter_{i}", doc.id)
         xs = [p[0] for p in copy.outline]
         ys = [p[1] for p in copy.outline]
         cx = (min(xs) + max(xs)) / 2
@@ -151,7 +151,7 @@ def test_duplicate_scatter_places_copies_inside_bounds_by_center():
         assert 0.3 <= cy <= 0.4
 
 
-def test_duplicate_missing_region_message_includes_pattern():
+def test_duplicate_missing_element_message_includes_pattern():
     reset_graph()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
@@ -165,37 +165,37 @@ def test_duplicate_missing_region_message_includes_pattern():
         bounds=[0.1, 0.1, 0.2, 0.2],
     )
 
-    assert result == "Error: region_id required for pattern 'scatter'"
+    assert result == "Error: element_id required for pattern 'scatter'"
 
 
-def test_add_shading_gradient_styles_existing_region():
+def test_add_shading_gradient_styles_existing_element():
     reset_graph()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
     graph = scene_ops.get_graph()
     doc = graph.create_document()
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="facade",
+        element_id="facade",
         outline=[(0.2, 0.2), (0.6, 0.2), (0.6, 0.7), (0.2, 0.7)],
         style=Style(fill="#406070"),
     )
 
     result = mcp.tools["add_shading"](
         document_id=doc.id,
-        region_id="facade",
+        element_id="facade",
         mode="gradient",
         light_direction=135,
         intensity=0.4,
     )
 
-    facade = graph.get_region("facade", doc.id)
+    facade = graph.get_element("facade", doc.id)
     assert "Gradient shading applied" in result
     assert facade.style.fill["type"] == "linear"
     assert len(facade.style.fill["stops"]) == 3
 
 
-def test_generate_cloud_creates_soft_layered_regions():
+def test_generate_cloud_creates_soft_layered_elements():
     reset_graph()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
@@ -204,7 +204,7 @@ def test_generate_cloud_creates_soft_layered_regions():
 
     result = mcp.tools["generate_cloud"](
         document_id=doc.id,
-        region_id="cloud",
+        element_id="cloud",
         cx=0.45,
         cy=0.18,
         width=0.28,
@@ -213,14 +213,14 @@ def test_generate_cloud_creates_soft_layered_regions():
         seed=4,
     )
 
-    cloud_regions = [
-        r for r in graph.get_all_regions(doc.id)
+    cloud_elements = [
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("tool") == "generate_cloud"
     ]
     assert "Cloud generated: cloud" in result
-    assert len(cloud_regions) >= 6
-    assert any(r.style.blur > 0 for r in cloud_regions)
-    assert {r.metadata.get("part") for r in cloud_regions} >= {"shade", "puff", "body"}
+    assert len(cloud_elements) >= 6
+    assert any(r.style.blur > 0 for r in cloud_elements)
+    assert {r.metadata.get("part") for r in cloud_elements} >= {"shade", "puff", "body"}
 
 
 def test_generate_background_asset_facade_detail_groups_parts():
@@ -234,13 +234,13 @@ def test_generate_background_asset_facade_detail_groups_parts():
         document_id=doc.id,
         mode="facade_detail",
         bounds=[0.2, 0.2, 0.4, 0.5],
-        region_id="facade_bits",
+        element_id="facade_bits",
         count=12,
         detail=["mullions", "sills", "cornice"],
     )
 
     created = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("tool") == "generate_background_asset"
     ]
     assert "Background asset generated: mode=facade_detail" in result
@@ -265,7 +265,7 @@ def test_generate_background_asset_tree_cluster_creates_trunks_and_leaves():
     )
 
     created = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("mode") == "tree_cluster"
     ]
     assert "Background asset generated: mode=tree_cluster" in result
@@ -291,7 +291,7 @@ def test_create_comic_panel_layout_grid_adds_reading_order_metadata():
         reading_direction="rtl",
     )
 
-    panels = [graph.get_region(f"page_panel_{i:02d}", doc.id) for i in range(1, 5)]
+    panels = [graph.get_element(f"page_panel_{i:02d}", doc.id) for i in range(1, 5)]
     assert "Comic panel layout created: layout=grid, panels=4" in result
     assert {p.metadata["reading_index"] for p in panels} == {0, 1, 2, 3}
     assert panels[1].metadata["reading_index"] == 0
@@ -313,8 +313,8 @@ def test_create_comic_panel_layout_feature_top_creates_large_opening_panel():
         panel_prefix="story",
     )
 
-    top = graph.get_region("story_01", doc.id)
-    lower = graph.get_region("story_02", doc.id)
+    top = graph.get_element("story_01", doc.id)
+    lower = graph.get_element("story_02", doc.id)
     top_height = top.outline[2][1] - top.outline[0][1]
     lower_height = lower.outline[2][1] - lower.outline[0][1]
     assert top_height > lower_height * 0.75
@@ -330,7 +330,7 @@ def test_create_surface_stripes_projects_repeated_road_markings():
 
     result = mcp.tools["create_surface_stripes"](
         document_id=doc.id,
-        region_id="crosswalk",
+        element_id="crosswalk",
         target_quad=[[0.35, 0.45], [0.65, 0.45], [0.92, 0.82], [0.08, 0.82]],
         count=4,
         orientation="u",
@@ -340,7 +340,7 @@ def test_create_surface_stripes_projects_repeated_road_markings():
     )
 
     stripes = [
-        r for r in graph.get_all_regions(doc.id)
+        r for r in graph.get_all_elements(doc.id)
         if r.metadata.get("tool") == "create_surface_stripes"
     ]
     assert "Surface stripes created: 4" in result
@@ -354,31 +354,31 @@ def test_environment_densify_generate_shape_patterns():
     procedural.create_tools(mcp)
     graph = procedural.get_graph()
     doc = graph.create_document()
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="shop",
+        element_id="shop",
         outline=[(0.15, 0.25), (0.45, 0.25), (0.45, 0.72), (0.15, 0.72)],
     )
 
     assert "cornice: created" in mcp.tools["generate_shape"](
         document_id=doc.id,
         pattern="cornice",
-        params={"region_id": "shop", "region_id_out": "shop_cornice", "style": "stepped"},
+        params={"element_id": "shop", "element_id_out": "shop_cornice", "style": "stepped"},
     )
     assert "awning: created" in mcp.tools["generate_shape"](
         document_id=doc.id,
         pattern="awning",
-        params={"region_id": "shop", "region_id_out": "shop_awning", "stripe_count": 3},
+        params={"element_id": "shop", "element_id_out": "shop_awning", "stripe_count": 3},
     )
     assert "rooftop_props: created" in mcp.tools["generate_shape"](
         document_id=doc.id,
         pattern="rooftop_props",
-        params={"region_id": "shop", "count": 4, "seed": 9},
+        params={"element_id": "shop", "count": 4, "seed": 9},
     )
 
-    assert graph.has_region("shop_cornice", doc.id)
-    assert graph.has_region("shop_awning", doc.id)
-    assert len([r for r in graph.get_all_regions(doc.id) if r.metadata.get("pattern") == "rooftop_props"]) == 4
+    assert graph.has_element("shop_cornice", doc.id)
+    assert graph.has_element("shop_awning", doc.id)
+    assert len([r for r in graph.get_all_elements(doc.id) if r.metadata.get("pattern") == "rooftop_props"]) == 4
 
 
 def test_export_svg_can_exclude_construction_guides(tmp_path):
@@ -387,16 +387,16 @@ def test_export_svg_can_exclude_construction_guides(tmp_path):
     scene_view.create_tools(mcp)
     graph = scene_view.get_graph()
     doc = graph.create_document()
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="final_building",
+        element_id="final_building",
         outline=[(0.2, 0.2), (0.5, 0.2), (0.5, 0.7), (0.2, 0.7)],
         layer="architecture",
         style=Style(fill="#223344"),
     )
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="guide_line",
+        element_id="guide_line",
         outline=[(0.0, 0.4), (1.0, 0.4)],
         layer="guides",
         style=Style(fill=None, stroke="#FF00FF"),

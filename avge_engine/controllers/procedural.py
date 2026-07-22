@@ -73,7 +73,7 @@ def create_tools(mcp):
     def create_line_pattern(
         pattern: LINE_PATTERNS,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         points: list[list[float]] | None = None,
         bounds: list[float] | None = None,
         center: list[float] | None = None,
@@ -116,7 +116,7 @@ def create_tools(mcp):
         return ProceduralService().create_line_pattern(
             pattern=pattern,
             document_id=document_id,
-            region_id=region_id,
+            element_id=element_id,
             points=points,
             bounds=bounds,
             center=center,
@@ -149,28 +149,28 @@ def create_tools(mcp):
         "Each pattern is a pure geometric operation — no domain knowledge. "
         "Patterns:\n"
         "  radial_spread — Fan N protrusions from one edge of a base shape.\n"
-        "    Params: region_id, count, anchor, length_range, width, angle_spread, taper, length_variance\n"
+        "    Params: element_id, count, anchor, length_range, width, angle_spread, taper, length_variance\n"
         "  offset_outline — Expand (positive) or contract (negative) an outline uniformly.\n"
-        "    Params: region_id, distance\n"
+        "    Params: element_id, distance\n"
         "  guide_lines — Generate proportional division markers within a bounding box.\n"
         "    Params: bbox_x, bbox_y, bbox_w, bbox_h, ratios, horizontal\n"
         "  distribute_points — Place N evenly-spaced points along one edge.\n"
-        "    Params: region_id, count, edge\n"
+        "    Params: element_id, count, edge\n"
         "  bridge_shapes — Connect two overlapping outlines into one.\n"
-        "    Params: region_id_a, region_id_b\n"
+        "    Params: element_id_a, element_id_b\n"
         "  interpolate_outlines — Create N morph steps between two outlines.\n"
-        "    Params: region_id_a, region_id_b, steps\n"
+        "    Params: element_id_a, element_id_b, steps\n"
         "  distribute_linear — Generate evenly-spaced points along a line.\n"
         "    Params: start (x,y), end (x,y), count\n"
         "    Returns coordinate list — feed into batch or create primitives.\n"
         "    💡 Place building walls, fence posts, window columns in one call.\n"
         "  apex_from_edge — Project a triangle (roof) from an outline edge.\n"
-        "    Params: region_id (source outline), edge (top/bottom/left/right), apex_offset, inset\n"
-        "    Creates a new region — roof triangle from a wall rect.\n"
+        "    Params: element_id (source outline), edge (top/bottom/left/right), apex_offset, inset\n"
+        "    Creates a new element — roof triangle from a wall rect.\n"
         "    💡 Wall rect + apex_from_edge = complete building in 2 calls.\n"
         "    💡 inset=0.015 for roof overhang (wider than wall).\n"
         "  segmented_chain — Create a bent limb or curled finger chain.\n"
-        "    Params: region_id (anchor), anchor (edge name), segments (list of dicts),\n"
+        "    Params: element_id (anchor), anchor (edge name), segments (list of dicts),\n"
         "    joint_radius, count (fan multiple chains), angle_spread\n"
         "    💡 One bent arm (2 segments + joint) or 5 curled fingers in 1 call.\n"
         "  create_burst — Radiating lines from center (impact/speed lines).\n"
@@ -179,13 +179,13 @@ def create_tools(mcp):
         "  speech_bubble — Generate a speech bubble outline (rounded rect + tail).\n"
         "    Params: cx, cy, width, height, tail_direction (top/bottom/left/right),\n"
         "    tail_length, tail_width, rx (corner radius), fill, stroke\n"
-        "    💡 Creates a region — add text inside with create_text.\n"
+        "    💡 Creates a element — add text inside with create_text.\n"
         "  cornice — Add a decorative band along a building edge.\n"
-        "    Params: region_id, edge, depth, style, fill, stroke\n"
+        "    Params: element_id, edge, depth, style, fill, stroke\n"
         "  awning — Add an angled canopy with optional stripes along a facade edge.\n"
-        "    Params: region_id, edge, width, height, tilt_angle, stripe_count, colors\n"
+        "    Params: element_id, edge, width, height, tilt_angle, stripe_count, colors\n"
         "  rooftop_props — Scatter rooftop silhouettes along a roof edge.\n"
-        "    Params: region_id, edge, count, seed, prop_types, density\n"
+        "    Params: element_id, edge, count, seed, prop_types, density\n"
         "  isometric_box — Generate 3 visible faces of an isometric 3D box.\n"
         "    Params: x, y, width, depth, height, angle, fill, top_fill, left_fill, right_fill,\n"
         "      skip_faces (e.g. [\"top\"] for hidden leg faces), shadow (bool),\n"
@@ -196,7 +196,7 @@ def create_tools(mcp):
         "      (0.12,0.15) = back-left, (0.85,0.24) = back-right.\n"
         "    💡 One gold bar = 1 call. Table leg: skip_faces=[\"top\"], shadow=true\n"
         "  attach — Snap one isometric box to another using named anchors.\n"
-        "    Params: parent (region_id), parent_anchor, child_anchor, flush (bool),\n"
+        "    Params: parent (element_id), parent_anchor, child_anchor, flush (bool),\n"
         "      child isometric_box params (width, depth, height, fill, etc.)\n"
         "    Anchors: top_back_vertex, top_left/right/front_corner,\n"
         "      bottom_back, bottom_left/right/front\n"
@@ -215,9 +215,9 @@ def create_tools(mcp):
             pattern: Pattern name — which geometric operation to run.
             params: Pattern-specific parameters (see pattern descriptions).
             document_id: Document UUID (omit to use active document).
-            relative_to: Region ID for relative coordinate mapping. When set,
+            relative_to: Element ID for relative coordinate mapping. When set,
                 ``x`` and ``y`` are treated as 0–1 fractions of the reference
-                region's bounding box. ``width``, ``depth``, ``height`` are
+                element's bounding box. ``width``, ``depth``, ``height`` are
                 always absolute (not scaled).
         """
         scene = get_graph()
@@ -278,7 +278,7 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="import_svg_path",
-        description="Import an SVG path data string as a vector region. "
+        description="Import an SVG path data string as a vector element. "
         "Parses M, L, C, Q, Z commands into outline points. "
         "💡 Use for complex silhouettes, logos, or any shape where "
         "typing coordinates manually would be impractical. "
@@ -287,7 +287,7 @@ def create_tools(mcp):
     def import_svg_path(
         path_data: str,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | None = "#CCCCCC",
@@ -299,12 +299,12 @@ def create_tools(mcp):
         mirror_x: bool = False,
         mirror_y: bool = False,
     ) -> str:
-        """Import an SVG path data string as a vector region.
+        """Import an SVG path data string as a vector element.
 
         Args:
             path_data: SVG path data string (e.g. "M 0.1 0.1 C 0.5 0.8 0.9 0.1 1.0 0.5 Z").
             document_id: Document UUID (omit to use active document).
-            region_id: Optional unique ID.
+            element_id: Optional unique ID.
             layer: Layer name.
             z_index: Paint order.
             fill: Fill hex color.
@@ -347,9 +347,9 @@ def create_tools(mcp):
             ]
 
         try:
-            r = scene.create_region(
+            r = scene.create_element(
                 outline=outline,
-                region_id=region_id,
+                element_id=element_id,
                 document_id=doc_id,
                 layer=layer,
                 z_index=z_index,
@@ -379,16 +379,16 @@ def _resolve_params(params: dict, *keys: str) -> list:
 
 
 def _do_radial_spread(scene, doc_id: str, params: dict) -> str:
-    """Create protrusions fanning from one edge of a region."""
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id is required and must exist"
+    """Create protrusions fanning from one edge of a element."""
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id is required and must exist"
 
-    region = scene.get_region(region_id, doc_id)
+    element = scene.get_element(element_id, doc_id)
     from avge_engine.geometry.procedural import radial_spread
 
     protrusions = radial_spread(
-        region.outline,
+        element.outline,
         count=params.get("count", 5),
         anchor=params.get("anchor", "top_edge"),
         length_range=tuple(params.get("length_range", [0.1, 0.15])),
@@ -401,19 +401,19 @@ def _do_radial_spread(scene, doc_id: str, params: dict) -> str:
     if not protrusions:
         return "Error: No protrusions generated (check outline vs anchor)"
 
-    fill = params.get("fill", region.style.fill)
-    stroke = params.get("stroke", region.style.stroke)
-    stroke_width = params.get("stroke_width", region.style.stroke_width)
-    z_base = params.get("z_index", region.z_index + 1)
+    fill = params.get("fill", element.style.fill)
+    stroke = params.get("stroke", element.style.stroke)
+    stroke_width = params.get("stroke_width", element.style.stroke_width)
+    z_base = params.get("z_index", element.z_index + 1)
 
     created: list[str] = []
     for i, outline in enumerate(protrusions):
-        rid = f"{region_id}_spread{i}"
-        r = scene.create_region(
+        rid = f"{element_id}_spread{i}"
+        r = scene.create_element(
             outline=outline,
-            region_id=rid,
+            element_id=rid,
             document_id=doc_id,
-            layer=region.layer,
+            layer=element.layer,
             z_index=z_base + i,
             constraints=CurveConstraints(smoothness=0.5, closed=True),
             style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width),
@@ -421,49 +421,49 @@ def _do_radial_spread(scene, doc_id: str, params: dict) -> str:
         created.append(r.id)
 
     return (
-        f"radial_spread: created {len(created)} protrusion(s) on '{region_id}': "
+        f"radial_spread: created {len(created)} protrusion(s) on '{element_id}': "
         f"{', '.join(created)}"
     )
 
 
 def _do_offset_outline(scene, doc_id: str, params: dict) -> str:
-    """Inset or outset a region's outline."""
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id is required and must exist"
+    """Inset or outset a element's outline."""
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id is required and must exist"
 
-    region = scene.get_region(region_id, doc_id)
+    element = scene.get_element(element_id, doc_id)
     distance = params.get("distance", 0.02)
 
     from avge_engine.geometry.procedural import offset_outline
 
     new_outline = offset_outline(
-        region.outline,
+        element.outline,
         distance=distance,
-        closed=region.constraints.closed,
+        closed=element.constraints.closed,
     )
 
     if not new_outline or len(new_outline) < 3:
         return f"Error: offset produced degenerate outline ({len(new_outline)} pts)"
 
-    new_rid = f"{region_id}_offset"
-    r = scene.create_region(
+    new_rid = f"{element_id}_offset"
+    r = scene.create_element(
         outline=new_outline,
-        region_id=new_rid,
+        element_id=new_rid,
         document_id=doc_id,
-        layer=region.layer,
-        z_index=params.get("z_index", region.z_index + 1),
-        constraints=CurveConstraints(smoothness=region.constraints.smoothness, closed=region.constraints.closed),
+        layer=element.layer,
+        z_index=params.get("z_index", element.z_index + 1),
+        constraints=CurveConstraints(smoothness=element.constraints.smoothness, closed=element.constraints.closed),
         style=Style(
-            fill=params.get("fill", region.style.fill),
-            stroke=params.get("stroke", region.style.stroke),
-            stroke_width=params.get("stroke_width", region.style.stroke_width),
-            opacity=params.get("opacity", region.style.opacity),
+            fill=params.get("fill", element.style.fill),
+            stroke=params.get("stroke", element.style.stroke),
+            stroke_width=params.get("stroke_width", element.style.stroke_width),
+            opacity=params.get("opacity", element.style.opacity),
         ),
     )
     direction = "expanded" if distance > 0 else "contracted"
     return (
-        f"offset_outline: {direction} '{region_id}' by {abs(distance)} "
+        f"offset_outline: {direction} '{element_id}' by {abs(distance)} "
         f"→ '{r.id}' ({len(new_outline)} pts)"
     )
 
@@ -509,53 +509,53 @@ def _do_guide_lines(params: dict) -> str:
 
 
 def _do_distribute_points(scene, doc_id: str, params: dict) -> str:
-    """Place evenly-spaced points along an edge of a region."""
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id is required and must exist"
+    """Place evenly-spaced points along an edge of a element."""
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id is required and must exist"
 
-    region = scene.get_region(region_id, doc_id)
+    element = scene.get_element(element_id, doc_id)
     from avge_engine.geometry.procedural import distribute_points
 
     points = distribute_points(
-        region.outline,
+        element.outline,
         count=params.get("count", 5),
         edge=params.get("edge", "top_edge"),
-        closed=region.constraints.closed,
+        closed=element.constraints.closed,
     )
 
     pts_fmt = ", ".join(f"({p[0]:.4f},{p[1]:.4f})" for p in points)
-    return f"distribute_points: {len(points)} point(s) on '{region_id}': {pts_fmt}"
+    return f"distribute_points: {len(points)} point(s) on '{element_id}': {pts_fmt}"
 
 
 def _do_bridge_shapes(scene, doc_id: str, params: dict) -> str:
-    """Connect two overlapping regions into a single bridge shape."""
-    rid_a = params.get("region_id_a")
-    rid_b = params.get("region_id_b")
+    """Connect two overlapping elements into a single bridge shape."""
+    rid_a = params.get("element_id_a")
+    rid_b = params.get("element_id_b")
     if not rid_a or not rid_b:
-        return "Error: region_id_a and region_id_b are required"
-    if not scene.has_region(rid_a, doc_id):
-        return f"Error: region '{rid_a}' not found"
-    if not scene.has_region(rid_b, doc_id):
-        return f"Error: region '{rid_b}' not found"
+        return "Error: element_id_a and element_id_b are required"
+    if not scene.has_element(rid_a, doc_id):
+        return f"Error: element '{rid_a}' not found"
+    if not scene.has_element(rid_b, doc_id):
+        return f"Error: element '{rid_b}' not found"
 
-    region_a = scene.get_region(rid_a, doc_id)
-    region_b = scene.get_region(rid_b, doc_id)
+    element_a = scene.get_element(rid_a, doc_id)
+    element_b = scene.get_element(rid_b, doc_id)
 
     from avge_engine.geometry.procedural import bridge_shapes
 
-    new_outline = bridge_shapes(region_a.outline, region_b.outline)
+    new_outline = bridge_shapes(element_a.outline, element_b.outline)
 
     if not new_outline or len(new_outline) < 3:
         return f"Error: bridge produced degenerate outline ({len(new_outline)} pts)"
 
     new_rid = f"{rid_a}_bridge_{rid_b}"
-    r = scene.create_region(
+    r = scene.create_element(
         outline=new_outline,
-        region_id=new_rid,
+        element_id=new_rid,
         document_id=doc_id,
-        layer=params.get("layer", region_a.layer),
-        z_index=params.get("z_index", max(region_a.z_index, region_b.z_index) + 1),
+        layer=params.get("layer", element_a.layer),
+        z_index=params.get("z_index", max(element_a.z_index, element_b.z_index) + 1),
         constraints=CurveConstraints(smoothness=0.4, closed=True),
         style=Style(
             fill=params.get("fill", "#CCCCCC"),
@@ -567,27 +567,27 @@ def _do_bridge_shapes(scene, doc_id: str, params: dict) -> str:
 
 
 def _do_interpolate(scene, doc_id: str, params: dict) -> str:
-    """Create intermediate outlines morphing between two source regions."""
-    rid_a = params.get("region_id_a")
-    rid_b = params.get("region_id_b")
+    """Create intermediate outlines morphing between two source elements."""
+    rid_a = params.get("element_id_a")
+    rid_b = params.get("element_id_b")
     if not rid_a or not rid_b:
-        return "Error: region_id_a and region_id_b are required"
-    if not scene.has_region(rid_a, doc_id):
-        return f"Error: region '{rid_a}' not found"
-    if not scene.has_region(rid_b, doc_id):
-        return f"Error: region '{rid_b}' not found"
+        return "Error: element_id_a and element_id_b are required"
+    if not scene.has_element(rid_a, doc_id):
+        return f"Error: element '{rid_a}' not found"
+    if not scene.has_element(rid_b, doc_id):
+        return f"Error: element '{rid_b}' not found"
 
-    region_a = scene.get_region(rid_a, doc_id)
-    region_b = scene.get_region(rid_b, doc_id)
+    element_a = scene.get_element(rid_a, doc_id)
+    element_b = scene.get_element(rid_b, doc_id)
     steps = params.get("steps", 3)
 
     from avge_engine.geometry.procedural import interpolate_outlines
 
     outlines = interpolate_outlines(
-        region_a.outline,
-        region_b.outline,
+        element_a.outline,
+        element_b.outline,
         steps=steps,
-        closed=region_a.constraints.closed,
+        closed=element_a.constraints.closed,
     )
 
     if not outlines:
@@ -596,20 +596,20 @@ def _do_interpolate(scene, doc_id: str, params: dict) -> str:
     fill = params.get("fill", "#CCCCCC")
     stroke = params.get("stroke", "#333333")
     stroke_width = params.get("stroke_width", 0.005)
-    z_base = params.get("z_index", max(region_a.z_index, region_b.z_index) + 1)
+    z_base = params.get("z_index", max(element_a.z_index, element_b.z_index) + 1)
 
     created: list[str] = []
     for i, outline in enumerate(outlines):
         rid = f"interp_{rid_a}_{rid_b}_{i}"
-        r = scene.create_region(
+        r = scene.create_element(
             outline=outline,
-            region_id=rid,
+            element_id=rid,
             document_id=doc_id,
-            layer=region_a.layer,
+            layer=element_a.layer,
             z_index=z_base + i,
             constraints=CurveConstraints(
-                smoothness=region_a.constraints.smoothness,
-                closed=region_a.constraints.closed,
+                smoothness=element_a.constraints.smoothness,
+                closed=element_a.constraints.closed,
             ),
             style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width),
         )
@@ -640,19 +640,19 @@ def _do_distribute_linear(params: dict) -> str:
 
 
 def _do_apex_from_edge(scene, doc_id: str, params: dict) -> str:
-    """Project a triangle (roof) from one edge of a region."""
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id is required and must exist"
+    """Project a triangle (roof) from one edge of a element."""
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id is required and must exist"
 
-    region = scene.get_region(region_id, doc_id)
+    element = scene.get_element(element_id, doc_id)
     edge = params.get("edge", "top")
     apex_offset = params.get("apex_offset")
 
     from avge_engine.geometry.procedural import apex_from_edge
     inset = params.get("inset", 0.0)
     triangle = apex_from_edge(
-        region.outline,
+        element.outline,
         edge=edge,
         apex_offset=apex_offset,
         inset=inset,
@@ -661,32 +661,32 @@ def _do_apex_from_edge(scene, doc_id: str, params: dict) -> str:
     if not triangle or len(triangle) < 3:
         return f"Error: apex_from_edge produced degenerate triangle ({len(triangle)} pts)"
 
-    new_rid = f"{region_id}_{edge}_apex"
-    r = scene.create_region(
+    new_rid = f"{element_id}_{edge}_apex"
+    r = scene.create_element(
         outline=triangle,
-        region_id=new_rid,
+        element_id=new_rid,
         document_id=doc_id,
-        layer=region.layer,
-        z_index=params.get("z_index", region.z_index + 1),
+        layer=element.layer,
+        z_index=params.get("z_index", element.z_index + 1),
         constraints=CurveConstraints(smoothness=0.0, closed=True),
         style=Style(
-            fill=params.get("fill", region.style.fill),
-            stroke=params.get("stroke", region.style.stroke),
-            stroke_width=params.get("stroke_width", region.style.stroke_width),
+            fill=params.get("fill", element.style.fill),
+            stroke=params.get("stroke", element.style.stroke),
+            stroke_width=params.get("stroke_width", element.style.stroke_width),
         ),
     )
     return (
-        f"apex_from_edge: projected triangle from '{region_id}' {edge} edge "
+        f"apex_from_edge: projected triangle from '{element_id}' {edge} edge "
         f"→ '{r.id}' ({len(triangle)} pts)"
     )
 
 def _do_segmented_chain(scene, doc_id: str, params: dict) -> str:
     """Create a connected chain of tapered segments (bent limb, curled finger)."""
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id is required and must exist"
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id is required and must exist"
 
-    region = scene.get_region(region_id, doc_id)
+    element = scene.get_element(element_id, doc_id)
     segments = params.get("segments")
     if not segments or not isinstance(segments, list) or len(segments) < 1:
         return "Error: 'segments' param is required (list of segment dicts)"
@@ -699,20 +699,20 @@ def _do_segmented_chain(scene, doc_id: str, params: dict) -> str:
 
     from avge_engine.geometry.procedural import segmented_chain, _filter_edge, _outward_dir
 
-    # Get anchor position and direction from the base region
-    edge_pts = _filter_edge(region.outline, anchor)
+    # Get anchor position and direction from the base element
+    edge_pts = _filter_edge(element.outline, anchor)
     if not edge_pts or len(edge_pts) < 2:
-        return f"Error: Could not find '{anchor}' edge on region"
+        return f"Error: Could not find '{anchor}' edge on element"
     # Anchor at midpoint of edge
     ax = (edge_pts[0][0] + edge_pts[-1][0]) / 2
     ay = (edge_pts[0][1] + edge_pts[-1][1]) / 2
     out_dir = _outward_dir(anchor)
 
-    fill = params.get("fill", region.style.fill)
-    stroke = params.get("stroke", region.style.stroke)
-    stroke_width = params.get("stroke_width", region.style.stroke_width)
+    fill = params.get("fill", element.style.fill)
+    stroke = params.get("stroke", element.style.stroke)
+    stroke_width = params.get("stroke_width", element.style.stroke_width)
     smoothness = params.get("smoothness", 0.4)
-    z_base = params.get("z_index", region.z_index + 1)
+    z_base = params.get("z_index", element.z_index + 1)
 
     created: list[str] = []
     for i in range(count):
@@ -737,15 +737,15 @@ def _do_segmented_chain(scene, doc_id: str, params: dict) -> str:
             angle_offset=ao,
         )
 
-        # Create segment regions
+        # Create segment elements
         for si, outline in enumerate(result.get("segments", [])):
-            rid = f"{region_id}_seg_{i}_{si}"
+            rid = f"{element_id}_seg_{i}_{si}"
             try:
-                r = scene.create_region(
+                r = scene.create_element(
                     outline=outline,
-                    region_id=rid,
+                    element_id=rid,
                     document_id=doc_id,
-                    layer=region.layer,
+                    layer=element.layer,
                     z_index=z_base + si,
                     constraints=CurveConstraints(smoothness=smoothness, closed=True),
                     style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width),
@@ -754,15 +754,15 @@ def _do_segmented_chain(scene, doc_id: str, params: dict) -> str:
             except (ValueError, RuntimeError) as e:
                 return f"Error creating segment {si}: {e}"
 
-        # Create joint cover regions
+        # Create joint cover elements
         for ji, outline in enumerate(result.get("joints", [])):
-            rid = f"{region_id}_joint_{i}_{ji}"
+            rid = f"{element_id}_joint_{i}_{ji}"
             try:
-                r = scene.create_region(
+                r = scene.create_element(
                     outline=outline,
-                    region_id=rid,
+                    element_id=rid,
                     document_id=doc_id,
-                    layer=region.layer,
+                    layer=element.layer,
                     z_index=z_base + len(segments) + ji,
                     constraints=CurveConstraints(smoothness=0.3, closed=True),
                     style=Style(fill=fill, stroke=None),
@@ -772,12 +772,12 @@ def _do_segmented_chain(scene, doc_id: str, params: dict) -> str:
                 return f"Error creating joint {ji}: {e}"
 
     return (
-        f"segmented_chain: {len(created)} region(s) created from "
+        f"segmented_chain: {len(created)} element(s) created from "
         f"{len(segments)} segments × {count} chain(s): {', '.join(created)}"
     )
 
 def _do_speech_bubble(scene, doc_id: str, params: dict) -> str:
-    """Create a speech bubble region (rounded rect + tail)."""
+    """Create a speech bubble element (rounded rect + tail)."""
     from avge_engine.geometry.procedural import speech_bubble
 
     cx = params.get("cx", 0.5)
@@ -798,10 +798,10 @@ def _do_speech_bubble(scene, doc_id: str, params: dict) -> str:
     if not outline or len(outline) < 3:
         return "Error: speech_bubble produced degenerate outline"
 
-    rid = params.get("region_id") or f"bubble_{cx:.3f}_{cy:.3f}".replace(".", "_")
-    r = scene.create_region(
+    rid = params.get("element_id") or f"bubble_{cx:.3f}_{cy:.3f}".replace(".", "_")
+    r = scene.create_element(
         outline=outline,
-        region_id=rid,
+        element_id=rid,
         document_id=doc_id,
         layer=params.get("layer", "default"),
         z_index=params.get("z_index", 0),
@@ -843,12 +843,12 @@ def _do_create_burst(scene, doc_id: str, params: dict) -> str:
 
     created: list[str] = []
     for i, outline in enumerate(outlines):
-        rid = params.get("region_id") or f"burst_{i}"
-        rid_uniq = f"{rid}_{i}" if params.get("region_id") else rid
+        rid = params.get("element_id") or f"burst_{i}"
+        rid_uniq = f"{rid}_{i}" if params.get("element_id") else rid
         try:
-            r = scene.create_region(
+            r = scene.create_element(
                 outline=outline,
-                region_id=rid_uniq,
+                element_id=rid_uniq,
                 document_id=doc_id,
                 layer=params.get("layer", "default"),
                 z_index=z_base + i,
@@ -890,8 +890,8 @@ def _do_armature(scene, doc_id: str, params: dict) -> str:
     for i, outline in enumerate(segments):
         rid = f"arm_{_arm_seq}_{i}"
         try:
-            r = scene.create_region(
-                outline=outline, region_id=rid, document_id=doc_id,
+            r = scene.create_element(
+                outline=outline, element_id=rid, document_id=doc_id,
                 constraints=CurveConstraints(smoothness=params.get("smoothness", 0.3), closed=True),
                 style=Style(fill=fill, stroke=stroke, stroke_width=sw, opacity=opacity_val),
                 z_index=z_base + i,
@@ -905,7 +905,7 @@ def _do_armature(scene, doc_id: str, params: dict) -> str:
             from shapely import unary_union
             seg_polys = []
             for cid in created:
-                r = scene.get_region(cid, doc_id)
+                r = scene.get_element(cid, doc_id)
                 if r and len(r.outline) >= 3:
                     seg_polys.append(Polygon(r.outline))
             if seg_polys:
@@ -922,8 +922,8 @@ def _do_armature(scene, doc_id: str, params: dict) -> str:
                     merged = max(parts, key=lambda p: p.area)
                 outline = [(round(x, 6), round(y, 6)) for x, y in merged.exterior.coords[:-1]]
                 for cid in created:
-                    scene.delete_region(document_id=doc_id, region_id=cid)
-                r = scene.create_region(
+                    scene.delete_element(document_id=doc_id, element_id=cid)
+                r = scene.create_element(
                     outline=outline, document_id=doc_id,
                     constraints=CurveConstraints(smoothness=params.get("smoothness", 0.3), closed=True),
                     style=Style(fill=fill, stroke=stroke, stroke_width=sw),
@@ -938,42 +938,42 @@ def _do_armature(scene, doc_id: str, params: dict) -> str:
 
 def _do_foreshorten(scene, doc_id: str, params: dict) -> str:
     from avge_engine.geometry.procedural import foreshorten
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id required"
-    region = scene.get_region(region_id, doc_id)
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id required"
+    element = scene.get_element(element_id, doc_id)
     new_outline = foreshorten(
-        region.outline,
+        element.outline,
         depth_factor=params.get("depth_factor", 0.5),
         pivot_end=params.get("pivot_end", "start"),
     )
-    scene.edit_region(region_id=region_id, document_id=doc_id, outline=new_outline)
-    return f"foreshorten: '{region_id}' compressed (depth={params.get('depth_factor',0.5)})"
+    scene.edit_element(element_id=element_id, document_id=doc_id, outline=new_outline)
+    return f"foreshorten: '{element_id}' compressed (depth={params.get('depth_factor',0.5)})"
 
 
 def _do_surface_detail(scene, doc_id: str, params: dict) -> str:
     from avge_engine.geometry.procedural import surface_detail
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id required"
-    region = scene.get_region(region_id, doc_id)
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id required"
+    element = scene.get_element(element_id, doc_id)
     results = surface_detail(
-        region.outline,
+        element.outline,
         motif=params.get("motif", "scale"),
         density=params.get("density", 5),
         direction=params.get("direction", 0),
         size_range=tuple(params.get("size_range", [0.005, 0.015])),
     )
-    fill = params.get("fill", region.style.fill)
-    stroke = params.get("stroke", region.style.stroke)
-    sw = params.get("stroke_width", region.style.stroke_width)
-    z_base = params.get("z_index", region.z_index + 1)
+    fill = params.get("fill", element.style.fill)
+    stroke = params.get("stroke", element.style.stroke)
+    sw = params.get("stroke_width", element.style.stroke_width)
+    z_base = params.get("z_index", element.z_index + 1)
     created = []
     for i, outline in enumerate(results):
-        rid = f"{region_id}_detail_{i}"
+        rid = f"{element_id}_detail_{i}"
         try:
-            r = scene.create_region(
-                outline=outline, region_id=rid, document_id=doc_id,
+            r = scene.create_element(
+                outline=outline, element_id=rid, document_id=doc_id,
                 constraints=CurveConstraints(smoothness=0.0, closed=True),
                 style=Style(fill=fill, stroke=stroke, stroke_width=sw),
                 z_index=z_base + i,
@@ -981,15 +981,15 @@ def _do_surface_detail(scene, doc_id: str, params: dict) -> str:
             created.append(r.id)
         except (ValueError, RuntimeError) as e:
             return f"Error at detail {i}: {e}"
-    return f"surface_detail: {len(created)} motif(s) on '{region_id}'"
+    return f"surface_detail: {len(created)} motif(s) on '{element_id}'"
 
 
-def _edge_segment(region, edge: str) -> tuple[tuple[float, float], tuple[float, float]]:
-    """Return an approximate edge segment for a region outline."""
-    pts = list(region.outline)
+def _edge_segment(element, edge: str) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Return an approximate edge segment for a element outline."""
+    pts = list(element.outline)
     if not pts:
-        raise ValueError(f"Region '{region.id}' has no outline")
-    b = region.bounds
+        raise ValueError(f"Element '{element.id}' has no outline")
+    b = element.bounds
     min_x, min_y = b["x"], b["y"]
     max_x, max_y = b["x"] + b["w"], b["y"] + b["h"]
     if edge in ("top", "bottom"):
@@ -1024,14 +1024,14 @@ def _lerp(a: tuple[float, float], b: tuple[float, float], t: float) -> tuple[flo
 
 
 def _do_cornice(scene, doc_id: str, params: dict) -> str:
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id required"
-    region = scene.get_region(region_id, doc_id)
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id required"
+    element = scene.get_element(element_id, doc_id)
     edge = params.get("edge", "top")
     depth = float(params.get("depth", 0.018))
     style = params.get("style", "flat")
-    p0, p1 = _edge_segment(region, edge)
+    p0, p1 = _edge_segment(element, edge)
     nx, ny = _edge_normal(edge)
     quad = [
         [p0[0], p0[1]],
@@ -1039,16 +1039,16 @@ def _do_cornice(scene, doc_id: str, params: dict) -> str:
         [p1[0] + nx * depth, p1[1] + ny * depth],
         [p0[0] + nx * depth, p0[1] + ny * depth],
     ]
-    rid = params.get("region_id_out") or f"{region_id}_{edge}_cornice"
+    rid = params.get("element_id_out") or f"{element_id}_{edge}_cornice"
     fill = params.get("fill", "#DDE8EA")
-    stroke = params.get("stroke", region.style.stroke)
-    sw = params.get("stroke_width", region.style.stroke_width)
-    z = params.get("z_index", region.z_index + 4)
+    stroke = params.get("stroke", element.style.stroke)
+    sw = params.get("stroke_width", element.style.stroke_width)
+    z = params.get("z_index", element.z_index + 4)
     try:
         base = scene.project_quad(
-            quad, document_id=doc_id, region_id=rid, layer=region.layer,
+            quad, document_id=doc_id, element_id=rid, layer=element.layer,
             z_index=z, fill=fill, stroke=stroke, stroke_width=sw,
-            metadata={"tool": "generate_shape", "pattern": "cornice", "source": region_id},
+            metadata={"tool": "generate_shape", "pattern": "cornice", "source": element_id},
         )
         created = [base.id]
         if style in ("stepped", "molded"):
@@ -1060,24 +1060,24 @@ def _do_cornice(scene, doc_id: str, params: dict) -> str:
                 [p0[0] + nx * depth, p0[1] + ny * depth],
             ]
             trim = scene.project_quad(
-                q2, document_id=doc_id, region_id=f"{rid}_trim", layer=region.layer,
+                q2, document_id=doc_id, element_id=f"{rid}_trim", layer=element.layer,
                 z_index=z + 1, fill=params.get("trim_fill", "#F5FBFC"),
                 stroke=None, stroke_width=sw,
-                metadata={"tool": "generate_shape", "pattern": "cornice_trim", "source": region_id},
+                metadata={"tool": "generate_shape", "pattern": "cornice_trim", "source": element_id},
             )
             created.append(trim.id)
     except (ValueError, RuntimeError) as e:
         return f"Error: {e}"
-    return f"cornice: created {len(created)} region(s) on '{region_id}'"
+    return f"cornice: created {len(created)} element(s) on '{element_id}'"
 
 
 def _do_awning(scene, doc_id: str, params: dict) -> str:
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id required"
-    region = scene.get_region(region_id, doc_id)
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id required"
+    element = scene.get_element(element_id, doc_id)
     edge = params.get("edge", "bottom")
-    p0, p1 = _edge_segment(region, edge)
+    p0, p1 = _edge_segment(element, edge)
     width_frac = max(0.05, min(1.0, float(params.get("width", 0.45))))
     center = float(params.get("center", 0.5))
     half = width_frac / 2
@@ -1092,16 +1092,16 @@ def _do_awning(scene, doc_id: str, params: dict) -> str:
         [b[0] + nx * height + tilt * 0.01, b[1] + ny * height + abs(tilt) * 0.015],
         [a[0] + nx * height + tilt * 0.01, a[1] + ny * height + abs(tilt) * 0.015],
     ]
-    rid = params.get("region_id_out") or f"{region_id}_{edge}_awning"
+    rid = params.get("element_id_out") or f"{element_id}_{edge}_awning"
     colors = params.get("colors", ["#F3D56B", "#FFFFFF"])
-    z = params.get("z_index", region.z_index + 8)
+    z = params.get("z_index", element.z_index + 8)
     created: list[str] = []
     try:
         base = scene.project_quad(
-            q, document_id=doc_id, region_id=rid, layer=region.layer,
+            q, document_id=doc_id, element_id=rid, layer=element.layer,
             z_index=z, fill=colors[0], stroke=params.get("stroke", "#5E6C70"),
-            stroke_width=params.get("stroke_width", region.style.stroke_width),
-            metadata={"tool": "generate_shape", "pattern": "awning", "source": region_id},
+            stroke_width=params.get("stroke_width", element.style.stroke_width),
+            metadata={"tool": "generate_shape", "pattern": "awning", "source": element_id},
         )
         created.append(base.id)
         stripe_count = max(0, min(16, int(params.get("stripe_count", 0))))
@@ -1117,34 +1117,34 @@ def _do_awning(scene, doc_id: str, params: dict) -> str:
                 quad_point(q, u0, 1.0),
             ]
             stripe = scene.project_quad(
-                sq, document_id=doc_id, region_id=f"{rid}_stripe_{i:02d}",
-                layer=region.layer, z_index=z + 1, fill=colors[i % len(colors)],
-                stroke=None, stroke_width=params.get("stroke_width", region.style.stroke_width),
-                metadata={"tool": "generate_shape", "pattern": "awning_stripe", "source": region_id},
+                sq, document_id=doc_id, element_id=f"{rid}_stripe_{i:02d}",
+                layer=element.layer, z_index=z + 1, fill=colors[i % len(colors)],
+                stroke=None, stroke_width=params.get("stroke_width", element.style.stroke_width),
+                metadata={"tool": "generate_shape", "pattern": "awning_stripe", "source": element_id},
             )
             created.append(stripe.id)
     except (ValueError, RuntimeError) as e:
         return f"Error: {e}"
-    return f"awning: created {len(created)} region(s) on '{region_id}'"
+    return f"awning: created {len(created)} element(s) on '{element_id}'"
 
 
 def _do_rooftop_props(scene, doc_id: str, params: dict) -> str:
     import random as _random
-    region_id = params.get("region_id")
-    if not region_id or not scene.has_region(region_id, doc_id):
-        return "Error: region_id required"
-    region = scene.get_region(region_id, doc_id)
+    element_id = params.get("element_id")
+    if not element_id or not scene.has_element(element_id, doc_id):
+        return "Error: element_id required"
+    element = scene.get_element(element_id, doc_id)
     edge = params.get("edge", "top")
-    p0, p1 = _edge_segment(region, edge)
+    p0, p1 = _edge_segment(element, edge)
     nx, ny = _edge_normal(edge)
     count = max(1, min(32, int(params.get("count", 4))))
     density = max(0.05, min(1.0, float(params.get("density", 0.7))))
     prop_types = params.get("prop_types", ["vent", "antenna", "box", "tank"])
     rng = _random.Random(int(params.get("seed", 1)))
-    z = params.get("z_index", region.z_index + 6)
+    z = params.get("z_index", element.z_index + 6)
     fill = params.get("fill", "#6F7F83")
     stroke = params.get("stroke", "#33464D")
-    sw = params.get("stroke_width", region.style.stroke_width)
+    sw = params.get("stroke_width", element.style.stroke_width)
     created: list[str] = []
     span_start = (1.0 - density) / 2
     try:
@@ -1153,12 +1153,12 @@ def _do_rooftop_props(scene, doc_id: str, params: dict) -> str:
             base = _lerp(p0, p1, max(0.0, min(1.0, t)))
             size = rng.uniform(0.012, 0.035)
             kind = prop_types[i % len(prop_types)] if prop_types else "box"
-            rid = f"{region_id}_roof_{kind}_{i:02d}"
+            rid = f"{element_id}_roof_{kind}_{i:02d}"
             if kind == "antenna":
                 top = [base[0] + nx * size * 0.3, base[1] + ny * size * 2.6]
                 r = scene.create_line(
                     base[0], base[1], top[0], top[1],
-                    document_id=doc_id, region_id=rid, layer=region.layer,
+                    document_id=doc_id, element_id=rid, layer=element.layer,
                     z_index=z + i, stroke=stroke, stroke_width=sw,
                     stroke_linecap="round",
                 )
@@ -1166,7 +1166,7 @@ def _do_rooftop_props(scene, doc_id: str, params: dict) -> str:
                 r = scene.create_ellipse(
                     base[0] + nx * size * 0.3, base[1] + ny * size * 0.8,
                     rx=size * 0.75, ry=size * 0.45,
-                    document_id=doc_id, region_id=rid, layer=region.layer,
+                    document_id=doc_id, element_id=rid, layer=element.layer,
                     z_index=z + i, fill=fill, stroke=stroke, stroke_width=sw,
                 )
             else:
@@ -1174,28 +1174,28 @@ def _do_rooftop_props(scene, doc_id: str, params: dict) -> str:
                 y = base[1] - size * 0.5 + ny * size * 0.7
                 r = scene.create_rect(
                     x, y, size, size * rng.uniform(0.65, 1.3),
-                    rx=0.002, document_id=doc_id, region_id=rid,
-                    layer=region.layer, z_index=z + i,
+                    rx=0.002, document_id=doc_id, element_id=rid,
+                    layer=element.layer, z_index=z + i,
                     fill=fill, stroke=stroke, stroke_width=sw,
                 )
-            r.metadata.update({"tool": "generate_shape", "pattern": "rooftop_props", "source": region_id, "prop_type": kind})
+            r.metadata.update({"tool": "generate_shape", "pattern": "rooftop_props", "source": element_id, "prop_type": kind})
             created.append(r.id)
     except (ValueError, RuntimeError) as e:
         return f"Error: {e}"
-    return f"rooftop_props: created {len(created)} prop(s) on '{region_id}'"
+    return f"rooftop_props: created {len(created)} prop(s) on '{element_id}'"
 
 
 def _resolve_relative_box(scene, doc_id, relative_to, params):
-    """Transform isometric_box x,y from 0-1 within a parent region.
+    """Transform isometric_box x,y from 0-1 within a parent element.
 
-    Maps (0,0) = visual top-left of the region's bounding box,
+    Maps (0,0) = visual top-left of the element's bounding box,
     (1,1) = visual bottom-right. y increases downward (SVG coords).
     Only x and y are relative; width, depth, height stay as-is.
     """
-    region = scene.get_region(relative_to, doc_id)
-    if region is None:
+    element = scene.get_element(relative_to, doc_id)
+    if element is None:
         return
-    b = region.bounds
+    b = element.bounds
     bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
     if bw < 1e-10:
         bw = 1e-10
@@ -1222,12 +1222,12 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
     if not faces:
         return "Error: isometric_box produced no faces"
 
-    # Unique region ID prefix (required for >1 box per document)
-    prefix = params.get("new_prefix") or params.get("region_id", "box")
-    if scene.has_region(f"{prefix}_top", doc_id):
+    # Unique element ID prefix (required for >1 box per document)
+    prefix = params.get("new_prefix") or params.get("element_id", "box")
+    if scene.has_element(f"{prefix}_top", doc_id):
         # Auto-deduplicate by appending counter
         counter = 0
-        while scene.has_region(f"{prefix}_{counter}_top", doc_id):
+        while scene.has_element(f"{prefix}_{counter}_top", doc_id):
             counter += 1
         prefix = f"{prefix}_{counter}"
 
@@ -1276,8 +1276,8 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
                 "height": params.get("height", 0.08), "angle": params.get("angle", 30.0),
                 "top_slant": params.get("top_slant", 0.0),
             }
-            r = scene.create_region(
-                outline=outline, region_id=rid,
+            r = scene.create_element(
+                outline=outline, element_id=rid,
                 document_id=doc_id, layer=layer,
                 z_index=z_base + z_order.get(fname, 0),
                 constraints=CurveConstraints(smoothness=0.0, closed=True),
@@ -1308,7 +1308,7 @@ def _do_isometric_box(scene, doc_id: str, params: dict) -> str:
             try:
                 scene.create_ellipse(
                     scx, scy, sr, ry=sr2,
-                    document_id=doc_id, region_id=shadow_rid,
+                    document_id=doc_id, element_id=shadow_rid,
                     layer=layer, z_index=z_base - 1,
                     fill="#000000", stroke="none",
                     opacity=sop, blend_mode="multiply",
@@ -1383,7 +1383,7 @@ def _do_attach(scene, doc_id: str, params: dict) -> str:
     """Attach one isometric box to another using named anchors.
 
     Params:
-        parent: region_id of the parent box (any face).
+        parent: element_id of the parent box (any face).
         child_*: isometric_box params for the child (x/y are auto-computed).
         parent_anchor: named anchor on the parent (e.g. "bottom_left").
         child_anchor: named anchor on the child (e.g. "top_left_corner").
@@ -1394,10 +1394,10 @@ def _do_attach(scene, doc_id: str, params: dict) -> str:
 
     parent_id = params.get("parent")
     if not parent_id:
-        return "Error: 'parent' region_id required"
-    parent = scene.get_region(parent_id, doc_id)
+        return "Error: 'parent' element_id required"
+    parent = scene.get_element(parent_id, doc_id)
     if parent is None:
-        return f"Error: parent region '{parent_id}' not found"
+        return f"Error: parent element '{parent_id}' not found"
 
     # Read parent's isobox params from metadata
     meta = parent.metadata or {}

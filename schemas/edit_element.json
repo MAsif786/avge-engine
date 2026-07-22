@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "edit_region",
-  "description": "Modify an existing region's outline, single points, smoothness, style, layer, clipping, metadata, shape, or z_index. Use transform_objects for whole-region move/scale/rotate/mirror/align.",
+  "title": "edit_element",
+  "description": "Modify an existing element's outline, single points, smoothness, style, layer, clipping, metadata, shape, or z_index. Use transform_objects for whole-element move/scale/rotate/mirror/align.",
   "type": "object",
   "properties": {
-    "region_id": {"type": ["string", "null"]},
+    "element_id": {"type": ["string", "null"]},
     "ids": {
       "type": ["array", "null"],
       "items": {"type": "string"},
@@ -60,7 +60,7 @@
     }
   },
   "anyOf": [
-    {"required": ["region_id"]},
+    {"required": ["element_id"]},
     {"required": ["ids"]}
   ],
   "additionalProperties": false

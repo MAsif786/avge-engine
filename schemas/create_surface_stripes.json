@@ -22,7 +22,7 @@
     },
     "count": { "type": "integer", "minimum": 1, "maximum": 96 },
     "document_id": { "type": ["string", "null"], "default": null },
-    "region_id": {
+    "element_id": {
       "type": ["string", "null"],
       "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$",
       "default": null

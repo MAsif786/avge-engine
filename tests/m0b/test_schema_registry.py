@@ -75,24 +75,24 @@ class TestSchemaRegistry:
         errs = validate_input("clone_document", {"document_id": "doc_source"})
         assert len(errs) > 0
 
-    def test_create_region_valid(self):
-        errs = validate_input("create_region", {
+    def test_create_element_valid(self):
+        errs = validate_input("create_element", {
             "outline": [[0.1, 0.1], [0.5, 0.8], [0.9, 0.1]],
         })
         assert errs == []
 
-    def test_create_region_missing_outline(self):
-        errs = validate_input("create_region", {})
+    def test_create_element_missing_outline(self):
+        errs = validate_input("create_element", {})
         assert len(errs) > 0  # outline is required
 
-    def test_create_region_outline_too_few(self):
-        errs = validate_input("create_region", {"outline": [[0.1, 0.1]]})
+    def test_create_element_outline_too_few(self):
+        errs = validate_input("create_element", {"outline": [[0.1, 0.1]]})
         assert len(errs) > 0
 
-    def test_create_region_with_all_options(self):
-        errs = validate_input("create_region", {
+    def test_create_element_with_all_options(self):
+        errs = validate_input("create_element", {
             "outline": [[0.1, 0.1], [0.9, 0.9]],
-            "region_id": "test_1",
+            "element_id": "test_1",
             "layer": "main",
             "closed": True,
             "smoothness": 0.3,
@@ -103,8 +103,8 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_create_region_primitive_pattern_options_valid(self):
-        errs = validate_input("create_region", {
+    def test_create_element_primitive_pattern_options_valid(self):
+        errs = validate_input("create_element", {
             "shape": {"type": "rect", "x": 0.2, "y": 0.2, "width": 0.3, "height": 0.2},
             "outline_pattern": "wavy",
             "fill_pattern": "hatch",
@@ -114,22 +114,22 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_create_region_stroke_width_valid(self):
-        errs = validate_input("create_region", {
+    def test_create_element_stroke_width_valid(self):
+        errs = validate_input("create_element", {
             "outline": [[0.1, 0.1], [0.9, 0.9]],
             "stroke_width": 2,
         })
         assert errs == []
 
-    def test_create_region_invalid_smoothness(self):
-        errs = validate_input("create_region", {
+    def test_create_element_invalid_smoothness(self):
+        errs = validate_input("create_element", {
             "outline": [[0, 0], [1, 0], [1, 1]],
             "smoothness": 5.0,
         })
         assert len(errs) > 0
 
-    def test_create_region_invalid_coords(self):
-        errs = validate_input("create_region", {
+    def test_create_element_invalid_coords(self):
+        errs = validate_input("create_element", {
             "outline": [[-0.5, 1.5], [1, 0], [0, 1]],
         })
         assert len(errs) > 0
@@ -170,24 +170,24 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
-    def test_edit_region_point_nudge_valid(self):
-        errs = validate_input("edit_region", {
-            "region_id": "shape",
+    def test_edit_element_point_nudge_valid(self):
+        errs = validate_input("edit_element", {
+            "element_id": "shape",
             "point_index": 0,
             "point_dx": 0.02,
             "point_dy": -0.01,
         })
         assert errs == []
 
-    def test_edit_region_rejects_transform_params(self):
-        errs = validate_input("edit_region", {
-            "region_id": "shape",
+    def test_edit_element_rejects_transform_params(self):
+        errs = validate_input("edit_element", {
+            "element_id": "shape",
             "dx": 0.1,
         })
         assert len(errs) > 0
 
-    def test_edit_regions_style_update_valid(self):
-        errs = validate_input("edit_regions", {
+    def test_edit_elements_style_update_valid(self):
+        errs = validate_input("edit_elements", {
             "updates": [
                 {"id": "shape", "fill": "#FF0000", "z_index": 5},
                 {"id": "line", "point_index": 1, "point_dx": 0.02},
@@ -195,8 +195,8 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_edit_regions_rejects_transform_params(self):
-        errs = validate_input("edit_regions", {
+    def test_edit_elements_rejects_transform_params(self):
+        errs = validate_input("edit_elements", {
             "updates": [{"id": "shape", "rotate": 15}],
         })
         assert len(errs) > 0
@@ -242,7 +242,7 @@ class TestSchemaRegistry:
     def test_project_quad_valid(self):
         errs = validate_input("project_quad", {
             "target_quad": [[0.1, 0.2], [0.8, 0.12], [0.72, 0.62], [0.16, 0.72]],
-            "region_id": "tile",
+            "element_id": "tile",
             "fill": "#DDEEFF",
             "columns": 2,
             "rows": 2,
@@ -362,7 +362,7 @@ class TestSchemaRegistry:
 
     def test_refine_line_valid(self):
         errs = validate_input("refine_line", {
-            "region_id": "line",
+            "element_id": "line",
             "mode": "stabilize",
             "strength": 0.6,
             "simplify_tolerance": 0.01,
@@ -372,7 +372,7 @@ class TestSchemaRegistry:
 
     def test_refine_line_rejects_bad_mode(self):
         errs = validate_input("refine_line", {
-            "region_id": "line",
+            "element_id": "line",
             "mode": "warp",
         })
         assert len(errs) > 0
@@ -414,22 +414,22 @@ class TestSchemaRegistry:
         })
         assert len(errs) > 0
 
-    def test_mix_region_colors_valid(self):
-        errs = validate_input("mix_region_colors", {
-            "source_region_id": "warm",
-            "target_region_id": "cool",
+    def test_mix_element_colors_valid(self):
+        errs = validate_input("mix_element_colors", {
+            "source_element_id": "warm",
+            "target_element_id": "cool",
             "mix_ratio": 0.35,
             "source_channel": "fill",
             "target_channel": "stroke",
-            "output": "new_region",
-            "new_region_id": "mixed",
+            "output": "new_element",
+            "new_element_id": "mixed",
         })
         assert errs == []
 
-    def test_mix_region_colors_rejects_unknown_output(self):
-        errs = validate_input("mix_region_colors", {
-            "source_region_id": "warm",
-            "target_region_id": "cool",
+    def test_mix_element_colors_rejects_unknown_output(self):
+        errs = validate_input("mix_element_colors", {
+            "source_element_id": "warm",
+            "target_element_id": "cool",
             "output": "palette",
         })
         assert len(errs) > 0
@@ -452,9 +452,9 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_warp_region_valid(self):
-        errs = validate_input("warp_region", {
-            "region_id": "cape",
+    def test_warp_element_valid(self):
+        errs = validate_input("warp_element", {
+            "element_id": "cape",
             "mode": "handle_shift",
             "handles": [{"x": 0.5, "y": 0.5, "dx": 0.04, "dy": -0.02, "radius": 0.2}],
             "falloff": 1.5,
@@ -462,9 +462,9 @@ class TestSchemaRegistry:
         })
         assert errs == []
 
-    def test_warp_region_rejects_bad_mode(self):
-        errs = validate_input("warp_region", {
-            "region_id": "cape",
+    def test_warp_element_rejects_bad_mode(self):
+        errs = validate_input("warp_element", {
+            "element_id": "cape",
             "mode": "perspective",
         })
         assert len(errs) > 0
@@ -472,7 +472,7 @@ class TestSchemaRegistry:
     def test_duplicate_scatter_valid(self):
         errs = validate_input("duplicate", {
             "pattern": "scatter",
-            "region_id": "leaf",
+            "element_id": "leaf",
             "count": 12,
             "bounds": [0.2, 0.3, 0.4, 0.2],
             "seed": 9,
@@ -483,7 +483,7 @@ class TestSchemaRegistry:
     def test_duplicate_rejects_unknown_pattern(self):
         errs = validate_input("duplicate", {
             "pattern": "spray",
-            "region_id": "leaf",
+            "element_id": "leaf",
         })
         assert len(errs) > 0
 
@@ -550,7 +550,7 @@ class TestSchemaRegistry:
 
     def test_create_shadow_valid(self):
         errs = validate_input("create_shadow", {
-            "region_id": "chair",
+            "element_id": "chair",
             "direction": 90,
             "distance": 0.04,
             "softness": 5,
@@ -561,15 +561,15 @@ class TestSchemaRegistry:
 
     def test_create_shadow_invalid_distance(self):
         errs = validate_input("create_shadow", {
-            "region_id": "chair",
+            "element_id": "chair",
             "distance": 2.0,
         })
         assert len(errs) > 0
 
     def test_create_shadow_clipped_valid(self):
         errs = validate_input("create_shadow", {
-            "region_id": "chair",
-            "onto_region_id": "floor",
+            "element_id": "chair",
+            "onto_element_id": "floor",
             "direction": 45,
             "distance": 0.05,
         })
@@ -577,7 +577,7 @@ class TestSchemaRegistry:
 
     def test_create_shadow_receiver_is_optional(self):
         errs = validate_input("create_shadow", {
-            "region_id": "chair",
+            "element_id": "chair",
         })
         assert errs == []
 
@@ -649,7 +649,7 @@ class TestSchemaRegistry:
         assert len(errs) > 0
 
     def test_get_input_schema_structure(self):
-        schema = get_input_schema("create_region")
+        schema = get_input_schema("create_element")
         assert "properties" in schema
         assert "outline" in schema["properties"]
         assert "smoothness" in schema["properties"]

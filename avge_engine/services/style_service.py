@@ -10,8 +10,8 @@ from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.schemas.service_results import DepthHazeResult, LineHierarchyResult, MaterialApplyResult
 from avge_engine.services.base import BaseService
 from avge_engine.services.engine import resolve_doc, stroke_width_to_norm
-from avge_engine.services.selector_service import select_region_ids
-from avge_engine.scene.models import RegionNode
+from avge_engine.services.selector_service import select_element_ids
+from avge_engine.scene.models import ElementNode
 from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
 from avge_engine.utils.math_utils import clamp01
 
@@ -32,15 +32,15 @@ class StyleService(BaseService):
         affect_stroke: bool = True,
         opacity_falloff: float = 0.0,
     ) -> DepthHazeResult:
-        """Blend selected regions toward haze_color based on vertical depth."""
+        """Blend selected elements toward haze_color based on vertical depth."""
         doc_id = resolve_doc(document_id)
 
         if hex_to_rgb(haze_color) is None:
             raise ValueError("haze_color must be a #RRGGBB hex color")
 
-        target_ids = select_region_ids(self.graph, doc_id, selector, default_all=True)
+        target_ids = select_element_ids(self.graph, doc_id, selector, default_all=True)
         if not target_ids:
-            raise LookupError("No matching regions found")
+            raise LookupError("No matching elements found")
 
         denom = near_y - far_y
         if abs(denom) < 1e-6:
@@ -49,10 +49,10 @@ class StyleService(BaseService):
         affected = 0
         for rid in target_ids:
             try:
-                region = self.graph.get_region(rid, doc_id)
+                element = self.graph.get_element(rid, doc_id)
             except ValueError:
                 continue
-            bounds = region.bounds
+            bounds = element.bounds
             if not bounds:
                 continue
             cy = bounds["y"] + bounds["h"] / 2
@@ -62,19 +62,19 @@ class StyleService(BaseService):
                 continue
 
             kwargs: dict[str, Any] = {}
-            if affect_fill and isinstance(region.style.fill, str):
-                mixed_fill = mix_hex(region.style.fill, haze_color, strength)
+            if affect_fill and isinstance(element.style.fill, str):
+                mixed_fill = mix_hex(element.style.fill, haze_color, strength)
                 if mixed_fill:
                     kwargs["fill"] = mixed_fill
-            if affect_stroke and isinstance(region.style.stroke, str):
-                mixed_stroke = mix_hex(region.style.stroke, haze_color, strength)
+            if affect_stroke and isinstance(element.style.stroke, str):
+                mixed_stroke = mix_hex(element.style.stroke, haze_color, strength)
                 if mixed_stroke:
                     kwargs["stroke"] = mixed_stroke
             if opacity_falloff > 0:
-                kwargs["opacity"] = max(0.0, region.style.opacity * (1.0 - opacity_falloff * depth_t))
+                kwargs["opacity"] = max(0.0, element.style.opacity * (1.0 - opacity_falloff * depth_t))
             if not kwargs:
                 continue
-            self.graph.edit_region(region_id=rid, document_id=doc_id, **kwargs)
+            self.graph.edit_element(element_id=rid, document_id=doc_id, **kwargs)
             affected += 1
 
         return DepthHazeResult(affected=affected, haze_color=haze_color, max_strength=max_strength)
@@ -88,40 +88,40 @@ class StyleService(BaseService):
         inner_width: StrokeWidthInput = 3,
         basis: str = "z_index",
     ) -> LineHierarchyResult:
-        """Apply stroke-weight hierarchy to selected regions."""
+        """Apply stroke-weight hierarchy to selected elements."""
         doc_id = resolve_doc(document_id)
         outer_norm = stroke_width_to_norm(doc_id, outer_width)
         inner_norm = stroke_width_to_norm(doc_id, inner_width)
 
-        target_ids = set(select_region_ids(self.graph, doc_id, selector, default_all=True))
-        regions = [r for r in self.graph.get_all_regions(doc_id) if r.id in target_ids]
-        if not regions:
-            raise LookupError("No regions found")
+        target_ids = set(select_element_ids(self.graph, doc_id, selector, default_all=True))
+        elements = [r for r in self.graph.get_all_elements(doc_id) if r.id in target_ids]
+        if not elements:
+            raise LookupError("No elements found")
 
         if basis == "z_index":
-            regions.sort(key=lambda r: r.z_index, reverse=True)
+            elements.sort(key=lambda r: r.z_index, reverse=True)
         elif basis == "layer":
             layers: dict[str, list[Any]] = {}
-            for r in regions:
+            for r in elements:
                 layers.setdefault(r.layer, []).append(r)
-            regions = [r for layer_regions in layers.values() for r in layer_regions]
+            elements = [r for layer_elements in layers.values() for r in layer_elements]
         elif basis == "bounding_size":
-            regions.sort(key=lambda r: (r.bounds or {}).get("w", 0) or 0, reverse=True)
+            elements.sort(key=lambda r: (r.bounds or {}).get("w", 0) or 0, reverse=True)
         else:
             raise ValueError(f"Unknown basis '{basis}'")
 
-        cutoff = max(1, len(regions) // 3)
-        outer = regions[:cutoff]
-        inner = regions[cutoff:]
+        cutoff = max(1, len(elements) // 3)
+        outer = elements[:cutoff]
+        inner = elements[cutoff:]
 
         for r in outer:
             try:
-                self.graph.edit_region(region_id=r.id, document_id=doc_id, stroke_width=outer_norm)
+                self.graph.edit_element(element_id=r.id, document_id=doc_id, stroke_width=outer_norm)
             except (ValueError, RuntimeError):
                 pass
         for r in inner:
             try:
-                self.graph.edit_region(region_id=r.id, document_id=doc_id, stroke_width=inner_norm)
+                self.graph.edit_element(element_id=r.id, document_id=doc_id, stroke_width=inner_norm)
             except (ValueError, RuntimeError):
                 pass
 
@@ -171,8 +171,8 @@ class StyleService(BaseService):
                     pass
         return MaterialApplyResult(material=material, affected=len(affected), detail_count=len(overlays))
 
-    def _create_material_overlays(self, doc_id: str, region_id: str, material: str, intensity: float) -> list[str]:
-        source = self.graph.get_region(region_id, doc_id)
+    def _create_material_overlays(self, doc_id: str, element_id: str, material: str, intensity: float) -> list[str]:
+        source = self.graph.get_element(element_id, doc_id)
         bounds = source.bounds
         if bounds is None:
             return []
@@ -186,21 +186,21 @@ class StyleService(BaseService):
         created: list[str] = []
 
         def oid(suffix: str) -> str:
-            return f"{region_id}_{material}_{suffix}"
+            return f"{element_id}_{material}_{suffix}"
 
         stale = [
-            r.id for r in self.graph.get_all_regions(doc_id)
-            if r.metadata.get("material_source") == region_id
+            r.id for r in self.graph.get_all_elements(doc_id)
+            if r.metadata.get("material_source") == element_id
         ]
         if stale:
-            self.graph.delete_regions(doc_id, stale)
+            self.graph.delete_elements(doc_id, stale)
 
         if material == "glass":
-            created.append(self._add_overlay_region(doc_id, source, oid("shine"),
+            created.append(self._add_overlay_element(doc_id, source, oid("shine"),
                 [(min_x + 0.08 * w, min_y + 0.08 * h), (min_x + 0.88 * w, min_y + 0.03 * h),
                  (min_x + 0.72 * w, min_y + 0.22 * h), (min_x + 0.18 * w, min_y + 0.28 * h)],
                 "#FFFFFF", 0.22 + 0.18 * intensity, 2, material, "screen", None, 0.001, 0.35))
-            created.append(self._add_overlay_region(doc_id, source, oid("shade"),
+            created.append(self._add_overlay_element(doc_id, source, oid("shade"),
                 [(min_x + 0.12 * w, max_y - 0.20 * h), (max_x, max_y - 0.34 * h),
                  (max_x, max_y), (min_x, max_y)],
                 "#285765", 0.08 + 0.12 * intensity, 1, material, "multiply", None, 0.001, 0.2))
@@ -219,7 +219,7 @@ class StyleService(BaseService):
                 cy = min_y + y_frac * h
                 rw = s * w
                 rh = s * h
-                created.append(self._add_overlay_region(doc_id, source, oid(f"speck_{i}"),
+                created.append(self._add_overlay_element(doc_id, source, oid(f"speck_{i}"),
                     [(cx - rw, cy - rh), (cx + rw, cy - rh * 0.7), (cx + rw * 0.8, cy + rh), (cx - rw * 0.6, cy + rh * 0.8)],
                     "#5E625B" if i % 2 else "#F0EEE4", 0.10 + 0.10 * intensity, 1, material,
                     "multiply" if i % 2 else "screen", None, 0.001, 0.55))
@@ -246,22 +246,22 @@ class StyleService(BaseService):
                 cy = min_y + y_frac * h
                 rw = scale * w
                 rh = scale * h
-                created.append(self._add_overlay_region(doc_id, source, oid(f"leaf_{i}"),
+                created.append(self._add_overlay_element(doc_id, source, oid(f"leaf_{i}"),
                     [(cx, cy - rh), (cx + rw, cy), (cx, cy + rh), (cx - rw, cy)],
                     "#B8D96E" if i % 2 == 0 else "#2F6B35", 0.20 + 0.16 * intensity, 1, material,
                     "screen" if i % 2 == 0 else "multiply", None, 0.001, 0.75))
 
         if created:
-            self.graph.group_regions(f"material_{material}_{region_id}", [region_id, *created], doc_id, replace=True)
+            self.graph.group_elements(f"material_{material}_{element_id}", [element_id, *created], doc_id, replace=True)
         return created
 
-    def _add_overlay_region(self, doc_id: str, source, rid: str, outline, fill, opacity: float,
+    def _add_overlay_element(self, doc_id: str, source, rid: str, outline, fill, opacity: float,
                             z_offset: int, material: str, blend_mode: str | None = None,
                             stroke: str | None = None, stroke_width: float = 0.001,
                             smoothness: float = 0.2) -> str:
-        region = self.graph.create_region(
+        element = self.graph.create_element(
             document_id=doc_id,
-            region_id=rid,
+            element_id=rid,
             outline=outline,
             layer=source.layer,
             z_index=source.z_index + z_offset,
@@ -276,13 +276,13 @@ class StyleService(BaseService):
             ),
             metadata=_material_tag(source.id, material),
         )
-        return region.id
+        return element.id
 
     def _add_overlay_line(self, doc_id: str, source, rid: str, p1, p2, stroke: str,
                           opacity: float, z_offset: int, material: str,
                           stroke_width: float = 0.0012, blend_mode: str | None = None,
                           dasharray: str | None = None) -> str:
-        region = RegionNode(
+        element = ElementNode(
             id=rid,
             layer=source.layer,
             z_index=source.z_index + z_offset,
@@ -300,11 +300,11 @@ class StyleService(BaseService):
             ),
             metadata=_material_tag(source.id, material),
         )
-        self.graph._regions_for(doc_id)[rid] = region
+        self.graph._elements_for(doc_id)[rid] = element
         self.graph.get_document(doc_id).version += 1
         self.graph._auto_checkpoint(doc_id, "material_overlay", rid)
         self.graph._persist(doc_id)
         return rid
 
-def _material_tag(region_id: str, material: str) -> dict[str, str]:
-    return {"material_source": region_id, "material": material}
+def _material_tag(element_id: str, material: str) -> dict[str, str]:
+    return {"material_source": element_id, "material": material}

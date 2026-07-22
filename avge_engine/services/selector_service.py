@@ -1,23 +1,23 @@
-"""Shared region selection service."""
+"""Shared element selection service."""
 from __future__ import annotations
 
 from typing import Any
 
 
 class SelectorService:
-    """Resolve AVGE shared selectors into ordered region IDs."""
+    """Resolve AVGE shared selectors into ordered element IDs."""
 
     def __init__(self, graph) -> None:
         self.graph = graph
 
-    def select_region_ids(
+    def select_element_ids(
         self,
         doc_id: str,
         selector: dict[str, Any] | None,
         *,
         default_all: bool = False,
     ) -> list[str]:
-        """Resolve a common AVGE selector to ordered region IDs.
+        """Resolve a common AVGE selector to ordered element IDs.
 
         Supported selector keys:
         ids, group_name, layer, fill, tags, bounds, z_min, z_max, has_stroke.
@@ -25,7 +25,7 @@ class SelectorService:
         initial candidate set before filters are applied.
         """
         if not selector:
-            return [r.id for r in self.graph.get_all_regions(doc_id)] if default_all else []
+            return [r.id for r in self.graph.get_all_elements(doc_id)] if default_all else []
 
         candidates: list[str] | None = None
         if selector.get("ids"):
@@ -62,12 +62,12 @@ class SelectorService:
 
         if candidates is not None:
             return candidates
-        return [r.id for r in self.graph.get_all_regions(doc_id)] if default_all else []
+        return [r.id for r in self.graph.get_all_elements(doc_id)] if default_all else []
 
 
-def select_region_ids(graph, doc_id: str, selector: dict[str, Any] | None, *, default_all: bool = False) -> list[str]:
+def select_element_ids(graph, doc_id: str, selector: dict[str, Any] | None, *, default_all: bool = False) -> list[str]:
     """Compatibility helper for simple call sites."""
-    return SelectorService(graph).select_region_ids(doc_id, selector, default_all=default_all)
+    return SelectorService(graph).select_element_ids(doc_id, selector, default_all=default_all)
 
 
 def selector_from_legacy(

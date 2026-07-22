@@ -1,4 +1,4 @@
-"""Image and SVG import helpers for region tools."""
+"""Image and SVG import helpers for element tools."""
 from __future__ import annotations
 
 import base64
@@ -57,7 +57,7 @@ def is_svg_href(href: str, mime: str | None = None) -> bool:
     return clean.endswith(".svg") or href.startswith("data:image/svg+xml")
 
 
-def svg_path_regions(
+def svg_path_elements(
     svg_text: str,
     *,
     x: float,
@@ -70,7 +70,7 @@ def svg_path_regions(
     samples_per_curve: int,
     max_paths: int,
 ) -> list[dict[str, Any]]:
-    """Parse SVG path elements into mapped region definitions."""
+    """Parse SVG path elements into mapped element definitions."""
     from avge_engine.geometry.procedural import parse_svg_path
 
     try:
@@ -79,7 +79,7 @@ def svg_path_regions(
         raise ValueError(f"Invalid SVG: {exc}") from exc
 
     view_box = _svg_viewbox(root)
-    regions: list[dict[str, Any]] = []
+    elements: list[dict[str, Any]] = []
     for path_node in root.iter():
         if path_node.tag.rsplit("}", 1)[-1] != "path":
             continue
@@ -96,10 +96,10 @@ def svg_path_regions(
             fill = None
         if stroke in ("none", "transparent"):
             stroke = None
-        regions.append({"outline": mapped, "fill": fill, "stroke": stroke, "stroke_width": stroke_width})
-        if len(regions) >= max_paths:
+        elements.append({"outline": mapped, "fill": fill, "stroke": stroke, "stroke_width": stroke_width})
+        if len(elements) >= max_paths:
             break
-    return regions
+    return elements
 
 
 def _parse_svg_length(value: str | None) -> float | None:

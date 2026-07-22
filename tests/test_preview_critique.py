@@ -25,9 +25,9 @@ def test_preview_critique_flags_too_flat_and_missing_contact_shadows():
     doc = scene.create_document()
     for i in range(6):
         x = 0.08 + i * 0.13
-        scene.create_region(
+        scene.create_element(
             document_id=doc.id,
-            region_id=f"flat_{i}",
+            element_id=f"flat_{i}",
             outline=[(x, 0.52), (x + 0.09, 0.52), (x + 0.09, 0.72), (x, 0.72)],
             style=Style(fill="#CC3333", stroke="#333333"),
         )
@@ -49,7 +49,7 @@ def test_preview_critique_flags_over_rounded_rects():
             0.12,
             rx=0.06,
             document_id=doc.id,
-            region_id=f"pill_{i}",
+            element_id=f"pill_{i}",
         )
 
     findings = scene.critique_preview_quality(doc.id)
@@ -60,17 +60,17 @@ def test_preview_critique_flags_over_rounded_rects():
 def test_preview_critique_flags_bad_perspective_quad():
     scene = SceneGraph()
     doc = scene.create_document()
-    scene.create_region(
+    scene.create_element(
         document_id=doc.id,
-        region_id="skewed_panel",
+        element_id="skewed_panel",
         outline=[(0.2, 0.2), (0.7, 0.25), (0.8, 0.65), (0.3, 0.6)],
         constraints=CurveConstraints(smoothness=0.0, closed=True),
         style=Style(fill={"type": "linear", "x1": 0, "y1": 0, "x2": 1, "y2": 1,
                           "stops": [{"offset": 0, "color": "#EEEEEE"}, {"offset": 1, "color": "#AAAAAA"}]}),
     )
-    scene.create_region(
+    scene.create_element(
         document_id=doc.id,
-        region_id="support",
+        element_id="support",
         outline=[(0.1, 0.7), (0.9, 0.7), (0.9, 0.78), (0.1, 0.78)],
     )
 
@@ -82,9 +82,9 @@ def test_preview_critique_flags_bad_perspective_quad():
 def test_preview_critique_flags_dominant_blob_shape():
     scene = SceneGraph()
     doc = scene.create_document()
-    scene.create_region(
+    scene.create_element(
         document_id=doc.id,
-        region_id="blob",
+        element_id="blob",
         outline=[
             (0.12, 0.2), (0.24, 0.1), (0.48, 0.08), (0.72, 0.16),
             (0.88, 0.36), (0.82, 0.68), (0.54, 0.86), (0.22, 0.76),
@@ -94,9 +94,9 @@ def test_preview_critique_flags_dominant_blob_shape():
         style=Style(fill="#66AA77"),
     )
     for i in range(3):
-        scene.create_region(
+        scene.create_element(
             document_id=doc.id,
-            region_id=f"detail_{i}",
+            element_id=f"detail_{i}",
             outline=[(0.2 + i * 0.1, 0.3), (0.24 + i * 0.1, 0.3), (0.24 + i * 0.1, 0.34), (0.2 + i * 0.1, 0.34)],
             style=Style(fill="#224433"),
         )
@@ -113,9 +113,9 @@ def test_critique_tool_visual_json_output():
     graph = query.get_graph()
     doc = graph.create_document()
     for i in range(4):
-        graph.create_region(
+        graph.create_element(
             document_id=doc.id,
-            region_id=f"obj_{i}",
+            element_id=f"obj_{i}",
             outline=[(0.1 + i * 0.15, 0.55), (0.2 + i * 0.15, 0.55), (0.2 + i * 0.15, 0.75), (0.1 + i * 0.15, 0.75)],
         )
 
@@ -134,9 +134,9 @@ def test_critique_tool_both_json_output_includes_rules_and_visual():
     graph = query.get_graph()
     doc = graph.create_document()
     for i in range(6):
-        graph.create_region(
+        graph.create_element(
             document_id=doc.id,
-            region_id=f"obj_{i}",
+            element_id=f"obj_{i}",
             outline=[(0.1 + i * 0.1, 0.55), (0.17 + i * 0.1, 0.55), (0.17 + i * 0.1, 0.7), (0.1 + i * 0.1, 0.7)],
         )
 

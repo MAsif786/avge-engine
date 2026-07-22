@@ -7,16 +7,16 @@ def test_document_service_clones_document_deeply():
     reset_graph()
     service = DocumentService()
     doc = service.create_document(width=800, height=600, name="source", background="#101820")
-    service.graph.create_region(
+    service.graph.create_element(
         document_id=doc.id,
-        region_id="panel",
+        element_id="panel",
         outline=[(0.1, 0.1), (0.4, 0.1), (0.4, 0.4), (0.1, 0.4)],
         style=Style(fill="#336699"),
         metadata={"kind": "facade"},
     )
-    service.graph.group_regions("facades", ["panel"], document_id=doc.id)
+    service.graph.group_elements("facades", ["panel"], document_id=doc.id)
 
-    clone, source_id, region_count = service.clone_document(
+    clone, source_id, element_count = service.clone_document(
         source_document_id=doc.id,
         name="copy",
     )
@@ -24,8 +24,8 @@ def test_document_service_clones_document_deeply():
     assert source_id == doc.id
     assert clone.id != doc.id
     assert clone.name == "copy"
-    assert region_count == 1
-    assert service.graph.get_region("panel", clone.id) is not service.graph.get_region("panel", doc.id)
+    assert element_count == 1
+    assert service.graph.get_element("panel", clone.id) is not service.graph.get_element("panel", doc.id)
     assert [r["id"] for r in service.graph.get_group("facades", clone.id)] == ["panel"]
 
 

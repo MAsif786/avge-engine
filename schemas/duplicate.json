@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/duplicate/v1.json",
   "title": "duplicate",
-  "description": "Duplicate a region or group with single, linear, grid, radial, scatter, or group placement.",
+  "description": "Duplicate a element or group with single, linear, grid, radial, scatter, or group placement.",
   "type": "object",
   "properties": {
     "pattern": {
       "type": "string",
       "enum": ["single", "linear", "grid", "radial", "scatter", "group"]
     },
-    "region_id": { "type": ["string", "null"] },
+    "element_id": { "type": ["string", "null"] },
     "group_name": { "type": ["string", "null"] },
     "document_id": { "type": ["string", "null"] },
     "count": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 1 },

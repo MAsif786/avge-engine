@@ -57,7 +57,7 @@ def load_all() -> dict[str, dict[str, Any]]:
 
 
 def get_schema(tool_name: str) -> dict[str, Any]:
-    """Get a single tool's schema by tool name (e.g. 'create_region')."""
+    """Get a single tool's schema by tool name (e.g. 'create_element')."""
     if not _registry:
         load_all()
     schema = _registry.get(tool_name)

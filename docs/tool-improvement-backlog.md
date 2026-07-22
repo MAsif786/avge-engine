@@ -12,15 +12,15 @@ This backlog is implementation-oriented. Usage recipes belong in `docs/design-gu
 | `add_shading(mode="gradient", stops, light_direction, strength)` | Separate architecture gradient-shading proposal | Continuous per-plane shading cannot be expressed by hard two-tone copies. |
 | `generate_background_asset(mode, bounds, count, density, seed, detail)` | `generate_shape(pattern="cornice")`, `generate_shape(pattern="awning")`, `generate_shape(pattern="rooftop_props")`, `create_facade_details`, `create_building_cluster`, tree/water/rock/grass generators | Implemented in `m0b-v21` with generic modes for facade detail, tree clusters, cloud banks, water ripples, rock clusters, and grass patches. |
 | `apply_fx(type="lens_flare"|"motion_blur"|"speed_lines"|"impact_lines"|"particles", ...)` | `create_lens_flare`, `create_motion_effect`, weather/particle helper tools | Implemented in `m0b-v23` for editable vector directional/radiant/action FX. Single-stroke weather remains a brush preset. |
-| `mix_region_colors(source_region_id, target_region_id, mix_ratio, output)` | True `mixer_brush` behavior | Implemented in `m0b-v24` for returning, applying, or duplicating mixed solid region colors. |
-| `smudge_region` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
-| `warp_region(region_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Implemented in `m0b-v25` for bend, bulge, pinch, wave, and handle-shift outline deformation. |
-| `mesh_warp_region` | Higher-order organic deformation | Deferred. Build only if `warp_region` is insufficient. |
-| `create_comic_panel_layout(layout, rows, columns, gutters, reading_direction, ...)` | Panel creator and page layout tools | Implemented in `m0b-v22` with grouped panel regions, gutters, common page layouts, reading-order metadata, and clip-target metadata. |
+| `mix_element_colors(source_element_id, target_element_id, mix_ratio, output)` | True `mixer_brush` behavior | Implemented in `m0b-v24` for returning, applying, or duplicating mixed solid element colors. |
+| `smudge_element` / `smudge_edge` | Smudge coloring workflow | Directional color drag is different from `blur`, which only softens in place. |
+| `warp_element(element_id, mode, handles, falloff, preserve_corners)` | General warp/free deformation gap | Implemented in `m0b-v25` for bend, bulge, pinch, wave, and handle-shift outline deformation. |
+| `mesh_warp_element` | Higher-order organic deformation | Deferred. Build only if `warp_element` is insufficient. |
+| `create_comic_panel_layout(layout, rows, columns, gutters, reading_direction, ...)` | Panel creator and page layout tools | Implemented in `m0b-v22` with grouped panel elements, gutters, common page layouts, reading-order metadata, and clip-target metadata. |
 | `create_speech_balloon` | Manual balloon body + tail + text composition | Composite object with body, tail, text, grouping, and z-index defaults. |
 | `create_sound_effect_text` | Plain text plus manual outline/shadow accents | Composite lettering treatment for comic/manga SFX. |
 | `create_surface_stripes(target_quad, count, orientation, ...)` | Manual crosswalk/lane/floor stripe placement | Repeated projected stripes need shared perspective and spacing falloff. |
-| `measure_geometry(mode, points/region_id, units)` | Ruler, angle tool, distance tool | Query operation returning structured measurements in normalized and pixel units. |
+| `measure_geometry(mode, points/element_id, units)` | Ruler, angle tool, distance tool | Query operation returning structured measurements in normalized and pixel units. |
 | `create_measurement_grid` | Flat ruler/grid/guides | Flat construction grid is distinct from vanishing-point perspective grids. |
 | `create_adjustment_layer(type, selector, strength, ...)` | Scene-wide color grading/publishing polish | Non-destructive or overlay-based correction has no existing equivalent. |
 | `symmetry_duplicate(mode="mirror"|"radial"|"rotational"|"kaleidoscope", ...)` | Mirror/radial/rotational/kaleidoscope symmetry requests | Existing duplicate/transform covers part of this; kaleidoscope and a unified symmetric workflow are the gap. |
@@ -47,7 +47,7 @@ These may be useful, but should not be promoted to tools until an eval shows age
 |---|---|
 | `create_character_guide` | Does it materially improve face/body/hand/foot scaffold quality beyond the design guide plus primitives? |
 | `create_character_template` | Does it improve turnarounds, expression sheets, or pose references enough to justify a tool? |
-| `create_reference_board` | Likely composition-only: regions, text labels, palettes, and layer metadata. Build only if repeated failures show a tool is needed. |
+| `create_reference_board` | Likely composition-only: elements, text labels, palettes, and layer metadata. Build only if repeated failures show a tool is needed. |
 | Layer grouping metadata | Useful for organization, but not a drawing/rendering gap. Consider metadata support only if complex scenes become hard to manage. |
 
 ## Engine And Storage Backlog
@@ -56,7 +56,7 @@ These are not agent-facing tools. They are internal runtime/storage improvements
 
 | Candidate | Why defer |
 |---|---|
-| Compact raw in-memory regions | Current compact storage omits defaults/nulls and uses `outline_q`, but load still hydrates full `RegionNode` objects. A future `RegionStore` can keep full documents loaded as compact raw dicts, resolve defaults through helpers, and hydrate `RegionNode` only for touched regions. Measured memory reduction is roughly 38-56% on sampled docs, but this touches many scene/render/service paths, so keep it as a separate phase. |
+| Compact raw in-memory elements | Current compact storage omits defaults/nulls and uses `outline_q`, but load still hydrates full `ElementNode` objects. A future `ElementStore` can keep full documents loaded as compact raw dicts, resolve defaults through helpers, and hydrate `ElementNode` only for touched elements. Measured memory reduction is roughly 38-56% on sampled docs, but this touches many scene/render/service paths, so keep it as a separate phase. |
 
 ## Removed Or Not Planned
 
@@ -67,20 +67,20 @@ These should not be added as standalone tools.
 | `generate_cloud` | Use brush/cloud presets, scatter duplication, gradient shading, and blur as a documented composition pattern. |
 | One-point/two-point rulers | Existing `create_perspective_grid` covers them as modes. |
 | Move/scale/rotate/free transform | Existing `transform_objects` covers these. |
-| Rectangle/circle/ellipse/polygon/star/line/basic curve | Existing `create_primitive`, `create_region`, `create_curve`, and primitive API endpoints cover these. |
+| Rectangle/circle/ellipse/polygon/star/line/basic curve | Existing `create_primitive`, `create_element`, `create_curve`, and primitive API endpoints cover these. |
 | Lasso/rectangle select/ellipse select/object selection UI tools | Use shared selectors; consider only generic `select_by_shape` or `select_similar` if selector failures persist. |
-| Alpha lock | Agents can restyle selected regions without changing geometry. |
+| Alpha lock | Agents can restyle selected elements without changing geometry. |
 | Separate mask/clipping-mask tools | Existing `clip_to` covers the core behavior unless repeated mistakes justify a wrapper. |
 | Separate glow/bloom tools | Glow is covered by presets/blend modes/soft overlays; bloom by `apply_texture_effect(effect="bloom")`. |
 | PSD/CLIP export | Heavy app-specific publishing formats; out of scope for now. |
 | True CMYK conversion | Out of scope until there is a real print pipeline; store color-mode metadata first. |
-| Color picker | Agents can inspect `get_region`/style data; not worth a separate human-style tool. |
+| Color picker | Agents can inspect `get_element`/style data; not worth a separate human-style tool. |
 
 ## Namespace Assignment
 
 - **Eager core:** `add_shading`, `export_raster`
-- **Style:** `smudge_region`/`smudge_edge`, `pattern_brush_along_path`, brush preset table
-- **Geometry:** `measure_geometry`, `create_measurement_grid`, `symmetry_duplicate`, `mesh_warp_region`, Bézier mode for `create_curve`
+- **Style:** `smudge_element`/`smudge_edge`, `pattern_brush_along_path`, brush preset table
+- **Geometry:** `measure_geometry`, `create_measurement_grid`, `symmetry_duplicate`, `mesh_warp_element`, Bézier mode for `create_curve`
 - **Scene:** `create_adjustment_layer`, `create_surface_stripes`, `resize_document`, `set_print_metadata`
 - **Comic:** `create_speech_balloon`, `create_sound_effect_text`
 - **Eval-gated scene helpers:** character guide/template/reference board/layer grouping
@@ -125,11 +125,11 @@ Phase 2 core tool work complete. Deferred items remain eval-gated or lower prior
 4. `create_surface_stripes`
 5. `create_adjustment_layer`
 6. Bézier mode on `create_curve`
-7. `smudge_region` / `smudge_edge`
+7. `smudge_element` / `smudge_edge`
 
 ### Phase 5 — Eval-Gated Or Deferred
 
 - Run a character/reference scaffold eval before building `create_character_guide`, `create_character_template`, or `create_reference_board`.
 - Build `pattern_brush_along_path` only if current pattern tools fail real decorative-border/stamp cases.
-- Build `mesh_warp_region` only if `warp_region` fails real deformation cases.
+- Build `mesh_warp_element` only if `warp_element` fails real deformation cases.
 - Add export/critique guardrails for visible guide layers alongside any guide/template feature that ships.

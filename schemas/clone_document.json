@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://avge.dev/schemas/clone_document/v1.json",
   "title": "clone_document",
-  "description": "Clone an existing document into a new document ID, including metadata, gradients, regions, layers, groups, and editable geometry.",
+  "description": "Clone an existing document into a new document ID, including metadata, gradients, elements, layers, groups, and editable geometry.",
   "type": "object",
   "properties": {
     "source_document_id": {

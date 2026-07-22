@@ -6,13 +6,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from avge_engine.schemas.common import StrokeWidthInput
-from avge_engine.scene.models import RegionNode
+from avge_engine.scene.models import ElementNode
 
 
 class DocumentSummary(BaseModel):
     document: dict[str, Any]
-    region_count: int
-    regions: list[dict[str, Any]] | None = None
+    element_count: int
+    elements: list[dict[str, Any]] | None = None
 
 
 class DeleteDocumentsResult(BaseModel):
@@ -28,21 +28,21 @@ class HistoryEntry(BaseModel):
     time: str = "?"
     action: str = "?"
     detail: str = ""
-    region_count: str = "?"
+    element_count: str = "?"
 
 
-class EditRegionResult(BaseModel):
+class EditElementResult(BaseModel):
     affected: list[str]
 
 
-class EditRegionsResult(BaseModel):
+class EditElementsResult(BaseModel):
     ok: int
     total: int
     lines: list[str]
 
 
 class RefineLineResult(BaseModel):
-    region_id: str
+    element_id: str
     before_points: int
     after_points: int
     mode: str
@@ -54,7 +54,7 @@ class CopyElementResult(BaseModel):
     target_document_id: str
     copied_ids: list[str]
     group_name: str | None = None
-    source_region_id: str | None = None
+    source_element_id: str | None = None
 
 
 class InsertImageResult(BaseModel):
@@ -64,29 +64,29 @@ class InsertImageResult(BaseModel):
     width: float
     height: float
     href_length: int | None = None
-    region_id: str | None = None
+    element_id: str | None = None
     created_ids: list[str] = Field(default_factory=list)
 
 
-class CreateRegionResult(BaseModel):
-    region_id: str
+class CreateElementResult(BaseModel):
+    element_id: str
     bounds: dict[str, float] | None
     outline_point_count: int
     warnings: list[str] = Field(default_factory=list)
 
 
 class CreatePrimitiveResult(BaseModel):
-    region_id: str
+    element_id: str
 
 
 class CreateCurveResult(BaseModel):
-    region_id: str
+    element_id: str
     points: int
     smoothness: float
 
 
 class BooleanOperationResult(BaseModel):
-    region_id: str
+    element_id: str
     outline_points: int
 
 
@@ -101,7 +101,7 @@ class FacadeGridResult(BaseModel):
     prefix: str
     windows: int
     lit_ratio: float
-    region_count: int
+    element_count: int
 
 
 class SurfaceStripesResult(BaseModel):
@@ -128,9 +128,9 @@ class LineHierarchyResult(BaseModel):
 
 
 class ShadowResult(BaseModel):
-    shadow: RegionNode
+    shadow: ElementNode
     source_id: str
-    onto_region_id: str | None
+    onto_element_id: str | None
     clipped: bool
     softness: float
     direction: float

@@ -1,4 +1,4 @@
-"""Region controller — create_region, delete_region, edit_region, duplicate_region."""
+"""Element controller — create_element, delete_element, edit_element, duplicate_element."""
 from __future__ import annotations
 
 import math
@@ -12,8 +12,8 @@ from avge_engine.services.engine import (
     validate_input,
     stroke_width_to_norm,
 )
-from avge_engine.services.region_service import RegionService
-from avge_engine.services.region_pattern_service import apply_primitive_patterns
+from avge_engine.services.element_service import ElementService
+from avge_engine.services.element_pattern_service import apply_primitive_patterns
 from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star, ellipse_band
 from avge_engine.scene import CurveConstraints, Style
 
@@ -25,21 +25,21 @@ IMAGE_IMPORT_MODES = Literal["image", "embed", "svg_paths"]
 
 
 def _relative_to_absolute(scene, doc_id, relative_to, points):
-    """Transform relative (0-1) coordinates to absolute within a reference region's bounds.
+    """Transform relative (0-1) coordinates to absolute within a reference element's bounds.
 
     Args:
         scene: Scene graph instance.
         doc_id: Document ID.
-        relative_to: Region ID to use as reference bounding box.
+        relative_to: Element ID to use as reference bounding box.
         points: List of [x, y] or (x, y) coordinates in 0-1 space.
 
     Returns:
         Transformed coordinates in absolute canvas space.
     """
-    region = scene.get_region(relative_to, doc_id)
-    if region is None:
-        raise ValueError(f"Reference region '{relative_to}' not found")
-    b = region.bounds
+    element = scene.get_element(relative_to, doc_id)
+    if element is None:
+        raise ValueError(f"Reference element '{relative_to}' not found")
+    b = element.bounds
     bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
     if bw < 1e-10:
         bw = 1e-10
@@ -50,10 +50,10 @@ def _relative_to_absolute(scene, doc_id, relative_to, points):
 
 def _relative_shape(scene, doc_id, relative_to, shape):
     """Transform a shape dict's coordinate keys from relative to absolute."""
-    region = scene.get_region(relative_to, doc_id)
-    if region is None:
-        raise ValueError(f"Reference region '{relative_to}' not found")
-    b = region.bounds
+    element = scene.get_element(relative_to, doc_id)
+    if element is None:
+        raise ValueError(f"Reference element '{relative_to}' not found")
+    b = element.bounds
     bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
     if bw < 1e-10:
         bw = 1e-10
@@ -100,22 +100,22 @@ def _relative_shape(scene, doc_id, relative_to, shape):
 
 
 def create_tools(mcp):
-    """Register region tools on the given FastMCP instance."""
+    """Register element tools on the given FastMCP instance."""
 
     @mcp.tool(
-        name="create_region",
-        description="Create a vector region from an outline defined by points. "
+        name="create_element",
+        description="Create a vector element from an outline defined by points. "
         "The engine fits smooth Bézier curves to your points. "
         "⚠️ Coordinates MUST be normalized 0.0–1.0 "
         "((0,0)=top-left, (1,1)=bottom-right). "
-        "💡 Refine incrementally: add regions here, use "
-        "``restyle`` to recolor, ``edit_region`` to nudge points — "
+        "💡 Refine incrementally: add elements here, use "
+        "``restyle`` to recolor, ``edit_element`` to nudge points — "
         "never rebuild from scratch. "
         "💡 blur=N adds Gaussian blur for soft glows, shadows, and fog.",
     )
-    def create_region(
+    def create_element(
         outline: list[list[float]] | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         document_id: str | None = None,
         layer: str = "default",
         closed: bool = True,
@@ -150,7 +150,7 @@ def create_tools(mcp):
         pattern_stroke_width: StrokeWidthInput = None,
         pattern_opacity: float | None = None,
     ) -> str:
-        """Create a vector region. Use ``outline`` for polygon/curve shapes,
+        """Create a vector element. Use ``outline`` for polygon/curve shapes,
         or ``shape`` dict for SVG primitives (rect, ellipse, line).
         When ``shape`` is set, ``outline`` is ignored.
 
@@ -163,7 +163,7 @@ def create_tools(mcp):
                 line: x1, y1, x2, y2 (stroke only, fill ignored)
                 star: cx, cy, r, r_inner?, points? (default 5), rotate?
                 polygon: cx, cy, r, sides? (default 6), rotate?
-            region_id: Optional unique ID (auto-generated if omitted).
+            element_id: Optional unique ID (auto-generated if omitted).
             document_id: Document UUID (omit to use active document).
             layer: Layer name (default "default").
             closed: Whether polygon shape is closed (default True).
@@ -180,26 +180,26 @@ def create_tools(mcp):
                 💡 Use for smooth lighting on panels, bottles, glass reflections.
             smoothness_per_point: JSON array of per-vertex tension values.
             z_index: Paint order (higher = on top).
-            z_before: Place this region directly behind the region with this ID.
-                Overrides z_index if the referenced region exists.
-            z_after: Place this region directly in front of the region with this ID.
-                Overrides z_index if the referenced region exists.
-            clip_to: Region ID to constrain rendering inside that region's outline.
+            z_before: Place this element directly behind the element with this ID.
+                Overrides z_index if the referenced element exists.
+            z_after: Place this element directly in front of the element with this ID.
+                Overrides z_index if the referenced element exists.
+            clip_to: Element ID to constrain rendering inside that element's outline.
             blend_mode: CSS mix-blend-mode.
             tags: JSON object of key/value metadata tags.
             stroke_linecap: Line end style for line shapes — "butt", "round", or "square".
             stroke_dasharray: Dash pattern for strokes (e.g. "4,2" for 4px dash, 2px gap).
             blur: Gaussian blur radius in pixels — soft glows, shadows, fog.
-                💡 One blur region replaces 4-5 stacked low-opacity ellipses.
+                💡 One blur element replaces 4-5 stacked low-opacity ellipses.
             rotate: Rotation in degrees around the shape center. 💡 For rotated primitives
-                via the shape parameter, or use transform_objects post-hoc for existing regions.
+                via the shape parameter, or use transform_objects post-hoc for existing elements.
             handle_in: Per-point incoming Bézier handle vectors [[dx,dy],...]. Overrides Catmull-Rom.
             handle_out: Per-point outgoing Bézier handle vectors [[dx,dy],...].
-            relative_to: Region ID to use as coordinate reference. When set,
+            relative_to: Element ID to use as coordinate reference. When set,
                 outline points are treated as 0.0-1.0 fractions of the reference
-                region's bounding box, then mapped to absolute canvas coordinates.
+                element's bounding box, then mapped to absolute canvas coordinates.
                 💡 Place a bolt at (0.5, 0.5) on a belt panel without measuring.
-            groups: Optional list of group names to add this region to.
+            groups: Optional list of group names to add this element to.
             outline_pattern: Optional primitive outline style: dashed, dotted,
                 wavy, zigzag, rough, sketch, tapered, or pressure.
             fill_pattern: Optional clipped interior texture: hatch, cross_hatch,
@@ -222,13 +222,13 @@ def create_tools(mcp):
         resolved_z = z_index
         try:
             if z_before is not None:
-                ref = scene.get_region(z_before, doc_id)
+                ref = scene.get_element(z_before, doc_id)
                 resolved_z = ref.z_index - 1
             elif z_after is not None:
-                ref = scene.get_region(z_after, doc_id)
+                ref = scene.get_element(z_after, doc_id)
                 resolved_z = ref.z_index + 1
         except ValueError:
-            return f"Error: Reference region for z-ordering not found"
+            return f"Error: Reference element for z-ordering not found"
 
         # Resolve fill from fill_gradient (applies to both shape and outline paths)
         resolved_fill = fill
@@ -255,7 +255,7 @@ def create_tools(mcp):
                     r = scene.create_rect(
                         shape["x"], shape["y"], shape["width"], shape["height"],
                         rx=shape.get("rx", 0.0),
-                        document_id=doc_id, region_id=region_id,
+                        document_id=doc_id, element_id=element_id,
                         layer=layer, z_index=resolved_z,
                         fill=resolved_fill, stroke=stroke,
                         stroke_width=stroke_width, opacity=opacity,
@@ -274,13 +274,13 @@ def create_tools(mcp):
                     )
                     rxn = f", rx={shape.get('rx',0)}" if shape.get('rx',0) > 0 else ""
                     tpn = f", taper={shape.get('taper',0)}" if shape.get('taper',0) else ""
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Rect created: id={r.id}, {shape.get('x',0):.4f},{shape.get('y',0):.4f} {shape.get('width',0):.4f}x{shape.get('height',0):.4f}{rxn}{tpn}{extra}"
                 elif stype == "ellipse":
                     e = scene.create_ellipse(
                         shape["cx"], shape["cy"], shape["rx"],
                         ry=shape.get("ry", None),
-                        document_id=doc_id, region_id=region_id,
+                        document_id=doc_id, element_id=element_id,
                         layer=layer, z_index=resolved_z,
                         fill=resolved_fill, stroke=stroke,
                         stroke_width=stroke_width, opacity=opacity,
@@ -297,14 +297,14 @@ def create_tools(mcp):
                         layer, resolved_z,
                     )
                     rys = shape.get("ry", shape["rx"])
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}{extra}"
                 elif stype == "line":
                     pts = shape.get("points")
                     if pts is not None and len(pts) > 2:
                         lr = scene.create_line(
                             points=pts,
-                            document_id=doc_id, region_id=region_id,
+                            document_id=doc_id, element_id=element_id,
                             layer=layer, z_index=resolved_z,
                             stroke=stroke, stroke_width=stroke_width,
                             opacity=opacity, blend_mode=blend_mode,
@@ -318,7 +318,7 @@ def create_tools(mcp):
                     else:
                         lr = scene.create_line(
                             shape["x1"], shape["y1"], shape["x2"], shape["y2"],
-                            document_id=doc_id, region_id=region_id,
+                            document_id=doc_id, element_id=element_id,
                             layer=layer, z_index=resolved_z,
                             stroke=stroke, stroke_width=stroke_width,
                             opacity=opacity, blend_mode=blend_mode,
@@ -332,14 +332,14 @@ def create_tools(mcp):
                 elif  stype == "arc":
                     pts = compute_arc(shape["cx"], shape["cy"], shape["r"],
                         start_angle=shape.get("start_angle", 0.0), end_angle=shape.get("end_angle", 180.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_element(outline=pts, document_id=doc_id, element_id=element_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.5, closed=False),
                         style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     return f"Arc created: id={r.id}, ({shape['cx']:.4f},{shape['cy']:.4f}) r={shape['r']:.4f}"
                 elif  stype == "polygon":
                     pts = compute_polygon(shape["cx"], shape["cy"], shape["r"],
                         sides=shape.get("sides", 6), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
-                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_element(outline=pts, document_id=doc_id, element_id=element_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     pattern_ids = apply_primitive_patterns(
@@ -348,7 +348,7 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides{extra}"
                 elif  stype == "star":
                     inner_radius = shape.get("r_inner")
@@ -356,7 +356,7 @@ def create_tools(mcp):
                         inner_radius = shape["r"] * 0.5
                     pts = compute_star(shape["cx"], shape["cy"], shape["r"],
                         inner_radius, points=shape.get("points", 5), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
-                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_element(outline=pts, document_id=doc_id, element_id=element_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=resolved_fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity, blur=blur))
                     pattern_ids = apply_primitive_patterns(
@@ -365,7 +365,7 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Star created: id={r.id}, {shape.get('points',5)} points{extra}"
                 else:
                     return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, arc, polygon, star"
@@ -408,9 +408,9 @@ def create_tools(mcp):
             metadata = dict(tags)
 
         try:
-            region = scene.create_region(
+            element = scene.create_element(
                 outline=norm_outline,
-                region_id=region_id,
+                element_id=element_id,
                 document_id=doc_id,
                 layer=layer,
                 z_index=resolved_z,
@@ -423,13 +423,13 @@ def create_tools(mcp):
             return f"Error: {e}"
 
         pattern_ids = apply_primitive_patterns(
-            scene, doc_id, region, outline_pattern, fill_pattern,
+            scene, doc_id, element, outline_pattern, fill_pattern,
             pattern_density, pattern_amplitude, pattern_jitter,
             pattern_seed, stroke, pattern_width, pattern_opacity,
             layer, resolved_z,
         )
 
-        bounds = region.bounds
+        bounds = element.bounds
         bounds_str = (
             f"x={bounds['x']:.4f} y={bounds['y']:.4f} "
             f"w={bounds['w']:.4f} h={bounds['h']:.4f}"
@@ -445,9 +445,9 @@ def create_tools(mcp):
             )
 
         return (
-            f"Region created: id={region.id}, layer={region.layer}, "
+            f"Element created: id={element.id}, layer={element.layer}, "
             f"bounds=({bounds_str}), points={len(outline)}"
-            f"{', pattern_regions=' + str(len(pattern_ids)) if pattern_ids else ''}"
+            f"{', pattern_elements=' + str(len(pattern_ids)) if pattern_ids else ''}"
             f"{advisory}"
         )
 
@@ -474,7 +474,7 @@ def create_tools(mcp):
         samples: int = 64,
         perspective: float = 0.0,
         skew_x: float = 0.0,
-        region_id: str | None = None,
+        element_id: str | None = None,
         document_id: str | None = None,
         layer: str = "default",
         fill: str | None = "#CCCCCC",
@@ -499,7 +499,7 @@ def create_tools(mcp):
         pattern_stroke_width: StrokeWidthInput = None,
         pattern_opacity: float | None = None,
     ) -> str:
-        """Create an annular ellipse/arc band as a closed vector region.
+        """Create an annular ellipse/arc band as a closed vector element.
 
         Args:
             cx, cy: Center in normalized coordinates.
@@ -528,13 +528,13 @@ def create_tools(mcp):
         resolved_z = z_index
         try:
             if z_before is not None:
-                ref = scene.get_region(z_before, doc_id)
+                ref = scene.get_element(z_before, doc_id)
                 resolved_z = ref.z_index - 1
             elif z_after is not None:
-                ref = scene.get_region(z_after, doc_id)
+                ref = scene.get_element(z_after, doc_id)
                 resolved_z = ref.z_index + 1
         except ValueError:
-            return "Error: Reference region for z-ordering not found"
+            return "Error: Reference element for z-ordering not found"
 
         resolved_fill = fill
         if fill_gradient is not None:
@@ -562,9 +562,9 @@ def create_tools(mcp):
                 perspective=perspective,
                 skew_x=skew_x,
             )
-            region = scene.create_region(
+            element = scene.create_element(
                 outline=outline,
-                region_id=region_id,
+                element_id=element_id,
                 document_id=doc_id,
                 layer=layer,
                 z_index=resolved_z,
@@ -584,9 +584,9 @@ def create_tools(mcp):
             )
             if groups:
                 for g in groups:
-                    scene.add_to_group(g, [region.id], doc_id)
+                    scene.add_to_group(g, [element.id], doc_id)
             pattern_ids = apply_primitive_patterns(
-                scene, doc_id, region, outline_pattern, fill_pattern,
+                scene, doc_id, element, outline_pattern, fill_pattern,
                 pattern_density, pattern_amplitude, pattern_jitter,
                 pattern_seed, stroke, pattern_width, pattern_opacity,
                 layer, resolved_z,
@@ -594,7 +594,7 @@ def create_tools(mcp):
         except (ValueError, RuntimeError, KeyError) as e:
             return f"Error: {e}"
 
-        bounds = region.bounds
+        bounds = element.bounds
         bounds_str = (
             f"x={bounds['x']:.4f} y={bounds['y']:.4f} "
             f"w={bounds['w']:.4f} h={bounds['h']:.4f}"
@@ -602,51 +602,51 @@ def create_tools(mcp):
             else "N/A"
         )
         return (
-            f"Ellipse band created: id={region.id}, "
-            f"bounds=({bounds_str}), points={len(region.outline)}, "
+            f"Ellipse band created: id={element.id}, "
+            f"bounds=({bounds_str}), points={len(element.outline)}, "
             f"angles={start_angle:g}→{end_angle:g}"
-            f"{', pattern_regions=' + str(len(pattern_ids)) if pattern_ids else ''}"
+            f"{', pattern_elements=' + str(len(pattern_ids)) if pattern_ids else ''}"
         )
 
     @mcp.tool(
-        name="delete_region",
-        description="Delete one or more regions by ID. Returns list of "
+        name="delete_element",
+        description="Delete one or more elements by ID. Returns list of "
         "actually removed IDs. Use this to clean up stray geometry, "
         "botched outlines, or elements you want to replace.",
     )
-    def delete_region(ids: list[str], document_id: str | None = None) -> str:
-        """Delete one or more regions by ID.
+    def delete_element(ids: list[str], document_id: str | None = None) -> str:
+        """Delete one or more elements by ID.
 
         Args:
-            ids: List of region IDs to delete (e.g. ["tag", "steam1"]).
+            ids: List of element IDs to delete (e.g. ["tag", "steam1"]).
             document_id: Document UUID (omit to use active document).
         """
         try:
-            deleted = RegionService().delete_regions(ids=ids, document_id=document_id)
+            deleted = ElementService().delete_elements(ids=ids, document_id=document_id)
         except RuntimeError:
             return "Error: No active document"
 
         if not deleted:
-            return "No matching regions found to delete"
+            return "No matching elements found to delete"
         # Split into multiple lines to avoid output truncation
-        summary = f"Deleted {len(deleted)} region(s):"
+        summary = f"Deleted {len(deleted)} element(s):"
         lines = [summary]
         for i in range(0, len(deleted), 8):
             lines.append("  " + ", ".join(deleted[i:i+8]))
         return "\n".join(lines)
 
     @mcp.tool(
-        name="edit_region",
-        description="Modify an existing region's outline, style, z_index, or shape. "
+        name="edit_element",
+        description="Modify an existing element's outline, style, z_index, or shape. "
         "Only provided fields are changed; omitted fields keep their values. "
         "💡 Single-point editing: use ``point_index`` + ``point_coords`` "
         "to nudge one vertex without resending the whole outline. "
-        "Use transform_objects for whole-region move/scale/rotate/mirror/align. "
+        "Use transform_objects for whole-element move/scale/rotate/mirror/align. "
         "💡 Batch z-index: pass ids=[...] with z_index=N to reorder "
-        "multiple regions at once.",
+        "multiple elements at once.",
     )
-    def edit_region(
-        region_id: str | None = None,
+    def edit_element(
+        element_id: str | None = None,
         ids: list[str] | None = None,
         document_id: str | None = None,
         outline: list[list[float]] | None = None,
@@ -671,13 +671,13 @@ def create_tools(mcp):
         handle_in: list[list[float]] | None = None,
         handle_out: list[list[float]] | None = None,
     ) -> str:
-        """Modify an existing region's properties.
+        """Modify an existing element's properties.
 
         Args:
-            region_id: ID of the region to edit (omit if using ids).
+            element_id: ID of the element to edit (omit if using ids).
             document_id: Document UUID (omit for active doc).
-            ids: List of region IDs to edit simultaneously.
-                💡 Apply the same color/outline change to multiple regions at once.
+            ids: List of element IDs to edit simultaneously.
+                💡 Apply the same color/outline change to multiple elements at once.
             outline: New outline coordinates (omit to keep current).
             point_index: Index of a single outline point to move (requires
                 ``point_coords`` or ``point_dx``/``point_dy``). Avoids resending the
@@ -694,7 +694,7 @@ def create_tools(mcp):
             opacity: New opacity.
             z_index: New paint order (higher = on top).
             blend_mode: CSS mix-blend-mode (multiply, screen, overlay, etc.).
-            clip_to: Region ID to clip rendering inside.
+            clip_to: Element ID to clip rendering inside.
             layer: New layer name.
             tags: JSON object of key/value metadata tags (replaces all tags).
             shape: New primitive shape dict for rect/ellipse/line resize.
@@ -707,8 +707,8 @@ def create_tools(mcp):
             handle_out: Per-point outgoing Bézier handle vectors [[dx,dy],...].
         """
         try:
-            result = RegionService().edit_region(
-                region_id=region_id,
+            result = ElementService().edit_element(
+                element_id=element_id,
                 ids=ids,
                 document_id=document_id,
                 outline=outline,
@@ -734,45 +734,45 @@ def create_tools(mcp):
                 handle_out=handle_out,
             )
             if len(result.affected) == 1:
-                return f"Region '{result.affected[0]}' updated"
+                return f"Element '{result.affected[0]}' updated"
             if len(result.affected) > 1:
-                return f"Updated {len(result.affected)} region(s): {', '.join(result.affected)}"
-            return "No regions updated"
+                return f"Updated {len(result.affected)} element(s): {', '.join(result.affected)}"
+            return "No elements updated"
         except RuntimeError:
             return "Error: No active document"
         except (ValueError, IndexError) as e:
             return f"Error: {e}"
 
     @mcp.tool(
-        name="edit_regions",
-        description="Edit multiple regions in a single call, each with its own "
+        name="edit_elements",
+        description="Edit multiple elements in a single call, each with its own "
         "content/style override. Use transform_objects for move/scale/rotate/mirror/align. "
-        "💡 Recolor or relayer many regions without extra calls.\n"
+        "💡 Recolor or relayer many elements without extra calls.\n"
         'Example: [{"id":"belt","fill":"#222"},{"id":"belt_buckle","z_index":20}]',
     )
-    def edit_regions(
+    def edit_elements(
         updates: list[dict],
         document_id: str | None = None,
     ) -> str:
-        """Edit multiple regions with per-region content/style updates.
+        """Edit multiple elements with per-element content/style updates.
 
         Args:
             updates: List of update objects, each with:
-                - ``id`` (required): Region ID.
+                - ``id`` (required): Element ID.
                 - ``outline``: Replace outline points.
                 - ``fill`` / ``stroke`` / ``stroke_width`` / ``opacity``: Override style.
                 - ``z_index``: Override paint order.
                 - ``layer``: Move to a different layer.
                 - ``point_index`` / ``point_coords`` / ``point_dx`` / ``point_dy``: Edit one point.
-                Other ``edit_region`` fields also work.
+                Other ``edit_element`` fields also work.
             document_id: Document UUID (omit for active doc).
         """
         try:
-            result = RegionService().edit_regions(updates=updates, document_id=document_id)
+            result = ElementService().edit_elements(updates=updates, document_id=document_id)
         except RuntimeError:
             return "Error: No active document"
 
-        summary = f"edit_regions: {result.ok}/{result.total} updated"
+        summary = f"edit_elements: {result.ok}/{result.total} updated"
         return "\n".join([summary] + result.lines)
 
 
@@ -785,7 +785,7 @@ def create_tools(mcp):
         "geometry is right but the stroke needs cleanup.",
     )
     def refine_line(
-        region_id: str,
+        element_id: str,
         document_id: str | None = None,
         mode: Literal["stabilize", "smooth", "simplify", "straighten"] = "stabilize",
         strength: float = 0.5,
@@ -797,7 +797,7 @@ def create_tools(mcp):
         """Refine line/curve geometry in place.
 
         Args:
-            region_id: Existing region/line ID.
+            element_id: Existing element/line ID.
             document_id: Document UUID (omit for active doc).
             mode: stabilize, smooth, simplify, or straighten.
             strength: 0.0-1.0 correction strength.
@@ -807,8 +807,8 @@ def create_tools(mcp):
             iterations: Number of smoothing passes for mode='smooth'.
         """
         try:
-            result = RegionService().refine_line(
-                region_id=region_id,
+            result = ElementService().refine_line(
+                element_id=element_id,
                 document_id=document_id,
                 mode=mode,
                 strength=strength,
@@ -818,7 +818,7 @@ def create_tools(mcp):
                 iterations=iterations,
             )
             return (
-                f"Line refined: id={result.region_id}, mode={result.mode}, "
+                f"Line refined: id={result.element_id}, mode={result.mode}, "
                 f"points={result.before_points}->{result.after_points}, "
                 f"smoothness={result.smoothness}"
             )
@@ -850,7 +850,7 @@ def create_tools(mcp):
         y: float,
         text: str,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         fill: str | None = "#333333",
@@ -876,7 +876,7 @@ def create_tools(mcp):
                 For typical labels, place y at the bottom of where the text sits.
             text: The text content to display.
             document_id: Document UUID (omit to use active document).
-            region_id: Optional unique ID (auto-generated if omitted).
+            element_id: Optional unique ID (auto-generated if omitted).
             layer: Layer name (default "default").
             z_index: Paint order (higher = on top).
             fill: Text color (default "#333333").
@@ -895,7 +895,7 @@ def create_tools(mcp):
             skew_x: Skew along X axis in degrees (matches isometric slope).
                 For right face text use skew_y=-30, for left face skew_y=30.
             skew_y: Skew along Y axis in degrees.
-            groups: Optional list of group names to add this region to.
+            groups: Optional list of group names to add this element to.
             background_box: Dict to auto-create a rect behind the text.
                 Keys: fill (default "#FFF"), padding (default 0.01), rx (default 0.005),
                 stroke (default "none"), z_index_offset (default -1).
@@ -910,7 +910,7 @@ def create_tools(mcp):
         try:
             r = scene.create_text(
                 x, y, text,
-                document_id=doc_id, region_id=region_id,
+                document_id=doc_id, element_id=element_id,
                 layer=layer, z_index=z_index,
                 fill=fill, font_size=font_size, font_family=font_family,
                 text_anchor=text_anchor, font_weight=font_weight, font_style=font_style,
@@ -959,10 +959,10 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="insert_image",
-        description="Add an image to the canvas, embed it as a data URI, or import SVG paths as editable vector regions. "
+        description="Add an image to the canvas, embed it as a data URI, or import SVG paths as editable vector elements. "
         "import_mode='image' keeps href as an external SVG <image>; import_mode='embed' fetches local/remote bytes "
         "and stores a data URI so previews do not need network access; import_mode='svg_paths' parses SVG <path> "
-        "elements into editable regions. Use clip_to to hide overflow outside a mask/clip region.",
+        "elements into editable elements. Use clip_to to hide overflow outside a mask/clip element.",
     )
     def insert_image(
         x: float,
@@ -971,7 +971,7 @@ def create_tools(mcp):
         height: float,
         href: str,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         preserve_aspect_ratio: str = "xMidYMid meet",
@@ -992,18 +992,18 @@ def create_tools(mcp):
             width, height: Dimensions in normalized space.
             href: URL or data URI of the image.
             document_id: Document UUID (omit to use active document).
-            region_id: Optional unique ID.
+            element_id: Optional unique ID.
             layer: Layer name.
             z_index: Paint order.
             preserve_aspect_ratio: SVG preserveAspectRatio value
                 (default "xMidYMid meet").
             rotate: Rotation in degrees around image center.
-            clip_to: Optional region ID used as an SVG clip path.
+            clip_to: Optional element ID used as an SVG clip path.
             import_mode: "image" preserves href, "embed" stores fetched bytes
-                as data URI, "svg_paths" imports SVG path data as vector regions.
+                as data URI, "svg_paths" imports SVG path data as vector elements.
         """
         try:
-            service = RegionService()
+            service = ElementService()
             result = service.insert_image(
                 x=x,
                 y=y,
@@ -1011,7 +1011,7 @@ def create_tools(mcp):
                 height=height,
                 href=href,
                 document_id=document_id,
-                region_id=region_id,
+                element_id=element_id,
                 layer=layer,
                 z_index=z_index,
                 preserve_aspect_ratio=preserve_aspect_ratio,
@@ -1030,11 +1030,11 @@ def create_tools(mcp):
         except (ValueError, OSError, UnicodeDecodeError) as e:
             return f"Error: {e}"
         if result.mode == "svg_paths":
-            return f"SVG paths imported: regions={len(result.created_ids)}, ids={', '.join(result.created_ids[:6])}"
-        if result.region_id is None or result.href_length is None:
-            return "Error: insert_image returned no region"
+            return f"SVG paths imported: elements={len(result.created_ids)}, ids={', '.join(result.created_ids[:6])}"
+        if result.element_id is None or result.href_length is None:
+            return "Error: insert_image returned no element"
         return (
-            f"Image added: id={result.region_id}, mode={result.mode}, "
+            f"Image added: id={result.element_id}, mode={result.mode}, "
             f"({result.x:.4f},{result.y:.4f}) {result.width:.4f}x{result.height:.4f}, "
             f"len(href)={result.href_length}"
         )
@@ -1049,7 +1049,7 @@ def create_tools(mcp):
         "💡 Fingers: rect with rx=half the width gives perfect pill shapes. "
         "💡 Palm creases: line for stroke-only wrinkles. "
         "💡 Curved lines: use type='polyline' with points and smoothness. "
-        "💡 Compound strokes: use type='compound_path' with subpaths to keep many seams/cables as one region. "
+        "💡 Compound strokes: use type='compound_path' with subpaths to keep many seams/cables as one element. "
         "Shape object keys per type:\n"
         "  rect:     x, y, width, height, rx? (corner radius), taper? (trapezoid)\n"
         "  ellipse:  cx, cy, rx, ry? (ry=rx if omitted)\n"
@@ -1063,7 +1063,7 @@ def create_tools(mcp):
     def create_primitive(
         shape: dict,
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         z_before: str | None = None,
@@ -1103,11 +1103,11 @@ def create_tools(mcp):
                 polygon: {"type":"polygon", "cx":0.5, "cy":0.5, "r":0.1, "sides":8}
                 arc:    {"type":"arc", "cx":0.5, "cy":0.5, "r":0.1, "start_angle":0, "end_angle":180}
             document_id: Document UUID (omit to use active document).
-            region_id: Optional unique ID.
+            element_id: Optional unique ID.
             layer: Layer name.
             z_index: Paint order.
-            z_before: Place this region directly behind the region with this ID.
-            z_after: Place this region directly in front of the region with this ID.
+            z_before: Place this element directly behind the element with this ID.
+            z_after: Place this element directly in front of the element with this ID.
             fill: Fill hex color, gradient dict, or "none"/"transparent" for no fill.
             stroke: Stroke color.
             stroke_width: Stroke width in canvas pixels.
@@ -1119,11 +1119,11 @@ def create_tools(mcp):
             stroke_dasharray: Dash pattern for stroked primitives.
             smoothness: Default curve smoothness for polyline/compound_path.
             closed: Default closed flag for polyline/compound_path.
-            relative_to: Region ID to use as coordinate reference. When set,
+            relative_to: Element ID to use as coordinate reference. When set,
                 outline points are treated as 0.0-1.0 fractions of the reference
-                region's bounding box, then mapped to absolute canvas coordinates.
+                element's bounding box, then mapped to absolute canvas coordinates.
                 💡 Place a bolt at (0.5, 0.5) on a belt panel without measuring.
-            groups: Optional list of group names to add this region to.
+            groups: Optional list of group names to add this element to.
             outline_pattern: Optional outline style: dashed, dotted, wavy,
                 zigzag, rough, sketch, tapered, or pressure.
             fill_pattern: Optional clipped interior texture for closed primitives:
@@ -1145,13 +1145,13 @@ def create_tools(mcp):
         resolved_z = z_index
         try:
             if z_before is not None:
-                ref = scene.get_region(z_before, doc_id)
+                ref = scene.get_element(z_before, doc_id)
                 resolved_z = ref.z_index - 1
             elif z_after is not None:
-                ref = scene.get_region(z_after, doc_id)
+                ref = scene.get_element(z_after, doc_id)
                 resolved_z = ref.z_index + 1
         except ValueError:
-            return f"Error: Reference region for z-ordering not found"
+            return f"Error: Reference element for z-ordering not found"
 
         # Transform relative coords to absolute if relative_to is set
         if relative_to is not None:
@@ -1163,7 +1163,7 @@ def create_tools(mcp):
                 r = scene.create_rect(
                     shape["x"], shape["y"], shape["width"], shape["height"],
                     rx=shape.get("rx", 0.0),
-                    document_id=doc_id, region_id=region_id,
+                    document_id=doc_id, element_id=element_id,
                     layer=layer, z_index=resolved_z,
                     fill=fill, stroke=stroke,
                     stroke_width=stroke_width, opacity=opacity,
@@ -1181,13 +1181,13 @@ def create_tools(mcp):
                 )
                 rxn = f", rx={shape.get('rx',0)}" if shape.get('rx',0) > 0 else ""
                 tpn = f", taper={shape.get('taper',0)}" if shape.get('taper',0) else ""
-                extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                 return f"Rect created: id={r.id}, {shape['x']:.4f},{shape['y']:.4f} {shape['width']:.4f}x{shape['height']:.4f}{rxn}{tpn}{extra}"
             elif stype == "ellipse":
                 e = scene.create_ellipse(
                     shape["cx"], shape["cy"], shape["rx"],
                     ry=shape.get("ry"),
-                    document_id=doc_id, region_id=region_id,
+                    document_id=doc_id, element_id=element_id,
                     layer=layer, z_index=resolved_z,
                     fill=fill, stroke=stroke,
                     stroke_width=stroke_width, opacity=opacity,
@@ -1204,7 +1204,7 @@ def create_tools(mcp):
                     layer, resolved_z,
                 )
                 rys = shape.get("ry", shape["rx"])
-                extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                 return f"Ellipse created: id={e.id}, cx={shape['cx']:.4f} cy={shape['cy']:.4f} rx={shape['rx']:.4f} ry={rys:.4f}{extra}"
             elif stype in ("line", "polyline"):
                 pts = shape.get("points")
@@ -1214,9 +1214,9 @@ def create_tools(mcp):
                     is_closed = bool(shape.get("closed", closed if closed is not None else False))
                     line_smoothness = shape.get("smoothness", smoothness)
                     if is_closed:
-                        lr = scene.create_region(
+                        lr = scene.create_element(
                             outline=[(float(p[0]), float(p[1])) for p in pts],
-                            document_id=doc_id, region_id=region_id,
+                            document_id=doc_id, element_id=element_id,
                             layer=layer, z_index=resolved_z,
                             constraints=CurveConstraints(
                                 smoothness=max(0.0, min(1.0, line_smoothness if line_smoothness is not None else 0.0)),
@@ -1235,7 +1235,7 @@ def create_tools(mcp):
                     else:
                         lr = scene.create_line(
                             points=pts,
-                            document_id=doc_id, region_id=region_id,
+                            document_id=doc_id, element_id=element_id,
                             layer=layer, z_index=resolved_z,
                             stroke=stroke, stroke_width=stroke_width,
                             opacity=opacity, blend_mode=blend_mode,
@@ -1254,13 +1254,13 @@ def create_tools(mcp):
                         layer, resolved_z,
                     )
                     closed_note = ", closed" if is_closed else ""
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Polyline created: id={lr.id}, {len(pts)} points{closed_note}{extra}"
                 else:
                     lr = scene.create_line(
                         shape.get("x1", 0.0), shape.get("y1", 0.0),
                         shape.get("x2", 0.5), shape.get("y2", 0.5),
-                        document_id=doc_id, region_id=region_id,
+                        document_id=doc_id, element_id=element_id,
                         layer=layer, z_index=resolved_z,
                         stroke=stroke, stroke_width=stroke_width,
                         opacity=opacity, blend_mode=blend_mode,
@@ -1277,7 +1277,7 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Line created: id={lr.id}, ({shape.get('x1',0):.4f},{shape.get('y1',0):.4f}) → ({shape.get('x2',0.5):.4f},{shape.get('y2',0.5):.4f}){extra}"
             elif stype in ("compound_path", "path"):
                     subpaths = shape.get("subpaths")
@@ -1287,7 +1287,7 @@ def create_tools(mcp):
                         return "Error: compound_path requires subpaths"
                     r = scene.create_compound_path(
                         subpaths=subpaths,
-                        document_id=doc_id, region_id=region_id,
+                        document_id=doc_id, element_id=element_id,
                         layer=layer, z_index=resolved_z,
                         fill=None if fill in (None, "none", "transparent") else fill,
                         stroke=None if stroke in (None, "none") else stroke,
@@ -1309,12 +1309,12 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Compound path created: id={r.id}, {len(subpaths)} subpath(s){extra}"
             elif stype == "arc":
                     pts = compute_arc(shape["cx"], shape["cy"], shape["r"],
                         start_angle=shape.get("start_angle", 0.0), end_angle=shape.get("end_angle", 180.0))
-                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_element(outline=pts, document_id=doc_id, element_id=element_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.5, closed=False),
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
                     pattern_ids = apply_primitive_patterns(
@@ -1323,12 +1323,12 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Arc created: id={r.id}, ({shape['cx']:.4f},{shape['cy']:.4f}) r={shape['r']:.4f}{extra}"
             elif stype == "polygon":
                     pts = compute_polygon(shape["cx"], shape["cy"], shape["r"],
                         sides=shape.get("sides", 6), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
-                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_element(outline=pts, document_id=doc_id, element_id=element_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
                     pattern_ids = apply_primitive_patterns(
@@ -1337,7 +1337,7 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Polygon created: id={r.id}, {shape.get('sides',6)} sides{extra}"
             elif stype == "star":
                     inner_radius = shape.get("r_inner")
@@ -1345,7 +1345,7 @@ def create_tools(mcp):
                         inner_radius = shape["r"] * 0.5
                     pts = compute_star(shape["cx"], shape["cy"], shape["r"],
                         inner_radius, points=shape.get("points", 5), rotation=shape.get("rotate", shape.get("rotation", 0.0)))
-                    r = scene.create_region(outline=pts, document_id=doc_id, region_id=region_id, layer=layer, z_index=resolved_z,
+                    r = scene.create_element(outline=pts, document_id=doc_id, element_id=element_id, layer=layer, z_index=resolved_z,
                         constraints=CurveConstraints(smoothness=0.0, closed=True),
                         style=Style(fill=fill, stroke=stroke, stroke_width=stroke_width, opacity=opacity))
                     pattern_ids = apply_primitive_patterns(
@@ -1354,7 +1354,7 @@ def create_tools(mcp):
                         pattern_seed, stroke, pattern_width, pattern_opacity,
                         layer, resolved_z,
                     )
-                    extra = f", pattern_regions={len(pattern_ids)}" if pattern_ids else ""
+                    extra = f", pattern_elements={len(pattern_ids)}" if pattern_ids else ""
                     return f"Star created: id={r.id}, {shape.get('points',5)} points{extra}"
             else:
                 return f"Error: Unknown shape type '{stype}'. Supported: rect, ellipse, line, polyline, compound_path, path, arc, polygon, star"
@@ -1364,7 +1364,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="create_curve",
         description="Create a smooth curved line through 3+ control points. "
-        "Unlike create_region (filled shapes) or create_shape (primitives), "
+        "Unlike create_element (filled shapes) or create_shape (primitives), "
         "create_curve produces a thin stroked path that curves through your "
         "points with Catmull-Rom interpolation. "
         "💡 Hair strands: 4-6 points with smoothness=0.5, stroke='#3D2B1F', "
@@ -1377,7 +1377,7 @@ def create_tools(mcp):
     def create_curve(
         points: list[list[float]],
         document_id: str | None = None,
-        region_id: str | None = None,
+        element_id: str | None = None,
         layer: str = "default",
         z_index: int = 0,
         stroke: str | None = "#333333",
@@ -1401,7 +1401,7 @@ def create_tools(mcp):
         Args:
             points: List of [x, y] control points in normalized space (3+ required).
             document_id: Document UUID (omit to use active document).
-            region_id: Optional unique ID.
+            element_id: Optional unique ID.
             layer: Layer name (default "default").
             z_index: Paint order (higher = on top).
             stroke: Stroke color (default "#333333").
@@ -1411,8 +1411,8 @@ def create_tools(mcp):
             blend_mode: CSS mix-blend-mode.
             stroke_linecap: Line end style — "round" (default), "butt", or "square".
             stroke_dasharray: Dash pattern for strokes (e.g. "4,2").
-            relative_to: Region ID to use as coordinate reference. Points are
-                treated as 0.0-1.0 fractions of the reference region's bounds.
+            relative_to: Element ID to use as coordinate reference. Points are
+                treated as 0.0-1.0 fractions of the reference element's bounds.
             outline_pattern: Optional line style overlay: dashed, dotted, wavy,
                 zigzag, rough, sketch, tapered, or pressure.
             pattern_density/amplitude/jitter/seed: Controls for generated outline pattern.
@@ -1443,7 +1443,7 @@ def create_tools(mcp):
                 x2, y2 = points[1]
                 lr = scene.create_line(
                     x1, y1, x2, y2,
-                    document_id=doc_id, region_id=region_id,
+                    document_id=doc_id, element_id=element_id,
                     layer=layer, z_index=z_index,
                     stroke=stroke, stroke_width=stroke_width,
                     opacity=opacity, blend_mode=blend_mode,
@@ -1453,7 +1453,7 @@ def create_tools(mcp):
             else:
                 lr = scene.create_line(
                     points=points,
-                    document_id=doc_id, region_id=region_id,
+                    document_id=doc_id, element_id=element_id,
                     layer=layer, z_index=z_index,
                     stroke=stroke, stroke_width=stroke_width,
                     opacity=opacity, blend_mode=blend_mode,
@@ -1471,50 +1471,50 @@ def create_tools(mcp):
                 f"Curve created: id={lr.id}, {len(points)} points, "
                 f"smoothness={smoothness}, stroke_width={stroke_width}, "
                 f"stroke_linecap='{stroke_linecap}'"
-                f"{', pattern_regions=' + str(len(pattern_ids)) if pattern_ids else ''}"
+                f"{', pattern_elements=' + str(len(pattern_ids)) if pattern_ids else ''}"
             )
         except (ValueError, RuntimeError) as e:
             return f"Error: {e}"
 
     @mcp.tool(
         name="copy_element",
-        description="Copy any element (region, rect, text, image, ellipse, line) "
+        description="Copy any element (element, rect, text, image, ellipse, line) "
         "or group from one document to another. "
         "💡 Reuse characters, props, or backgrounds across pages "
         "instead of rebuilding from scratch. "
         "Copies all properties: outline, style, primitive, transform, metadata. "
         "💡 Pass group_name='cat' to copy all group members at once. "
         "💡 Use offset_x/y to reposition in the target doc. "
-        "Example: copy_element(region_id='head', target_document_id='doc_p2') "
+        "Example: copy_element(element_id='head', target_document_id='doc_p2') "
         "Example: copy_element(group_name='building', target_document_id='doc_p2', "
         "source_document_id='doc_p1', offset_x=0.2)",
     )
     def copy_element(
-        region_id: str | None = None,
+        element_id: str | None = None,
         group_name: str | None = None,
         target_document_id: str | None = None,
         source_document_id: str | None = None,
-        new_region_id: str | None = None,
+        new_element_id: str | None = None,
         offset_x: float = 0.0,
         offset_y: float = 0.0,
     ) -> str:
         """Copy any element or group from one document to another.
 
         Args:
-            region_id: ID of the element to copy (omit if using group).
+            element_id: ID of the element to copy (omit if using group).
             group_name: Group name — copies all group members at once.
             target_document_id: Destination document UUID.
             source_document_id: Source document UUID (omit for current active doc).
-            new_region_id: Optional new ID for the copy (single region only).
+            new_element_id: Optional new ID for the copy (single element only).
             offset_x, offset_y: Position offset for the copy.
         """
         try:
-            result = RegionService().copy_element(
-                region_id=region_id,
+            result = ElementService().copy_element(
+                element_id=element_id,
                 group_name=group_name,
                 target_document_id=target_document_id,
                 source_document_id=source_document_id,
-                new_region_id=new_region_id,
+                new_element_id=new_element_id,
                 offset_x=offset_x,
                 offset_y=offset_y,
             )
@@ -1532,6 +1532,6 @@ def create_tools(mcp):
             )
 
         return (
-            f"Copied '{result.source_region_id}' from {result.source_document_id} to "
+            f"Copied '{result.source_element_id}' from {result.source_document_id} to "
             f"'{result.target_document_id}' as '{result.copied_ids[0]}'"
         )

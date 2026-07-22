@@ -1,4 +1,4 @@
-"""Region and primitive request schemas."""
+"""Element and primitive request schemas."""
 from __future__ import annotations
 
 from typing import Any
@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field
 from avge_engine.schemas.common import BLEND_MODES, BOOLEAN_OPS
 
 
-class CreateRegionRequest(BaseModel):
+class CreateElementRequest(BaseModel):
     outline: list[list[float]]
     document_id: str | None = None
-    region_id: str | None = None
+    element_id: str | None = None
     layer: str = "default"
     closed: bool = True
     smoothness: float = Field(default=0.5, ge=0.0, le=1.0)
@@ -30,8 +30,8 @@ class CreateRegionRequest(BaseModel):
     blur: float = Field(default=0.0, ge=0.0, le=80.0)
 
 
-class EditRegionRequest(BaseModel):
-    region_id: str
+class EditElementRequest(BaseModel):
+    element_id: str
     document_id: str
     outline: list[list[float]] | None = None
     smoothness: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -50,7 +50,7 @@ class EditRegionRequest(BaseModel):
     blur: float | None = Field(default=None, ge=0.0, le=80.0)
 
 
-class DeleteRegionRequest(BaseModel):
+class DeleteElementRequest(BaseModel):
     ids: list[str] = Field(min_length=1)
     document_id: str
     confirm: bool = False
@@ -59,17 +59,17 @@ class DeleteRegionRequest(BaseModel):
 class CopyElementRequest(BaseModel):
     source_document_id: str | None = None
     target_document_id: str
-    region_id: str | None = None
+    element_id: str | None = None
     group: str | None = None
-    new_region_id: str | None = None
+    new_element_id: str | None = None
     offset_x: float = 0.0
     offset_y: float = 0.0
 
 
 class BooleanOpRequest(BaseModel):
     operation: BOOLEAN_OPS = "union"
-    region_ids: list[str] = Field(min_length=2)
-    new_region_id: str | None = None
+    element_ids: list[str] = Field(min_length=2)
+    new_element_id: str | None = None
     document_id: str
     keep_originals: bool = False
     fill: str | None = None
@@ -81,7 +81,7 @@ class BooleanOpRequest(BaseModel):
 class CreateCurveRequest(BaseModel):
     points: list[list[float]] = Field(min_length=2, max_length=100)
     document_id: str
-    region_id: str | None = None
+    element_id: str | None = None
     layer: str = "default"
     z_index: int = 0
     stroke: str | None = "#333333"
@@ -99,7 +99,7 @@ class CreateRectRequest(BaseModel):
     height: float
     rx: float = 0.0
     document_id: str
-    region_id: str | None = None
+    element_id: str | None = None
     layer: str = "default"
     z_index: int = 0
     fill: str | None = "#CCCCCC"
@@ -115,7 +115,7 @@ class CreateEllipseRequest(BaseModel):
     rx: float
     ry: float | None = None
     document_id: str
-    region_id: str | None = None
+    element_id: str | None = None
     layer: str = "default"
     z_index: int = 0
     fill: str | None = "#CCCCCC"
@@ -131,7 +131,7 @@ class CreateLineRequest(BaseModel):
     x2: float
     y2: float
     document_id: str
-    region_id: str | None = None
+    element_id: str | None = None
     layer: str = "default"
     z_index: int = 0
     stroke: str | None = "#333333"

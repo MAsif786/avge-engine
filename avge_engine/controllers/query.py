@@ -5,7 +5,7 @@ import json as _json
 from typing import Any, Literal
 
 from avge_engine.services.engine import get_graph, resolve_doc
-from avge_engine.services.selector_service import select_region_ids
+from avge_engine.services.selector_service import select_element_ids
 
 
 def create_tools(mcp):
@@ -13,11 +13,11 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="find_objects",
-        description="Query regions with the shared selector schema or legacy top-level filters. "
-        "Lets you target e.g. 'all regions with fill #E8D4B0' for a "
+        description="Query elements with the shared selector schema or legacy top-level filters. "
+        "Lets you target e.g. 'all elements with fill #E8D4B0' for a "
         "palette-wide recolor without tracking every ID manually. "
         "Filters are AND-ed together; omit a filter to skip it. "
-        "💡 Use tags filter to find regions by semantic label "
+        "💡 Use tags filter to find elements by semantic label "
         "(e.g. tags={'part':'handle'} after creating with tags).",
     )
     def find_objects(
@@ -38,7 +38,7 @@ def create_tools(mcp):
         layer: str | None = None,
         tags: dict | None = None,
     ) -> str:
-        """Query regions by visual properties, bounds, and metadata tags.
+        """Query elements by visual properties, bounds, and metadata tags.
 
         Args:
             document_id: Document UUID (omit to use active document).
@@ -66,7 +66,7 @@ def create_tools(mcp):
             return "Error: No active document — call create_document first"
 
         if selector is not None:
-            target_ids = select_region_ids(scene, doc_id, selector)
+            target_ids = select_element_ids(scene, doc_id, selector)
             all_results = scene.find_objects(document_id=doc_id)
             target_set = set(target_ids)
             results = [r for r in all_results if r["id"] in target_set]
@@ -86,9 +86,9 @@ def create_tools(mcp):
             )
 
         if not results:
-            return "No matching regions found"
+            return "No matching elements found"
 
-        lines = [f"Found {len(results)} region(s):"]
+        lines = [f"Found {len(results)} element(s):"]
         for r in results:
             b = r["bounds"]
             lines.append(
@@ -165,8 +165,8 @@ def create_tools(mcp):
             lines.append(f"Visual ({len(visual_findings)} finding(s)):")
             if visual_findings:
                 for i, f in enumerate(visual_findings, 1):
-                    ids = f.get("region_ids") or []
-                    id_note = f" regions={', '.join(ids)}" if ids else ""
+                    ids = f.get("element_ids") or []
+                    id_note = f" elements={', '.join(ids)}" if ids else ""
                     lines.append(
                         f"  {i}. [{f['severity']}] {f['code']} "
                         f"(confidence={f['confidence']:.2f}){id_note}"
@@ -179,12 +179,12 @@ def create_tools(mcp):
 
     @mcp.tool(
         name="list_layers",
-        description="List all unique layers and their region counts. "
-        "Use shift_layer_z to shift all regions in a layer up or down "
+        description="List all unique layers and their element counts. "
+        "Use shift_layer_z to shift all elements in a layer up or down "
         "in the z-order.",
     )
     def list_layers(document_id: str | None = None) -> str:
-        """List all layers and their region counts.
+        """List all layers and their element counts.
 
         Args:
             document_id: Document UUID (omit to use active document).
@@ -202,12 +202,12 @@ def create_tools(mcp):
 
         lines = [f"Layers ({len(layers)}):"]
         for lr in layers:
-            lines.append(f"  {lr['layer']}: {lr['count']} region(s)")
+            lines.append(f"  {lr['layer']}: {lr['count']} element(s)")
         return "\n".join(lines)
 
     @mcp.tool(
         name="shift_layer_z",
-        description="Shift all regions in a layer by a z-offset. "
+        description="Shift all elements in a layer by a z-offset. "
         "Positive offset moves them higher (top), negative moves lower (back). "
         "Use after list_layers to find which layer to adjust.",
     )
@@ -216,7 +216,7 @@ def create_tools(mcp):
         z_offset: int,
         document_id: str | None = None,
     ) -> str:
-        """Shift all regions in a layer by z_offset.
+        """Shift all elements in a layer by z_offset.
 
         Args:
             layer: Layer name to reorder.
@@ -235,8 +235,8 @@ def create_tools(mcp):
             document_id=doc_id,
         )
         if count == 0:
-            return f"No regions found in layer '{layer}'"
+            return f"No elements found in layer '{layer}'"
         return (
-            f"Reordered {count} region(s) in layer '{layer}' "
+            f"Reordered {count} element(s) in layer '{layer}' "
             f"(z_offset={z_offset:+d})"
         )

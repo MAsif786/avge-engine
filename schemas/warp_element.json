@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avge.dev/schemas/warp_region/v1.json",
-  "title": "warp_region",
-  "description": "Apply non-affine vector outline deformation to one region.",
+  "$id": "https://avge.dev/schemas/warp_element/v1.json",
+  "title": "warp_element",
+  "description": "Apply non-affine vector outline deformation to one element.",
   "type": "object",
   "properties": {
-    "region_id": { "type": "string" },
+    "element_id": { "type": "string" },
     "mode": {
       "type": "string",
       "enum": ["bend", "bulge", "pinch", "wave", "handle_shift"],
@@ -42,6 +42,6 @@
     "preserve_corners": { "type": "boolean", "default": false },
     "smoothness": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
   },
-  "required": ["region_id"],
+  "required": ["element_id"],
   "additionalProperties": false
 }

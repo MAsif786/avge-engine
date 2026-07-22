@@ -4,11 +4,11 @@
   "$defs": {
     "selector": {
       "type": ["object", "null"],
-      "description": "Shared region selector. Keys are AND-ed except ids/group_name, which establish the initial candidate set. Omit/null where documented to select all regions.",
+      "description": "Shared element selector. Keys are AND-ed except ids/group_name, which establish the initial candidate set. Omit/null where documented to select all elements.",
       "properties": {
         "ids": {
           "type": "array",
-          "description": "Explicit region IDs.",
+          "description": "Explicit element IDs.",
           "items": { "type": "string" },
           "minItems": 1,
           "maxItems": 500

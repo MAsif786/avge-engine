@@ -8,16 +8,16 @@ def _setup_scene():
     service = ShadowService()
     graph = service.graph
     doc = graph.create_document(width=1000, height=800)
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="box",
+        element_id="box",
         outline=[(0.2, 0.2), (0.4, 0.2), (0.4, 0.4), (0.2, 0.4)],
         z_index=5,
         style=Style(fill="#6699CC", stroke="#111111", stroke_width=0.002),
     )
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="floor",
+        element_id="floor",
         outline=[(0.1, 0.5), (0.9, 0.5), (0.9, 0.9), (0.1, 0.9)],
         layer="floor",
         z_index=2,
@@ -31,13 +31,13 @@ def test_shadow_service_creates_clipped_shadow():
 
     result = service.create_shadow(
         document_id=doc.id,
-        region_id="box",
-        onto_region_id="floor",
-        new_region_id="box_cast",
+        element_id="box",
+        onto_element_id="floor",
+        new_element_id="box_cast",
         z_offset=1,
     )
 
-    shadow = service.graph.get_region("box_cast", doc.id)
+    shadow = service.graph.get_element("box_cast", doc.id)
     assert result.clipped is True
     assert result.shadow.id == "box_cast"
     assert shadow.clip_to == "floor"
@@ -59,4 +59,4 @@ def test_shadow_service_adds_gradient_shading_by_selector():
 
     assert result.mode == "gradient"
     assert result.target_count == 1
-    assert service.graph.get_region("box", doc.id).style.fill["type"] == "linear"
+    assert service.graph.get_element("box", doc.id).style.fill["type"] == "linear"

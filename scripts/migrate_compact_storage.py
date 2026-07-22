@@ -49,7 +49,7 @@ def main() -> int:
             continue
         try:
             old_bytes = path.read_bytes()
-            data = json.loads(old_bytes)
+            data = _normalize_element_keys(json.loads(old_bytes))
             data = decode_snapshot(data)
             compact = encode_snapshot(data)
             new_bytes = json.dumps(compact, separators=(",", ":"), default=str).encode()
@@ -88,6 +88,42 @@ def _atomic_write(path: Path, content: bytes) -> None:
         except OSError:
             pass
         raise
+
+
+def _normalize_element_keys(data: dict[str, Any]) -> dict[str, Any]:
+    """Convert legacy region-named persisted data to element-named data.
+
+    Runtime code no longer keeps region compatibility. This migration performs
+    the one-time persisted document rename before compact encoding.
+    """
+    normalized = dict(data)
+    if "elements" not in normalized and "regions" in normalized:
+        normalized["elements"] = normalized.pop("regions")
+    else:
+        normalized.pop("regions", None)
+
+    document = dict(normalized.get("document") or {})
+    if "region_count" in document and "element_count" not in document:
+        document["element_count"] = document.pop("region_count")
+    else:
+        document.pop("region_count", None)
+    normalized["document"] = document
+
+    metadata = dict(normalized.get("metadata") or {})
+    if "region_count" in metadata and "element_count" not in metadata:
+        metadata["element_count"] = metadata.pop("region_count")
+    else:
+        metadata.pop("region_count", None)
+    normalized["metadata"] = metadata
+
+    elements = {}
+    for element_id, element in (normalized.get("elements") or {}).items():
+        item = dict(element)
+        if item.get("type") == "region":
+            item["type"] = "element"
+        elements[element_id] = item
+    normalized["elements"] = elements
+    return normalized
 
 
 if __name__ == "__main__":

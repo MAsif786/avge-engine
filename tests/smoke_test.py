@@ -27,28 +27,28 @@ def test_create_document():
     print("  ✓ create_document")
 
 
-def test_create_region():
+def test_create_element():
     scene = SceneGraph()
     did = _doc(scene)
-    region = scene.create_region(
-        document_id=did, region_id="triangle",
+    element = scene.create_element(
+        document_id=did, element_id="triangle",
         outline=[(0.1, 0.1), (0.5, 0.8), (0.9, 0.1)],
         constraints=CurveConstraints(smoothness=0.0, closed=True),
         style=Style(fill="#FF0000", stroke="#000000"),
     )
-    assert region.id == "triangle"
-    assert len(region.outline) == 3
-    assert region.style.fill == "#FF0000"
-    print("  ✓ create_region")
+    assert element.id == "triangle"
+    assert len(element.outline) == 3
+    assert element.style.fill == "#FF0000"
+    print("  ✓ create_element")
 
 
 def test_style_objects():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
+    scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
     affected = scene.style_objects(["r1"], document_id=did, fill="#00FF00", stroke_width=0.02)
     assert affected == ["r1"]
-    r1 = scene.get_region("r1", did)
+    r1 = scene.get_element("r1", did)
     assert r1.style.fill == "#00FF00"
     assert r1.style.stroke_width == 0.02
     print("  ✓ style_objects")
@@ -57,11 +57,11 @@ def test_style_objects():
 def test_describe_scene():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
+    scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
     desc = scene.describe_scene(detail="summary", document_id=did)
-    assert desc["region_count"] == 1
-    assert desc["regions"][0]["id"] == "r1"
-    assert desc["regions"][0]["outline_point_count"] == 4
+    assert desc["element_count"] == 1
+    assert desc["elements"][0]["id"] == "r1"
+    assert desc["elements"][0]["outline_point_count"] == 4
     print("  ✓ describe_scene")
 
 
@@ -84,7 +84,7 @@ def test_curve_fitting():
 def test_renderer():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="sq",
+    scene.create_element(document_id=did, element_id="sq",
         outline=[(0.1,0.1),(0.9,0.1),(0.9,0.9),(0.1,0.9)],
         constraints=CurveConstraints(smoothness=0.0, closed=True),
         style=Style(fill="#4488FF", stroke="#222", stroke_width=0.01))
@@ -97,26 +97,26 @@ def test_renderer():
     print(f"  ✓ renderer ({len(svg)} chars svg, {len(b64)} b64)")
 
 
-def test_multi_region():
+def test_multi_element():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="body",
+    scene.create_element(document_id=did, element_id="body",
         outline=[(0.2,0.4),(0.8,0.4),(0.8,0.9),(0.2,0.9)],
         constraints=CurveConstraints(smoothness=0.0, closed=True),
         style=Style(fill="#E8D4B0", stroke="#333"))
-    scene.create_region(document_id=did, region_id="roof",
+    scene.create_element(document_id=did, element_id="roof",
         outline=[(0.15,0.4),(0.5,0.1),(0.85,0.4)],
         constraints=CurveConstraints(smoothness=0.0, closed=True),
         style=Style(fill="#CC5533", stroke="#333"))
     svg = svg_serialize(scene)
     assert "E8D4B0" in svg and "CC5533" in svg
-    print(f"  ✓ multi-region scene ({len(svg)} chars)")
+    print(f"  ✓ multi-element scene ({len(svg)} chars)")
 
 
 def test_deterministic():
     scene = SceneGraph()
     did = _doc(scene)
-    scene.create_region(document_id=did, region_id="t", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
+    scene.create_element(document_id=did, element_id="t", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
     svg1 = svg_serialize(scene)
     svg2 = svg_serialize(scene)
     assert svg1 == svg2
@@ -127,12 +127,12 @@ if __name__ == "__main__":
     print("\nAVGE Engine — Smoke Tests\n")
     tests = [
         ("Document", test_create_document),
-        ("Regions", test_create_region),
+        ("Elements", test_create_element),
         ("Style", test_style_objects),
         ("Describe", test_describe_scene),
         ("Curve Fitting", test_curve_fitting),
         ("Renderer", test_renderer),
-        ("Multi-Region", test_multi_region),
+        ("Multi-Element", test_multi_element),
         ("Determinism", test_deterministic),
     ]
     for name, fn in tests:

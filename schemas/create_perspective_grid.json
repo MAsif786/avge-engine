@@ -22,7 +22,7 @@
     },
     "horizon_y": { "type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.5 },
     "document_id": { "type": ["string", "null"], "default": null },
-    "region_id": { "type": ["string", "null"], "default": null },
+    "element_id": { "type": ["string", "null"], "default": null },
     "verticals": { "type": "integer", "minimum": 2, "maximum": 64, "default": 9 },
     "horizontals": { "type": "integer", "minimum": 2, "maximum": 64, "default": 9 },
     "bounds": {

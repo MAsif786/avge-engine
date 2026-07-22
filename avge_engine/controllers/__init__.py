@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from . import document, region, scene_view, style, history, scene_ops, query, procedural
+from . import document, element, scene_view, style, history, scene_ops, query, procedural
 
 TOOL_DISPATCH: dict[str, Callable[..., Any]] = {}
 """Global dispatch dict: tool name → callable. Populated by register_all().
@@ -19,7 +19,7 @@ Used by the batch tool to dynamically route ops to any registered tool."""
 def register_all(mcp):
     """Register all tool controllers with the given FastMCP instance."""
     document.create_tools(mcp)
-    region.create_tools(mcp)
+    element.create_tools(mcp)
     scene_view.create_tools(mcp)
     style.create_tools(mcp)
     history.create_tools(mcp)

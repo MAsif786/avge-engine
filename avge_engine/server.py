@@ -51,18 +51,18 @@ start with `create_perspective_grid`, block massing before detail, use
 `create_facade_grid` for windows, and finish the first pass with
 `apply_depth_haze`. Then run a densify pass: add overlapping buildings,
 secondary signs/props, facade clutter, wires, and falloff-spaced poles.
-Delete/hide all guide regions before final export.
+Delete/hide all guide elements before final export.
 
 📝 **Workflow — edit the same document, never rebuild from scratch:**
 1. `create_document` once with a `name` for your scene.
-2. `create_region` / `create_primitive` / `create_text` to add shapes.
-3. `restyle` to recolor existing regions — no need to delete and recreate.
+2. `create_element` / `create_primitive` / `create_text` to add shapes.
+3. `restyle` to recolor existing elements — no need to delete and recreate.
 4. `describe_scene` / `render_preview` to check and iterate.
 5. `checkpoint` before risky edits so `restore` can undo multiple steps.
-6. `delete_region` to remove unwanted geometry — avoids full rebuilds.
+6. `delete_element` to remove unwanted geometry — avoids full rebuilds.
 
 🔄 **Multi-part objects (e.g. cups, books, characters):**
-When an object has multiple regions (a cup body + handle + shadow, or a book
+When an object has multiple elements (a cup body + handle + shadow, or a book
 with cover + pages + spine), first `edit_group(action="create", group_name="...")`
 to collect them under a name, then `transform_objects(group_name="...")` to
 resize, reposition, or re-angle everything together.
@@ -74,7 +74,7 @@ Build in order: face → hair → eyes → brows → nose → mouth → ears →
 Use describe_scene between steps to verify positions. Checkpoint before risky edits.
 
 ⚡ **Batch patterns (execute ALL tools in one call):**
-  batch(ops=[{{"tool":"create_region", ...}}, {{"tool":"restyle", ...}}])
+  batch(ops=[{{"tool":"create_element", ...}}, {{"tool":"restyle", ...}}])
   💡 Create + style in one call instead of two.
 """,
 )

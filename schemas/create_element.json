@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avge.dev/schemas/create_region/v1.json",
-  "title": "create_region",
-  "description": "Create a vector region from a coarse point outline. The engine fits smooth Bézier curves to the outline using the supplied geometric constraints.",
+  "$id": "https://avge.dev/schemas/create_element/v1.json",
+  "title": "create_element",
+  "description": "Create a vector element from a coarse point outline. The engine fits smooth Bézier curves to the outline using the supplied geometric constraints.",
   "type": "object",
   "properties": {
     "outline": {
@@ -19,7 +19,7 @@
       },
       "minItems": 2
     },
-    "region_id": {
+    "element_id": {
       "type": "string",
       "description": "Optional unique ID (auto-generated if omitted).",
       "pattern": "^[a-zA-Z_][a-zA-Z0-9_-]{0,63}$"
@@ -33,8 +33,8 @@
     "type": {
       "type": "string",
       "description": "Object type discriminator.",
-      "default": "region",
-      "enum": ["region"]
+      "default": "element",
+      "enum": ["element"]
     },
     "closed": {
       "type": "boolean",

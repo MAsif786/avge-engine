@@ -1,23 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://avge.dev/schemas/mix_region_colors/v1.json",
-  "title": "mix_region_colors",
-  "description": "Mix colors from two existing regions and return, apply, or duplicate the result.",
+  "$id": "https://avge.dev/schemas/mix_element_colors/v1.json",
+  "title": "mix_element_colors",
+  "description": "Mix colors from two existing elements and return, apply, or duplicate the result.",
   "type": "object",
   "properties": {
-    "source_region_id": { "type": "string" },
-    "target_region_id": { "type": "string" },
+    "source_element_id": { "type": "string" },
+    "target_element_id": { "type": "string" },
     "document_id": { "type": ["string", "null"] },
     "mix_ratio": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5 },
     "source_channel": { "type": "string", "enum": ["fill", "stroke"], "default": "fill" },
     "target_channel": { "type": "string", "enum": ["fill", "stroke"], "default": "fill" },
     "output": {
       "type": "string",
-      "enum": ["return_color", "apply_source", "apply_target", "new_region"],
+      "enum": ["return_color", "apply_source", "apply_target", "new_element"],
       "default": "return_color"
     },
     "apply_to": { "type": "string", "enum": ["fill", "stroke", "both"], "default": "fill" },
-    "new_region_id": { "type": ["string", "null"] },
+    "new_element_id": { "type": ["string", "null"] },
     "offset_x": { "type": "number", "minimum": -2, "maximum": 2, "default": 0.02 },
     "offset_y": { "type": "number", "minimum": -2, "maximum": 2, "default": 0.02 },
     "opacity": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
@@ -25,6 +25,6 @@
       "$ref": "https://avge.dev/schemas/_defs/v1.json#/$defs/blend_mode"
     }
   },
-  "required": ["source_region_id", "target_region_id"],
+  "required": ["source_element_id", "target_element_id"],
   "additionalProperties": false
 }

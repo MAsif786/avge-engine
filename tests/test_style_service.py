@@ -8,25 +8,25 @@ def _setup_scene():
     service = StyleService()
     graph = service.graph
     doc = graph.create_document(width=1000, height=800)
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="near",
+        element_id="near",
         outline=[(0.1, 0.65), (0.25, 0.65), (0.25, 0.8), (0.1, 0.8)],
         layer="props",
         z_index=5,
         style=Style(fill="#CC3333", stroke="#111111", stroke_width=0.002),
     )
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="far",
+        element_id="far",
         outline=[(0.1, 0.1), (0.22, 0.1), (0.22, 0.2), (0.1, 0.2)],
         layer="props",
         z_index=1,
         style=Style(fill="#CC3333", stroke="#111111", stroke_width=0.002),
     )
-    graph.create_region(
+    graph.create_element(
         document_id=doc.id,
-        region_id="other",
+        element_id="other",
         outline=[(0.6, 0.65), (0.75, 0.65), (0.75, 0.8), (0.6, 0.8)],
         layer="other",
         z_index=0,
@@ -48,13 +48,13 @@ def test_style_service_apply_depth_haze_uses_selector():
     )
 
     assert result.affected == 2
-    assert service.graph.get_region("far", doc.id).style.fill != "#CC3333"
-    assert service.graph.get_region("other", doc.id).style.fill == "#3366CC"
+    assert service.graph.get_element("far", doc.id).style.fill != "#CC3333"
+    assert service.graph.get_element("other", doc.id).style.fill == "#3366CC"
 
 
 def test_style_service_apply_line_hierarchy_uses_selector():
     service, doc = _setup_scene()
-    other_width = service.graph.get_region("other", doc.id).style.stroke_width
+    other_width = service.graph.get_element("other", doc.id).style.stroke_width
 
     result = service.apply_line_hierarchy(
         document_id=doc.id,
@@ -66,6 +66,6 @@ def test_style_service_apply_line_hierarchy_uses_selector():
 
     assert result.outer_count == 1
     assert result.inner_count == 1
-    assert service.graph.get_region("near", doc.id).style.stroke_width != 0.002
-    assert service.graph.get_region("far", doc.id).style.stroke_width != 0.002
-    assert service.graph.get_region("other", doc.id).style.stroke_width == other_width
+    assert service.graph.get_element("near", doc.id).style.stroke_width != 0.002
+    assert service.graph.get_element("far", doc.id).style.stroke_width != 0.002
+    assert service.graph.get_element("other", doc.id).style.stroke_width == other_width
