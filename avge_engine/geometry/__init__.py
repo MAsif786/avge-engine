@@ -2,6 +2,17 @@
 
 from avge_engine.geometry.curve import fit_curves, sample_curve
 from avge_engine.geometry.line_refinement import chaikin, moving_average, rdp
+from avge_engine.geometry.line_patterns import (
+    hatch_subpaths,
+    jitter_points,
+    line_pattern_points,
+    resolve_bounds,
+    ribbon_outline,
+    role_dash,
+    role_opacity,
+    scribble_paths,
+    width_profile_values,
+)
 from avge_engine.geometry.types import (
     CurveConstraints,
     Point2D,
@@ -24,6 +35,15 @@ __all__ = [
     "chaikin",
     "moving_average",
     "rdp",
+    "hatch_subpaths",
+    "jitter_points",
+    "line_pattern_points",
+    "resolve_bounds",
+    "ribbon_outline",
+    "role_dash",
+    "role_opacity",
+    "scribble_paths",
+    "width_profile_values",
     "CurveConstraints",
     "Point2D",
     "Transform",

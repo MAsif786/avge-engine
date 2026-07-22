@@ -5,8 +5,15 @@ from __future__ import annotations
 import math
 import random
 
+from avge_engine.geometry.line_patterns import (
+    hatch_subpaths,
+    jitter_points,
+    line_pattern_points,
+    ribbon_outline,
+    scribble_paths,
+    width_profile_values,
+)
 from avge_engine.scene import CurveConstraints, Style
-from avge_engine.services import procedural_service as line_tools
 
 
 def sample_region_outline(region, samples_per_segment: int = 8) -> list[list[float]]:
@@ -75,7 +82,7 @@ def apply_primitive_patterns(
         if outline_pattern in ("rough", "sketch"):
             repeats = 2 if outline_pattern == "sketch" else 1
             for i in range(repeats):
-                pts = line_tools._jitter_points(sampled, max(pattern_jitter, pattern_amplitude * 0.45), rng)
+                pts = jitter_points(sampled, max(pattern_jitter, pattern_amplitude * 0.45), rng)
                 r = scene.create_line(
                     points=pts,
                     document_id=doc_id,
@@ -91,14 +98,14 @@ def apply_primitive_patterns(
                 r.metadata.update({"tool": "create_region_pattern", "pattern": outline_pattern, "base": base_region.id})
                 created.append(r.id)
         elif outline_pattern in ("tapered", "pressure"):
-            widths = line_tools._width_profile_values(
+            widths = width_profile_values(
                 len(sampled),
                 outline_pattern,
                 pattern_width * 2.2,
                 max(0.001, pattern_width * 0.35),
                 pattern_width,
             )
-            ribbon = line_tools._ribbon_outline(sampled, widths)
+            ribbon = ribbon_outline(sampled, widths)
             r = scene.create_region(
                 outline=ribbon,
                 document_id=doc_id,
@@ -113,7 +120,7 @@ def apply_primitive_patterns(
         else:
             subpaths = []
             for i in range(len(sampled) - 1):
-                subpaths.append(line_tools._line_pattern_points(
+                subpaths.append(line_pattern_points(
                     outline_pattern,
                     [sampled[i], sampled[i + 1]],
                     None,
@@ -146,7 +153,7 @@ def apply_primitive_patterns(
             bounds = [b["x"], b["y"], b["w"], b["h"]]
             rng = random.Random(pattern_seed)
             if fill_pattern in ("hatch", "cross_hatch", "contour_hatch"):
-                subpaths = line_tools._hatch_subpaths(
+                subpaths = hatch_subpaths(
                     bounds, pattern_density, 25.0, fill_pattern, pattern_amplitude, pattern_jitter, rng
                 )
                 r = scene.create_compound_path(
@@ -167,7 +174,7 @@ def apply_primitive_patterns(
                 r.metadata.update({"tool": "create_region_pattern", "pattern": fill_pattern, "base": base_region.id})
                 created.append(r.id)
             elif fill_pattern == "scribble":
-                for i, pts in enumerate(line_tools._scribble_paths(bounds, pattern_density, pattern_jitter, rng)):
+                for i, pts in enumerate(scribble_paths(bounds, pattern_density, pattern_jitter, rng)):
                     r = scene.create_line(
                         points=pts,
                         document_id=doc_id,
