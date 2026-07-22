@@ -262,7 +262,7 @@ def _apply_primitive_patterns(
     z_index: int,
 ) -> list[str]:
     """Create line-pattern overlays for a primitive outline and/or clipped fill."""
-    from avge_engine.controllers import procedural as line_tools
+    from avge_engine.services import procedural_service as line_tools
 
     created: list[str] = []
     color = stroke or "#333333"
