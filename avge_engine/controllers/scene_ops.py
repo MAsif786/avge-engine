@@ -21,10 +21,7 @@ from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc
 from avge_engine.services.scene_construction_service import SceneConstructionService
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
 from avge_engine.services.shadow_service import ShadowService
-
-
-def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
+from avge_engine.utils.math_utils import clamp01
 
 
 def create_tools(mcp):
@@ -1376,7 +1373,7 @@ def create_tools(mcp):
                 z_index=z_index + len(created),
                 stroke=stroke,
                 stroke_width=stroke_width_to_norm(doc_id, sw) or 0.002,
-                opacity=_clamp01(opacity * op),
+                opacity=clamp01(opacity * op),
                 stroke_linecap="round",
                 smoothness=smooth,
             )
@@ -1398,7 +1395,7 @@ def create_tools(mcp):
                     fill=fill,
                     stroke=stroke,
                     stroke_width=stroke_width_to_norm(doc_id, sw) or 0.001,
-                    opacity=_clamp01(opacity * op),
+                    opacity=clamp01(opacity * op),
                 ),
                 metadata={"tool": "generate_background_asset", "mode": mode, "part": name},
             )

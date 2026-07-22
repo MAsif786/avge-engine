@@ -5,6 +5,7 @@ import math
 import random
 from typing import Any, Literal
 
+from avge_engine.geometry.quad import quad_point
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.procedural_service import ProceduralService
 from avge_engine.scene import CurveConstraints, Style
@@ -1022,13 +1023,6 @@ def _lerp(a: tuple[float, float], b: tuple[float, float], t: float) -> tuple[flo
     return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
 
 
-def _quad_point(quad: list[list[float]], u: float, v: float) -> list[float]:
-    top = _lerp(tuple(quad[0]), tuple(quad[1]), u)
-    bottom = _lerp(tuple(quad[3]), tuple(quad[2]), u)
-    p = _lerp(top, bottom, v)
-    return [p[0], p[1]]
-
-
 def _do_cornice(scene, doc_id: str, params: dict) -> str:
     region_id = params.get("region_id")
     if not region_id or not scene.has_region(region_id, doc_id):
@@ -1117,10 +1111,10 @@ def _do_awning(scene, doc_id: str, params: dict) -> str:
             u0 = i / stripe_count
             u1 = (i + 1) / stripe_count
             sq = [
-                _quad_point(q, u0, 0.0),
-                _quad_point(q, u1, 0.0),
-                _quad_point(q, u1, 1.0),
-                _quad_point(q, u0, 1.0),
+                quad_point(q, u0, 0.0),
+                quad_point(q, u1, 0.0),
+                quad_point(q, u1, 1.0),
+                quad_point(q, u0, 1.0),
             ]
             stripe = scene.project_quad(
                 sq, document_id=doc_id, region_id=f"{rid}_stripe_{i:02d}",

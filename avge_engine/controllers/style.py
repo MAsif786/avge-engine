@@ -6,13 +6,16 @@ import math
 import random
 from typing import Any, Literal
 
+from avge_engine.constants.style import LAYER_ROLE_Z, MATERIAL_PRESETS
 from avge_engine.effects import Style
 from avge_engine.effects.brushes import BRUSH_PRESETS, BrushName, brush_preset_catalog
 from avge_engine.effects.style import VALID_BLEND_MODES
 from avge_engine.geometry import CurveConstraints
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids
-from avge_engine.services.style_service import MATERIAL_PRESETS, StyleService
+from avge_engine.services.style_service import StyleService
+from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
+from avge_engine.utils.math_utils import clamp01
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
@@ -32,25 +35,6 @@ TEXTURE_EFFECTS = Literal[
 ]
 FX_TYPES = Literal["lens_flare", "motion_blur", "speed_lines", "impact_lines", "particles"]
 COLOR_MIX_OUTPUTS = Literal["return_color", "apply_source", "apply_target", "new_region"]
-
-LAYER_ROLE_Z = {
-    "background": -1000,
-    "sketch": -700,
-    "guide": -650,
-    "base_color": -100,
-    "texture": 120,
-    "shadow": 160,
-    "highlight": 220,
-    "glow": 260,
-    "line_art": 320,
-    "fx": 380,
-    "mask": 500,
-}
-
-
-def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
-
 
 def _scene_bounds_for_ids(scene, doc_id: str, ids: list[str]) -> dict[str, float] | None:
     boxes = []
@@ -72,25 +56,6 @@ def _scene_bounds_for_ids(scene, doc_id: str, ids: list[str]) -> dict[str, float
 
 def _append_unique(base: str, suffix: str) -> str:
     return f"{base}_{suffix}_{random.randint(1000, 9999)}"
-
-
-def _hex_to_rgb(color: str) -> tuple[int, int, int] | None:
-    if not isinstance(color, str) or not color.startswith("#") or len(color) != 7:
-        return None
-    try:
-        return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-    except ValueError:
-        return None
-
-
-def _mix_hex(color: str, target: str, amount: float) -> str | None:
-    src = _hex_to_rgb(color)
-    dst = _hex_to_rgb(target)
-    if src is None or dst is None:
-        return None
-    t = max(0.0, min(1.0, amount))
-    rgb = [round(src[i] + (dst[i] - src[i]) * t) for i in range(3)]
-    return "#{:02X}{:02X}{:02X}".format(*rgb)
 
 
 def _apply_preset(preset_name: str, scene, doc_id: str, ids: list[str]) -> str | None:
@@ -382,7 +347,7 @@ def create_tools(mcp):
         cfg = BRUSH_PRESETS[brush]
         stroke_color = color or cfg["stroke"]
         stroke_width = stroke_width_to_norm(doc_id, size) or stroke_width_to_norm(doc_id, cfg["stroke_width"]) or 0.005
-        resolved_opacity = _clamp01(opacity if opacity is not None else cfg["opacity"])
+        resolved_opacity = clamp01(opacity if opacity is not None else cfg["opacity"])
         resolved_blend = blend_mode if blend_mode is not None else cfg.get("blend_mode")
         linecap = cfg.get("linecap", "round")
         resolved_pressure = cfg.get("pressure", False) if pressure is None else pressure
@@ -736,7 +701,7 @@ def create_tools(mcp):
         created: list[str] = []
         base_width = stroke_width_to_norm(doc_id, size) or 0.003
         resolved_blend = blend_mode or "screen"
-        resolved_opacity = _clamp01(opacity * intensity)
+        resolved_opacity = clamp01(opacity * intensity)
         safe_count = max(1, min(500, int(count)))
 
         def mark(region, part: str):
@@ -754,7 +719,7 @@ def create_tools(mcp):
                 z_index=z_index + len(created),
                 stroke=stroke,
                 stroke_width=sw,
-                opacity=_clamp01(op),
+                opacity=clamp01(op),
                 blend_mode=resolved_blend,
                 stroke_linecap="round",
                 smoothness=smooth,
@@ -773,7 +738,7 @@ def create_tools(mcp):
                 z_index=z_index + len(created),
                 fill=fill,
                 stroke=None,
-                opacity=_clamp01(op),
+                opacity=clamp01(op),
                 blend_mode=resolved_blend,
             )
             return mark(r, part)
@@ -891,13 +856,13 @@ def create_tools(mcp):
 
         source_color = getattr(source.style, source_channel)
         target_color = getattr(target.style, target_channel)
-        if not isinstance(source_color, str) or _hex_to_rgb(source_color) is None:
+        if not isinstance(source_color, str) or hex_to_rgb(source_color) is None:
             return f"Error: Source {source_channel} must be a solid #RRGGBB color"
-        if not isinstance(target_color, str) or _hex_to_rgb(target_color) is None:
+        if not isinstance(target_color, str) or hex_to_rgb(target_color) is None:
             return f"Error: Target {target_channel} must be a solid #RRGGBB color"
 
-        ratio = _clamp01(mix_ratio)
-        mixed = _mix_hex(source_color, target_color, ratio)
+        ratio = clamp01(mix_ratio)
+        mixed = mix_hex(source_color, target_color, ratio)
         if mixed is None:
             return "Error: Could not mix colors"
         metadata = {
@@ -920,7 +885,7 @@ def create_tools(mcp):
             if apply_to in ("stroke", "both"):
                 kwargs["stroke"] = mixed
             if opacity is not None:
-                kwargs["opacity"] = _clamp01(opacity)
+                kwargs["opacity"] = clamp01(opacity)
             if blend_mode is not None:
                 kwargs["blend_mode"] = blend_mode
             return kwargs
@@ -941,7 +906,7 @@ def create_tools(mcp):
                 offset_y=offset_y,
                 fill=mixed if apply_to in ("fill", "both") else None,
                 stroke=mixed if apply_to in ("stroke", "both") else None,
-                opacity=_clamp01(opacity) if opacity is not None else None,
+                opacity=clamp01(opacity) if opacity is not None else None,
                 blend_mode=blend_mode,
                 z_index=source.z_index + 1,
             )

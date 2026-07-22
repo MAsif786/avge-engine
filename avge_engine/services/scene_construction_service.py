@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import random
 
+from avge_engine.geometry.quad import cell_quad, clip_line_to_bounds, quad_point
 from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.schemas.service_results import FacadeGridResult, PerspectiveGridResult, SurfaceStripesResult
 from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.utils.math_utils import clamp01
 
 
 class SceneConstructionService:
@@ -50,8 +52,8 @@ class SceneConstructionService:
             subpaths.append([[x, y0], [x, y1]])
         for i in range(horizontal_count):
             y = y0 + (y1 - y0) * (i / (horizontal_count - 1))
-            left_line = _clip_line_to_bounds(vp_l, [x1, y], (x0, y0, x1, y1))
-            right_line = _clip_line_to_bounds(vp_r, [x0, y], (x0, y0, x1, y1))
+            left_line = clip_line_to_bounds(vp_l, [x1, y], (x0, y0, x1, y1))
+            right_line = clip_line_to_bounds(vp_r, [x0, y], (x0, y0, x1, y1))
             if left_line:
                 subpaths.append(left_line)
             if right_line:
@@ -67,7 +69,7 @@ class SceneConstructionService:
             fill=None,
             stroke=stroke,
             stroke_width=resolved_stroke_width,
-            opacity=_clamp01(opacity),
+            opacity=clamp01(opacity),
             smoothness=0.0,
             closed=False,
         )
@@ -81,7 +83,7 @@ class SceneConstructionService:
                 z_index=z_index,
                 stroke=stroke,
                 stroke_width=resolved_stroke_width,
-                opacity=_clamp01(opacity * 1.25),
+                opacity=clamp01(opacity * 1.25),
                 smoothness=0.0,
             )
             ids.append(horizon.id)
@@ -142,9 +144,9 @@ class SceneConstructionService:
         for row in range(rows):
             for col in range(columns):
                 cell_noise = (rng.random() - 0.5) * max(0.0, variation)
-                mu = _clamp01(margin_u + cell_noise)
-                mv = _clamp01(margin_v - cell_noise * 0.5)
-                win_quad = _cell_quad(
+                mu = clamp01(margin_u + cell_noise)
+                mv = clamp01(margin_v - cell_noise * 0.5)
+                win_quad = cell_quad(
                     quad,
                     col / columns,
                     row / rows,
@@ -153,7 +155,7 @@ class SceneConstructionService:
                     mu,
                     mv,
                 )
-                lit = rng.random() < _clamp01(lit_ratio)
+                lit = rng.random() < clamp01(lit_ratio)
                 rid = f"{prefix}_w{row:02d}_{col:02d}"
                 win = self.graph.project_quad(
                     win_quad,
@@ -210,8 +212,8 @@ class SceneConstructionService:
         count = max(1, min(100, int(count)))
         resolved_stroke_width = stroke_width_to_norm(doc_id, stroke_width)
         prefix = region_id or "surface_stripe"
-        start = _clamp01(start)
-        end = _clamp01(end)
+        start = clamp01(start)
+        end = clamp01(end)
         if end <= start:
             raise ValueError("end must be greater than start")
         if gap is None:
@@ -227,17 +229,17 @@ class SceneConstructionService:
                 break
             if orientation == "u":
                 quad = [
-                    _quad_point(target_quad, p0, 0.0),
-                    _quad_point(target_quad, p1, 0.0),
-                    _quad_point(target_quad, p1, 1.0),
-                    _quad_point(target_quad, p0, 1.0),
+                    quad_point(target_quad, p0, 0.0),
+                    quad_point(target_quad, p1, 0.0),
+                    quad_point(target_quad, p1, 1.0),
+                    quad_point(target_quad, p0, 1.0),
                 ]
             else:
                 quad = [
-                    _quad_point(target_quad, 0.0, p0),
-                    _quad_point(target_quad, 1.0, p0),
-                    _quad_point(target_quad, 1.0, p1),
-                    _quad_point(target_quad, 0.0, p1),
+                    quad_point(target_quad, 0.0, p0),
+                    quad_point(target_quad, 1.0, p0),
+                    quad_point(target_quad, 1.0, p1),
+                    quad_point(target_quad, 0.0, p1),
                 ]
             region = self.graph.project_quad(
                 quad,
@@ -257,74 +259,3 @@ class SceneConstructionService:
                 break
         return SurfaceStripesResult(ids=created)
 
-
-def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
-
-
-def _lerp_point(a: list[float] | tuple[float, float], b: list[float] | tuple[float, float], t: float) -> list[float]:
-    return [float(a[0]) + (float(b[0]) - float(a[0])) * t, float(a[1]) + (float(b[1]) - float(a[1])) * t]
-
-
-def _quad_point(quad: list[list[float]], u: float, v: float) -> list[float]:
-    top = _lerp_point(quad[0], quad[1], u)
-    bottom = _lerp_point(quad[3], quad[2], u)
-    return _lerp_point(top, bottom, v)
-
-
-def _cell_quad(
-    quad: list[list[float]],
-    u0: float,
-    v0: float,
-    u1: float,
-    v1: float,
-    margin_u: float,
-    margin_v: float,
-) -> list[list[float]]:
-    du = max(0.0, u1 - u0)
-    dv = max(0.0, v1 - v0)
-    uu0 = u0 + du * margin_u
-    uu1 = u1 - du * margin_u
-    vv0 = v0 + dv * margin_v
-    vv1 = v1 - dv * margin_v
-    return [
-        _quad_point(quad, uu0, vv0),
-        _quad_point(quad, uu1, vv0),
-        _quad_point(quad, uu1, vv1),
-        _quad_point(quad, uu0, vv1),
-    ]
-
-
-def _clip_line_to_bounds(
-    p1: list[float],
-    p2: list[float],
-    bounds: tuple[float, float, float, float],
-) -> list[list[float]] | None:
-    """Clip an infinite line through p1/p2 to an axis-aligned bounds rectangle."""
-    x0, y0, x1, y1 = bounds
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
-        return None
-
-    hits: list[tuple[float, list[float]]] = []
-    if abs(dx) > 1e-9:
-        for x in (x0, x1):
-            t = (x - p1[0]) / dx
-            y = p1[1] + dy * t
-            if y0 - 1e-9 <= y <= y1 + 1e-9:
-                hits.append((t, [x, y]))
-    if abs(dy) > 1e-9:
-        for y in (y0, y1):
-            t = (y - p1[1]) / dy
-            x = p1[0] + dx * t
-            if x0 - 1e-9 <= x <= x1 + 1e-9:
-                hits.append((t, [x, y]))
-
-    unique: list[tuple[float, list[float]]] = []
-    for t, pt in sorted(hits, key=lambda item: item[0]):
-        if not any(abs(pt[0] - u[1][0]) < 1e-6 and abs(pt[1] - u[1][1]) < 1e-6 for u in unique):
-            unique.append((t, pt))
-    if len(unique) < 2:
-        return None
-    return [unique[0][1], unique[-1][1]]

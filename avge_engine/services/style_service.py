@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from avge_engine.constants.style import MATERIAL_PRESETS
 from avge_engine.effects import Style
 from avge_engine.geometry import CurveConstraints
 from avge_engine.schemas.common import StrokeWidthInput
@@ -10,61 +11,8 @@ from avge_engine.schemas.service_results import DepthHazeResult, LineHierarchyRe
 from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids
 from avge_engine.scene.models import RegionNode
-
-
-MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
-    "glass": {
-        "fill_gradient": {"type": "linear", "x1": 0, "y1": 0, "x2": 1, "y2": 1, "stops": [
-            {"offset": 0.0, "color": "#F8FFFF"},
-            {"offset": 0.35, "color": "#BFDDE6"},
-            {"offset": 1.0, "color": "#6F9DAA"},
-        ]},
-        "stroke": "#D9F3F8", "stroke_width": 0.002, "opacity": 0.58, "blend_mode": "screen",
-    },
-    "brushed_metal": {
-        "fill_gradient": {"type": "linear", "x1": 0, "y1": 0, "x2": 0, "y2": 1, "stops": [
-            {"offset": 0.0, "color": "#F5F6F4"},
-            {"offset": 0.18, "color": "#8F989B"},
-            {"offset": 0.32, "color": "#D4D8D7"},
-            {"offset": 0.58, "color": "#6B7377"},
-            {"offset": 1.0, "color": "#C9CECD"},
-        ]},
-        "stroke": "#596064", "stroke_width": 0.0025, "opacity": 1.0,
-    },
-    "concrete": {
-        "fill_gradient": {"type": "linear", "x1": 0, "y1": 0, "x2": 1, "y2": 1, "stops": [
-            {"offset": 0.0, "color": "#D7D4C8"},
-            {"offset": 0.55, "color": "#A9AA9F"},
-            {"offset": 1.0, "color": "#7E8379"},
-        ]},
-        "stroke": "#6F746C", "stroke_width": 0.002, "opacity": 1.0,
-    },
-    "wood": {
-        "fill_gradient": {"type": "linear", "x1": 0, "y1": 0, "x2": 1, "y2": 0, "stops": [
-            {"offset": 0.0, "color": "#E3B06B"},
-            {"offset": 0.28, "color": "#9B622E"},
-            {"offset": 0.52, "color": "#D1974E"},
-            {"offset": 1.0, "color": "#70451F"},
-        ]},
-        "stroke": "#5E3719", "stroke_width": 0.002, "opacity": 1.0,
-    },
-    "tile": {
-        "fill_gradient": {"type": "linear", "x1": 0, "y1": 0, "x2": 1, "y2": 1, "stops": [
-            {"offset": 0.0, "color": "#F4EEE2"},
-            {"offset": 0.7, "color": "#CDBFA8"},
-            {"offset": 1.0, "color": "#A99B83"},
-        ]},
-        "stroke": "#8D826F", "stroke_width": 0.0025, "opacity": 1.0,
-    },
-    "foliage": {
-        "fill_gradient": {"type": "radial", "cx": 0.42, "cy": 0.34, "r": 0.72, "stops": [
-            {"offset": 0.0, "color": "#D8E88E"},
-            {"offset": 0.45, "color": "#6EA03F"},
-            {"offset": 1.0, "color": "#244C2E"},
-        ]},
-        "stroke": "#2C5631", "stroke_width": 0.0018, "opacity": 1.0,
-    },
-}
+from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
+from avge_engine.utils.math_utils import clamp01
 
 
 class StyleService:
@@ -89,7 +37,7 @@ class StyleService:
         """Blend selected regions toward haze_color based on vertical depth."""
         doc_id = resolve_doc(document_id)
 
-        if _hex_to_rgb(haze_color) is None:
+        if hex_to_rgb(haze_color) is None:
             raise ValueError("haze_color must be a #RRGGBB hex color")
 
         target_ids = select_region_ids(self.graph, doc_id, selector, default_all=True)
@@ -110,18 +58,18 @@ class StyleService:
             if not bounds:
                 continue
             cy = bounds["y"] + bounds["h"] / 2
-            depth_t = _clamp01((near_y - cy) / denom)
-            strength = _clamp01(depth_t * max_strength)
+            depth_t = clamp01((near_y - cy) / denom)
+            strength = clamp01(depth_t * max_strength)
             if strength <= 0:
                 continue
 
             kwargs: dict[str, Any] = {}
             if affect_fill and isinstance(region.style.fill, str):
-                mixed_fill = _mix_hex(region.style.fill, haze_color, strength)
+                mixed_fill = mix_hex(region.style.fill, haze_color, strength)
                 if mixed_fill:
                     kwargs["fill"] = mixed_fill
             if affect_stroke and isinstance(region.style.stroke, str):
-                mixed_stroke = _mix_hex(region.style.stroke, haze_color, strength)
+                mixed_stroke = mix_hex(region.style.stroke, haze_color, strength)
                 if mixed_stroke:
                     kwargs["stroke"] = mixed_stroke
             if opacity_falloff > 0:
@@ -236,7 +184,7 @@ class StyleService:
         h = max(0.001, bounds["h"])
         max_x = min_x + w
         max_y = min_y + h
-        intensity = _clamp01(intensity)
+        intensity = clamp01(intensity)
         created: list[str] = []
 
         def oid(suffix: str) -> str:
@@ -325,7 +273,7 @@ class StyleService:
                 fill=fill,
                 stroke=stroke,
                 stroke_width=stroke_width,
-                opacity=_clamp01(opacity),
+                opacity=clamp01(opacity),
                 blend_mode=blend_mode,
             ),
             metadata=_material_tag(source.id, material),
@@ -347,7 +295,7 @@ class StyleService:
                 fill=None,
                 stroke=stroke,
                 stroke_width=stroke_width,
-                opacity=_clamp01(opacity),
+                opacity=clamp01(opacity),
                 blend_mode=blend_mode,
                 stroke_linecap="round",
                 stroke_dasharray=dasharray,
@@ -359,30 +307,6 @@ class StyleService:
         self.graph._auto_checkpoint(doc_id, "material_overlay", rid)
         self.graph._persist(doc_id)
         return rid
-
-
-def _clamp01(value: float) -> float:
-    return max(0.0, min(1.0, float(value)))
-
-
-def _hex_to_rgb(color: str) -> tuple[int, int, int] | None:
-    if not isinstance(color, str) or not color.startswith("#") or len(color) != 7:
-        return None
-    try:
-        return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-    except ValueError:
-        return None
-
-
-def _mix_hex(color: str, target: str, amount: float) -> str | None:
-    src = _hex_to_rgb(color)
-    dst = _hex_to_rgb(target)
-    if src is None or dst is None:
-        return None
-    t = _clamp01(amount)
-    rgb = [round(src[i] + (dst[i] - src[i]) * t) for i in range(3)]
-    return "#{:02X}{:02X}{:02X}".format(*rgb)
-
 
 def _material_tag(region_id: str, material: str) -> dict[str, str]:
     return {"material_source": region_id, "material": material}

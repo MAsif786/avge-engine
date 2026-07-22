@@ -15,6 +15,7 @@ from avge_engine.geometry.perspective import (
     project_unit_points,
     rectangle_grid_points,
 )
+from avge_engine.geometry.quad import cell_quad, clip_line_to_bounds, lerp_point, quad_point
 
 __all__ = [
     "fit_curves",
@@ -29,4 +30,8 @@ __all__ = [
     "normalize_points_to_unit",
     "project_unit_points",
     "rectangle_grid_points",
+    "cell_quad",
+    "clip_line_to_bounds",
+    "lerp_point",
+    "quad_point",
 ]
