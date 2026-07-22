@@ -17,7 +17,7 @@ from avge_engine.geometry import (
 )
 from avge_engine.effects import Style, GradientDef
 from avge_engine.storage import StorageAdapter
-from avge_engine.scene.models import RegionNode, DocumentNode, ToolStats
+from avge_engine.scene.models import ElementNode, RegionNode, DocumentNode, ToolStats
 
 class SceneGraph:
     """In-memory scene graph supporting multiple named documents."""
@@ -267,6 +267,14 @@ class SceneGraph:
             raise ValueError(f"Document '{document_id}' not found")
         return regions
 
+    def _elements_for(self, document_id: str) -> dict[str, ElementNode]:
+        """Get drawable elements for a document.
+
+        This aliases the legacy region store while internal code migrates to
+        element terminology.
+        """
+        return self._regions_for(document_id)
+
     def create_region(
         self,
         outline: list[Point2D],
@@ -306,6 +314,37 @@ class SceneGraph:
         doc.version += 1
         return region
 
+    def create_element(
+        self,
+        outline: list[Point2D],
+        document_id: str | None = None,
+        element_id: str | None = None,
+        layer: str = "default",
+        z_index: int = 0,
+        clip_to: str | None = None,
+        constraints: CurveConstraints | None = None,
+        style: Style | None = None,
+        transform: Transform | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ElementNode:
+        """Create a drawable element.
+
+        Compatibility wrapper around create_region while public tools and
+        storage still use region naming.
+        """
+        return self.create_region(
+            outline=outline,
+            document_id=document_id,
+            region_id=element_id,
+            layer=layer,
+            z_index=z_index,
+            clip_to=clip_to,
+            constraints=constraints,
+            style=style,
+            transform=transform,
+            metadata=metadata,
+        )
+
     def get_region(self, region_id: str, document_id: str | None = None) -> RegionNode:
         regions = self._regions_for(self._resolve_doc(document_id))
         region = regions.get(region_id)
@@ -313,15 +352,31 @@ class SceneGraph:
             raise ValueError(f"Region '{region_id}' not found in document '{document_id}'")
         return region
 
+    def get_element(self, element_id: str, document_id: str | None = None) -> ElementNode:
+        element = self._elements_for(self._resolve_doc(document_id)).get(element_id)
+        if element is None:
+            raise ValueError(f"Element '{element_id}' not found in document '{document_id}'")
+        return element
+
     def has_region(self, region_id: str, document_id: str | None = None) -> bool:
         return region_id in self._regions_for(self._resolve_doc(document_id))
+
+    def has_element(self, element_id: str, document_id: str | None = None) -> bool:
+        return element_id in self._elements_for(self._resolve_doc(document_id))
 
     def get_all_regions(self, document_id: str) -> list[RegionNode]:
         """Return regions in insertion order."""
         return list(self._regions_for(document_id).values())
 
+    def get_all_elements(self, document_id: str) -> list[ElementNode]:
+        """Return drawable elements in insertion order."""
+        return list(self._elements_for(document_id).values())
+
     def region_count(self, document_id: str | None = None) -> int:
         return len(self._regions_for(self._resolve_doc(document_id)))
+
+    def element_count(self, document_id: str | None = None) -> int:
+        return len(self._elements_for(self._resolve_doc(document_id)))
 
     # ── Region deletion ────────────────────────────────────────────────
 
@@ -343,6 +398,14 @@ class SceneGraph:
             if self.delete_region(document_id, rid):
                 deleted.append(rid)
         return deleted
+
+    def delete_element(self, document_id: str, element_id: str) -> bool:
+        """Delete an element by ID."""
+        return self.delete_region(document_id, element_id)
+
+    def delete_elements(self, document_id: str, ids: list[str]) -> list[str]:
+        """Delete multiple elements. Returns list of actually deleted IDs."""
+        return self.delete_regions(document_id, ids)
 
     # ── Style presets ──────────────────────────────────────────────
 

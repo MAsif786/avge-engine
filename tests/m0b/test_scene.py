@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from avge_engine.scene import SceneGraph, CurveConstraints, Style, RegionNode
+from avge_engine.scene import SceneGraph, CurveConstraints, ElementNode, Style, RegionNode
 from avge_engine.geometry import fit_curves, compute_bounds, normalize_outline
 from avge_engine.renderer import svg_serialize
 
@@ -65,6 +65,24 @@ class TestSceneGraph:
         )
         assert region.id == "tri"
         assert len(region.outline) == 3
+        assert isinstance(region, ElementNode)
+
+    def test_element_aliases_wrap_region_store(self):
+        scene = SceneGraph()
+        doc = scene.create_document()
+        element = scene.create_element(
+            outline=[(0.1, 0.1), (0.5, 0.8), (0.9, 0.1)],
+            element_id="tri",
+            document_id=doc.id,
+        )
+
+        assert element.id == "tri"
+        assert scene.get_element("tri", doc.id) is scene.get_region("tri", doc.id)
+        assert scene.has_element("tri", doc.id) is True
+        assert scene.element_count(doc.id) == scene.region_count(doc.id) == 1
+        assert scene.get_all_elements(doc.id) == scene.get_all_regions(doc.id)
+        assert scene.delete_elements(doc.id, ["tri"]) == ["tri"]
+        assert scene.has_element("tri", doc.id) is False
 
     def test_create_region_no_document(self):
         scene = SceneGraph()

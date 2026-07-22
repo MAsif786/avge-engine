@@ -1,5 +1,6 @@
 from avge_engine.scene import Style
 from avge_engine.services.engine import reset_graph
+from avge_engine.services.element_service import ElementService
 from avge_engine.services.region_service import RegionService
 
 
@@ -55,6 +56,21 @@ def test_region_service_delete_regions():
 
     deleted = service.delete_regions(document_id=source.id, ids=["box", "missing"])
 
+    assert deleted == ["box"]
+
+
+def test_element_service_aliases_region_operations():
+    service, source, _ = _setup_scene()
+    element_service = ElementService(service.graph)
+
+    result = element_service.edit_element(
+        document_id=source.id,
+        element_id="box",
+        fill="#22CC88",
+    )
+    deleted = element_service.delete_elements(document_id=source.id, ids=["box"])
+
+    assert result.affected == ["box"]
     assert deleted == ["box"]
 
 
