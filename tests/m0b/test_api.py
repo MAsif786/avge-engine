@@ -37,6 +37,11 @@ class TestHealth:
         assert "text/html" in r.headers["content-type"]
         assert "AVGE Documents" in r.text
         assert "/viewer/documents" in r.text
+        assert "versionSelect" in r.text
+        assert "/versions" in r.text
+        assert "selectedVersion" in r.text
+        assert "height: auto;" in r.text
+        assert "doc-title" in r.text
         assert "docIdFromRoute" in r.text
         assert "history.pushState" in r.text
         assert "deleteSelectedDocument" in r.text
@@ -68,6 +73,20 @@ class TestHealth:
         assert r.status_code == 200
         data = r.json()
         assert "/tools/copy_element" in data["paths"]
+        assert "/tools/load_document" not in data["paths"]
+
+    async def test_load_document_is_not_exposed_as_tool(self, client):
+        created = await client.post("/tools/create_document", json={})
+        assert created.status_code == 200
+
+        r = await client.post("/tools/load_document", json={"document_id": "doc_missing"})
+
+        assert r.status_code == 404
+        assert "Unknown tool" in r.text
+
+        docs = await client.get("/tools/docs")
+        assert docs.status_code == 200
+        assert "## `load_document`" not in docs.text
 
 
 class TestDocument:
@@ -134,6 +153,62 @@ class TestDocument:
         assert data["count"] == 1
         assert data["documents"][0]["name"] == unique_name
 
+    async def test_viewer_documents_groups_named_before_unnamed(self, client):
+        prefix = f"ViewerNamedFirst-{uuid4().hex}"
+        named = f"{prefix} named"
+        named_res = await client.post("/tools/create_document", json={"name": named})
+        unnamed_res = await client.post("/tools/create_document", json={"name": ""})
+        named_id = named_res.json()["data"]["document_id"]
+        unnamed_id = unnamed_res.json()["data"]["document_id"]
+
+        r = await client.get("/viewer/documents", params={
+            "sort": "updated",
+            "order": "desc",
+        })
+
+        assert r.status_code == 200
+        data = r.json()
+        ids = [doc["id"] for doc in data["documents"]]
+        assert ids.index(named_id) < ids.index(unnamed_id)
+
+    async def test_viewer_versions_include_current_and_checkpoints(self, client):
+        created = await client.post("/tools/create_document", json={"name": "versions"})
+        document_id = created.json()["data"]["document_id"]
+
+        await client.post("/tools/create_region", json={
+            "document_id": document_id,
+            "region_id": "before_panel",
+            "outline": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4], [0.1, 0.4]],
+            "fill": "#336699",
+        })
+        saved = await client.post("/tools/checkpoint", json={
+            "document_id": document_id,
+            "name": "before_extra",
+        })
+        assert saved.status_code == 200
+
+        await client.post("/tools/create_region", json={
+            "document_id": document_id,
+            "region_id": "after_panel",
+            "outline": [[0.6, 0.1], [0.8, 0.1], [0.8, 0.3], [0.6, 0.3]],
+            "fill": "#993333",
+        })
+
+        versions = await client.get(f"/viewer/{document_id}/versions")
+        assert versions.status_code == 200
+        data = versions.json()
+        ids = [version["id"] for version in data["versions"]]
+        assert ids[0] == "current"
+        assert "before_extra" in ids
+
+        snapshot = await client.get(f"/preview/{document_id}/versions/before_extra.svg")
+        assert snapshot.status_code == 200
+        assert "#336699" in snapshot.text
+        assert "#993333" not in snapshot.text
+
+        missing = await client.get(f"/preview/{document_id}/versions/missing.svg")
+        assert missing.status_code == 404
+
     async def test_download_svg(self, client):
         created = await client.post("/tools/create_document", json={"name": "Download Doc"})
         document_id = created.json()["data"]["document_id"]
@@ -153,6 +228,42 @@ class TestDocument:
 
         assert r.status_code == 400
         assert "browser-side PNG" in r.text
+
+    async def test_generic_dispatch_uses_controller_tools(self, client):
+        created = await client.post("/tools/create_document", json={"name": "generic dispatch"})
+        document_id = created.json()["data"]["document_id"]
+
+        r = await client.post("/tools/create_primitive", json={
+            "document_id": document_id,
+            "shape": {"type": "rect", "x": 0.1, "y": 0.1, "width": 0.2, "height": 0.2},
+            "fill": "#336699",
+        })
+
+        assert r.status_code == 200
+        data = r.json()["data"]
+        assert data["status"] == "ok"
+        assert data["tool"] == "create_primitive"
+        assert "created" in data["result"].lower()
+
+    async def test_batch_dispatch_uses_controller_tools_without_mutating_ops(self, client):
+        created = await client.post("/tools/create_document", json={"name": "batch dispatch"})
+        document_id = created.json()["data"]["document_id"]
+        ops = [{
+            "tool": "create_primitive",
+            "shape": {"type": "ellipse", "cx": 0.5, "cy": 0.5, "rx": 0.1},
+            "fill": "#669933",
+        }]
+
+        r = await client.post("/tools/batch", json={
+            "document_id": document_id,
+            "ops": ops,
+        })
+
+        assert r.status_code == 200
+        assert ops[0]["tool"] == "create_primitive"
+        data = r.json()["data"]
+        assert data["results"][0]["status"] == "ok"
+        assert data["results"][0]["tool"] == "create_primitive"
 
     async def test_viewer_image_proxy_rejects_unsupported_scheme(self, client):
         r = await client.get("/viewer/image-proxy", params={"url": "ftp://example.com/image.png"})

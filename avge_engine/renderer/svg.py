@@ -37,7 +37,7 @@ def svg_serialize(
 
     Returns byte-identical SVG for identical scene graph input.
     """
-    doc_id = document_id or scene._last_doc_id
+    doc_id = document_id or scene.active_document_id()
     if not doc_id or not scene.has_document(doc_id):
         return ""  # No document to render
     doc = scene.get_document(doc_id)

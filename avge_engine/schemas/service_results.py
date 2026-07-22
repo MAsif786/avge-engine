@@ -23,6 +23,14 @@ class DeleteDocumentsResult(BaseModel):
     errors: list[str]
 
 
+class HistoryEntry(BaseModel):
+    name: str
+    time: str = "?"
+    action: str = "?"
+    detail: str = ""
+    region_count: str = "?"
+
+
 class EditRegionResult(BaseModel):
     affected: list[str]
 

@@ -9,10 +9,10 @@ from typing import Any
 
 from avge_engine.schemas.service_results import DeleteDocumentsResult, DocumentSummary
 from avge_engine.scene.models import DocumentNode
+from avge_engine.services.document_load_service import DocumentLoadService
 from avge_engine.services.engine import (
     get_graph,
     list_stored_documents,
-    load_stored_document,
     resolve_doc,
     set_active_doc,
 )
@@ -57,12 +57,6 @@ class DocumentService:
     def list_documents(self) -> list[dict[str, Any]]:
         return list_stored_documents()
 
-    def load_document(self, document_id: str) -> DocumentSummary | None:
-        if not load_stored_document(document_id):
-            return None
-        desc = self.graph.describe_scene(document_id)
-        return DocumentSummary(document=desc["document"], region_count=desc["region_count"])
-
     def clone_document(
         self,
         *,
@@ -91,18 +85,15 @@ class DocumentService:
                 errors=[],
             )
 
-        if not self.graph._storage:
-            raise RuntimeError("Storage not available")
-
         deleted: list[str] = []
         errors: list[str] = []
         for entry in found:
             doc_id = entry["id"]
             try:
-                self.graph._docs.pop(doc_id, None)
-                self.graph._regions_by_doc.pop(doc_id, None)
-                self.graph._storage.delete(doc_id)
-                deleted.append(doc_id)
+                if self.graph.delete_document(doc_id):
+                    deleted.append(doc_id)
+                else:
+                    errors.append(f"{doc_id}: not deleted")
             except Exception as e:
                 errors.append(f"{doc_id}: {e}")
         return DeleteDocumentsResult(
@@ -132,8 +123,7 @@ class DocumentService:
         return doc
 
     def ensure_loaded_summary(self, document_id: str) -> DocumentSummary:
-        if not self.graph.has_document(document_id) and not self.graph.load_document(document_id):
-            raise ValueError(f"Document '{document_id}' not found")
+        DocumentLoadService(self.graph).ensure_loaded_from_storage(document_id)
         desc = self.graph.describe_scene(document_id)
         return DocumentSummary(
             document=desc["document"],

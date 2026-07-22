@@ -25,8 +25,11 @@ from avge_engine import __version__, __tool_set_version__
 from avge_engine.api_viewer import viewer_html
 from avge_engine.services.engine import get_graph, reset_graph
 from avge_engine.services.creation_service import CreationService
+from avge_engine.services.document_load_service import DocumentLoadService
 from avge_engine.services.document_service import DocumentService
+from avge_engine.services.history_service import HistoryService
 from avge_engine.services.region_service import RegionService
+from avge_engine.services.tool_execution_service import ToolExecutionService
 from avge_engine.schema_registry import list_tool_names
 from avge_engine.renderer import (
     svg_serialize,
@@ -128,7 +131,12 @@ async def list_documents_viewer(search: str = "", sort: str = "updated", order: 
     else:
         key = lambda d: d.get("updated") or ""
 
-    docs = sorted(docs, key=key, reverse=reverse)
+    named_docs = [d for d in docs if (d.get("name") or "").strip()]
+    unnamed_docs = [d for d in docs if not (d.get("name") or "").strip()]
+    docs = (
+        sorted(named_docs, key=key, reverse=reverse)
+        + sorted(unnamed_docs, key=key, reverse=reverse)
+    )
     return {"documents": docs, "count": len(docs)}
 
 
@@ -150,6 +158,15 @@ async def viewer_image_proxy(url: str):
         media_type=mime,
         headers={"Cache-Control": "no-store, must-revalidate"},
     )
+
+
+@app.get("/viewer/{document_id}/versions")
+async def list_document_versions_viewer(document_id: str):
+    try:
+        versions = HistoryService().versions(document_id=document_id)
+    except ValueError:
+        return Response(f"Document '{document_id}' not found", status_code=404)
+    return {"document_id": document_id, "versions": versions, "count": len(versions)}
 
 
 @app.get("/viewer/{document_id}")
@@ -226,18 +243,6 @@ async def clone_document(req: CloneDocumentRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-
-
-@app.post("/tools/load_document", response_model=ToolResponse)
-async def load_document(req: DocIdBody):
-    summary = DocumentService().load_document(req.document_id)
-    if summary is not None:
-        return ToolResponse(data={
-            "document_id": req.document_id,
-            "region_count": summary.region_count,
-            "version": summary.document["version"],
-        })
-    raise HTTPException(status_code=404, detail=f"Document '{req.document_id}' not found")
 
 
 @app.get("/documents")
@@ -481,10 +486,9 @@ async def boolean_operation(req: BooleanOpRequest):
 @app.post("/tools/transform_objects", response_model=ToolResponse)
 async def transform_objects(req: TransformObjectsRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
-    doc_id = req.document_id
 
     ids = req.ids
     if req.group_name is not None:
@@ -513,10 +517,9 @@ async def transform_objects(req: TransformObjectsRequest):
 @app.post("/tools/edit_group", response_model=ToolResponse)
 async def edit_group(req: ManageGroupRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
-    doc_id = req.document_id
 
     if req.action == "delete":
         result = graph.ungroup_regions(req.group_name, doc_id)
@@ -554,12 +557,12 @@ async def list_groups(req: DocIdBody):
 @app.post("/tools/duplicate_group", response_model=ToolResponse)
 async def duplicate_group(req: DuplicateGroupRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
         new_ids = graph.duplicate_group(
-            group_name=req.group_name, document_id=req.document_id,
+            group_name=req.group_name, document_id=doc_id,
             new_prefix=req.new_prefix,
             dx=req.dx, dy=req.dy, scale=req.scale,
             sx=req.sx, sy=req.sy, rotate=req.rotate,
@@ -576,12 +579,12 @@ async def duplicate_group(req: DuplicateGroupRequest):
 @app.post("/tools/add_bumps", response_model=ToolResponse)
 async def add_bumps(req: ExtrudeOutlineRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     try:
         graph.extrude_region_outline(
-            region_id=req.region_id, document_id=req.document_id,
+            region_id=req.region_id, document_id=doc_id,
             segment_indices=req.segment_indices,
             extrusion_length=req.extrusion_length,
             extrusion_width=req.extrusion_width,
@@ -599,10 +602,10 @@ async def add_bumps(req: ExtrudeOutlineRequest):
 @app.post("/tools/describe_scene")
 async def describe_scene(req: DescribeSceneRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
-    desc = graph.describe_scene(detail=req.detail, filter_layer=req.filter_layer, document_id=req.document_id)
+    desc = graph.describe_scene(detail=req.detail, filter_layer=req.filter_layer, document_id=doc_id)
     return {
         "document": desc["document"],
         "regions": desc["regions"],
@@ -614,12 +617,12 @@ async def describe_scene(req: DescribeSceneRequest):
 @app.post("/tools/find_objects", response_model=ToolResponse)
 async def find_objects(req: FindObjectsRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     parsed_tags = dict(req.tags) if req.tags else None
     results = graph.find_objects(
-        document_id=req.document_id, fill=req.fill,
+        document_id=doc_id, fill=req.fill,
         min_x=req.min_x, max_x=req.max_x,
         min_y=req.min_y, max_y=req.max_y,
         min_w=req.min_w, max_w=req.max_w,
@@ -660,22 +663,22 @@ async def list_layers(req: DocIdBody):
 @app.post("/tools/shift_layer_z", response_model=ToolResponse)
 async def reorder_layer(req: ReorderLayerRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
-    count = graph.reorder_layer(req.layer, req.z_offset, req.document_id)
+    count = graph.reorder_layer(req.layer, req.z_offset, doc_id)
     return ToolResponse(data={"layer": req.layer, "z_offset": req.z_offset, "count": count})
 
 
 @app.post("/tools/render_preview", response_model=ToolResponse)
 async def render_preview(req: PreviewRequest):
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=400, detail="No active document")
     svg = svg_serialize(
         graph,
-        req.document_id,
+        doc_id,
         exclude_layers=req.exclude_layers,
         exclude_region_ids=req.exclude_region_ids,
         exclude_prefixes=req.exclude_prefixes,
@@ -691,12 +694,12 @@ async def render_preview(req: PreviewRequest):
 async def export_svg(req: ExportSvgRequest):
     from pathlib import Path
     graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
+    doc_id = req.document_id or graph.active_document_id()
     if not doc_id or not graph.has_document(doc_id):
         raise HTTPException(status_code=404, detail="No active document")
     svg = svg_serialize(
         graph,
-        req.document_id,
+        doc_id,
         exclude_layers=req.exclude_layers,
         exclude_region_ids=req.exclude_region_ids,
         exclude_prefixes=req.exclude_prefixes,
@@ -713,8 +716,9 @@ async def export_svg(req: ExportSvgRequest):
 async def preview_doc_png(document_id: str | None = None):
     """Render a PNG preview of a specific document by ID."""
     graph = get_graph()
-    # Reload from disk on every render to pick up MCP-side edits
-    if not graph.load_document(document_id):
+    try:
+        DocumentLoadService(graph).ensure_loaded_from_storage(document_id)
+    except ValueError:
         return Response(f"Document '{document_id}' not found", status_code=404)
     try:
         svg = svg_serialize(graph, document_id)
@@ -732,7 +736,9 @@ async def preview_doc_png(document_id: str | None = None):
 async def preview_doc_svg(document_id: str | None = None):
     """Render an SVG preview of a specific document by ID."""
     graph = get_graph()
-    if not graph.load_document(document_id):
+    try:
+        DocumentLoadService(graph).ensure_loaded_from_storage(document_id)
+    except ValueError:
         return Response(f"Document '{document_id}' not found", status_code=404)
     try:
         svg = svg_serialize(graph, document_id)
@@ -745,6 +751,31 @@ async def preview_doc_svg(document_id: str | None = None):
         return Response(f"Error: {e}", status_code=500)
 
 
+@app.get("/preview/{document_id}/versions/{checkpoint_name}.svg")
+async def preview_doc_version_svg(document_id: str, checkpoint_name: str):
+    """Render an SVG preview of a checkpoint without restoring it."""
+    try:
+        version_graph = HistoryService().snapshot_graph(
+            document_id=document_id,
+            checkpoint_name=checkpoint_name,
+        )
+        svg = svg_serialize(version_graph, document_id)
+        return Response(
+            content=svg,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "no-store, must-revalidate"},
+        )
+    except KeyError:
+        return Response(
+            f"Checkpoint '{checkpoint_name}' not found for document '{document_id}'",
+            status_code=404,
+        )
+    except ValueError:
+        return Response(f"Document '{document_id}' not found", status_code=404)
+    except Exception as e:
+        return Response(f"Error: {e}", status_code=500)
+
+
 @app.get("/download/{document_id}.{fmt}")
 async def download_document(document_id: str, fmt: str):
     """Download a document as SVG.
@@ -753,7 +784,9 @@ async def download_document(document_id: str, fmt: str):
     not depend on the server PNG renderer.
     """
     graph = get_graph()
-    if not graph.load_document(document_id):
+    try:
+        DocumentLoadService(graph).ensure_loaded_from_storage(document_id)
+    except ValueError:
         return Response(f"Document '{document_id}' not found", status_code=404)
 
     doc = graph.get_document(document_id)
@@ -814,93 +847,45 @@ def _read_viewer_image_url(url: str) -> tuple[bytes, str]:
 
 @app.post("/tools/checkpoint", response_model=ToolResponse)
 async def checkpoint(req: CheckpointRequest):
-    graph = get_graph()
     try:
-        from avge_engine.services.engine import resolve_doc
-        doc_id = resolve_doc(req.document_id)
-    except RuntimeError as e:
+        data = HistoryService().checkpoint(name=req.name, document_id=req.document_id)
+    except (RuntimeError, ValueError) as e:
         raise HTTPException(status_code=400, detail=str(e))
-    if not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No document")
-    graph.checkpoint(doc_id, req.name)
-    return ToolResponse(data={
-        "checkpoint": req.name,
-        "region_count": graph.region_count(doc_id),
-        "version": graph.get_document(doc_id).version,
-    })
+    return ToolResponse(data=data)
 
 
 @app.post("/tools/restore", response_model=ToolResponse)
 async def restore(req: CheckpointRequest):
-    graph = get_graph()
     try:
-        from avge_engine.services.engine import resolve_doc
-        doc_id = resolve_doc(req.document_id)
+        data = HistoryService().restore(name=req.name, document_id=req.document_id)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    if not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No document")
-    if not graph.restore(doc_id, req.name):
+    except LookupError:
         raise HTTPException(status_code=404, detail=f"Checkpoint '{req.name}' not found")
-    return ToolResponse(data={
-        "checkpoint": req.name,
-        "region_count": graph.region_count(doc_id),
-        "version": graph.get_document(doc_id).version,
-    })
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ToolResponse(data=data)
 
 
 @app.post("/tools/get_history", response_model=ToolResponse)
 async def get_history(req: DocIdLimitBody):
-    graph = get_graph()
-    if not graph.has_document(req.document_id):
+    try:
+        entries = HistoryService().entries(document_id=req.document_id, limit=req.limit)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Document not found")
-    doc_id = req.document_id
-    history = graph.list_checkpoints(doc_id)
-    meta_store = getattr(graph, "_checkpoint_meta", {})
-    entries = []
-    for name in history[:req.limit]:
-        entry = meta_store.get(f"{doc_id}::{name}", {})
-        entries.append({
-            "name": name,
-            "time": entry.get("time", "?"),
-            "action": entry.get("action", "?"),
-            "detail": entry.get("detail", ""),
-            "region_count": entry.get("region_count", "?"),
-        })
-    return ToolResponse(data={"history": entries, "count": len(entries)})
+    return ToolResponse(data={
+        "history": [entry.model_dump() for entry in entries],
+        "count": len(entries),
+    })
 
 
 @app.post("/tools/batch", response_model=ToolResponse)
 async def batch(req: BatchRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph._last_doc_id
-    if not doc_id or not graph.has_document(doc_id):
+    try:
+        results = ToolExecutionService().execute_batch(req.ops, document_id=req.document_id)
+    except RuntimeError:
         raise HTTPException(status_code=400, detail="No document")
-
-    # Dynamic dispatch: route each op to graph.<tool_name>(**params)
-    results: list[dict] = []
-    for op in req.ops:
-        tool_name = op.pop("tool", None)
-        if not tool_name:
-            results.append({"status": "error", "message": "Missing 'tool' key"})
-            continue
-
-        method = getattr(graph, tool_name, None)
-        if method is None:
-            results.append({"status": "error", "message": f"Unknown tool: {tool_name}"})
-            continue
-
-        try:
-            result = method(**op, document_id=req.document_id)
-            if isinstance(result, str):
-                results.append({"status": "ok", "message": result[:120]})
-            else:
-                rid = getattr(result, "id", None)
-                results.append({"status": "ok", "region_id": rid or str(result)})
-        except (ValueError, RuntimeError, TypeError, KeyError) as e:
-            results.append({"status": "error", "message": str(e)})
-
-    return ToolResponse(data={"results": results})
+    return ToolResponse(data={"results": [result.as_api_dict() for result in results]})
 
 
 @app.get("/tools/docs")
@@ -956,23 +941,16 @@ async def tool_dispatch(tool_name: str, body: dict):
     endpoints for every tool.
     """
     graph = get_graph()
-    doc_id = body.pop("document_id", None) or graph._last_doc_id
-
-    if not doc_id or not graph.has_document(doc_id):
+    params = dict(body)
+    doc_id = params.pop("document_id", None) or graph.active_document_id()
+    if not doc_id:
         raise HTTPException(status_code=400, detail="No active document")
-
-    method = getattr(graph, tool_name, None)
-    if method is None:
+    result = ToolExecutionService().execute_tool(tool_name, params, document_id=doc_id)
+    if result.status == "error" and result.message.startswith("Unknown tool:"):
         raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")
-
-    try:
-        result = method(**body, document_id=doc_id)
-        if hasattr(result, "model_dump"):
-            return ToolResponse(data=result.model_dump())
-        rid = getattr(result, "id", None)
-        return ToolResponse(data={"region_id": rid} if rid else {"result": str(result)[:200]})
-    except (ValueError, RuntimeError, TypeError, KeyError) as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    if result.status == "error":
+        raise HTTPException(status_code=400, detail=result.message)
+    return ToolResponse(data=result.as_api_dict())
 
 
 # ── Schema Discovery ───────────────────────────────────────────────

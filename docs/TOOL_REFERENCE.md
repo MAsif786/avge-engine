@@ -1197,7 +1197,7 @@ Add an image to the canvas, embed it as a data URI, or import SVG paths as edita
 
 ## `list_documents`
 
-List all saved documents on disk. Returns ID, name, version, and region count for each. Use load_document to restore one.
+List all saved documents on disk. Returns ID, name, version, and region count for each. Pass document_id directly to edit/view tools.
 
 
 ---
@@ -1223,20 +1223,6 @@ List all unique layers and their region counts. Use shift_layer_z to shift all r
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `document_id` | `any` |  |  |
-
----
-
-## `load_document`
-
-Load a previously saved document from disk into the editor. Use list_documents to see available documents.
-
-### Parameters
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `document_id` | `string` | ✓ |  |
-
----
 
 ## `project_quad`
 

@@ -282,13 +282,11 @@ def create_tools(mcp):
                 "primitive_type": r.primitive.get("type") if r.primitive else None,
             }
 
-        # Get checkpoint region data by peeking at stored snapshot
-        snap_key = f"{doc_id}::{name}"
-        snap = scene._checkpoints.get(snap_key)
-        if snap is None:
+        try:
+            _doc_snap, regions_snap = scene.checkpoint_snapshot(doc_id, name)
+        except KeyError:
             return f"Checkpoint '{name}' not found (available: {cps})"
 
-        _doc_snap, regions_snap = snap
         checkpoint_ids = set(regions_snap.keys())
         checkpoint_regions = {}
         for rid, r in regions_snap.items():
@@ -369,12 +367,10 @@ def create_tools(mcp):
         if not cps:
             return f"No checkpoints found for '{doc_id}'"
 
-        snap_key = f"{doc_id}::{name}"
-        snap = scene._checkpoints.get(snap_key)
-        if snap is None:
+        try:
+            _doc_snap, checkpoint_regions = scene.checkpoint_snapshot(doc_id, name)
+        except KeyError:
             return f"Checkpoint '{name}' not found"
-
-        _doc_snap, checkpoint_regions = snap
 
         # Get current regions
         current_regions = {r.id: r for r in scene.get_all_regions(doc_id)}

@@ -24,6 +24,10 @@ def viewer_html() -> str:
       --warn: #9f5b00;
     }
     * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
     body {
       margin: 0;
       font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -33,7 +37,8 @@ def viewer_html() -> str:
     .app {
       display: grid;
       grid-template-columns: minmax(320px, 420px) 1fr;
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
     }
     aside {
       border-right: 1px solid var(--line);
@@ -41,6 +46,8 @@ def viewer_html() -> str:
       display: flex;
       flex-direction: column;
       min-width: 0;
+      min-height: 0;
+      overflow: hidden;
     }
     header {
       padding: 16px;
@@ -89,11 +96,15 @@ def viewer_html() -> str:
     button.secondary:hover { background: #f7fafc; }
     button.danger:hover { background: #8f2f29; }
     .docs {
+      flex: 1;
+      min-height: 0;
       overflow: auto;
       padding: 8px;
     }
     .doc {
       width: 100%;
+      height: auto;
+      min-height: 70px;
       border: 1px solid transparent;
       border-radius: 6px;
       padding: 10px;
@@ -125,6 +136,8 @@ def viewer_html() -> str:
       display: grid;
       grid-template-rows: auto 1fr;
       min-width: 0;
+      min-height: 0;
+      overflow: hidden;
     }
     .preview-bar {
       min-height: 64px;
@@ -155,6 +168,10 @@ def viewer_html() -> str:
       flex-wrap: wrap;
       justify-content: flex-end;
     }
+    .version-select {
+      min-width: 190px;
+      max-width: 260px;
+    }
     label.toggle {
       display: inline-flex;
       gap: 8px;
@@ -164,7 +181,8 @@ def viewer_html() -> str:
     }
     label.toggle input { width: 16px; height: 16px; }
     .canvas-wrap {
-      overflow: auto;
+      min-height: 0;
+      overflow: hidden;
       padding: 18px;
       background:
         linear-gradient(45deg, #dfe6ec 25%, transparent 25%),
@@ -197,7 +215,7 @@ def viewer_html() -> str:
     .error { color: var(--warn); }
     @media (max-width: 820px) {
       .app { grid-template-columns: 1fr; }
-      aside { max-height: 45vh; border-right: 0; border-bottom: 1px solid var(--line); }
+      aside { height: 45vh; border-right: 0; border-bottom: 1px solid var(--line); }
       .preview-bar { grid-template-columns: 1fr; }
       .actions { justify-content: flex-start; }
       .toolbar { grid-template-columns: 1fr 1fr; }
@@ -233,6 +251,9 @@ def viewer_html() -> str:
           <div id="selectedId" class="selected-id"></div>
         </div>
         <div class="actions">
+          <select id="versionSelect" class="version-select" disabled>
+            <option value="current">Current</option>
+          </select>
           <label class="toggle"><input id="live" type="checkbox" checked> Live</label>
           <button class="secondary" id="refresh">Refresh</button>
           <button id="svg">SVG</button>
@@ -248,7 +269,14 @@ def viewer_html() -> str:
     </main>
   </div>
   <script>
-    const state = { docs: [], selected: null, timer: null, version: null };
+    const state = {
+      docs: [],
+      selected: null,
+      timer: null,
+      version: null,
+      versions: [],
+      selectedVersion: "current"
+    };
     const $ = (id) => document.getElementById(id);
 
     function docIdFromRoute() {
@@ -290,12 +318,13 @@ def viewer_html() -> str:
         return;
       }
       for (const doc of docs) {
+        const name = docName(doc);
         const btn = document.createElement("button");
         btn.className = "doc" + (state.selected === doc.id ? " active" : "");
         btn.innerHTML = `
-          <div class="doc-title">${escapeHtml(doc.name || "(unnamed)")}</div>
+          <div class="doc-title">${escapeHtml(name)}</div>
           <div class="doc-meta">
-            <span>${escapeHtml(doc.id)}</span>
+            <span>ID ${escapeHtml(doc.id)}</span>
             <span>${doc.region_count} regions</span>
             <span>v${doc.version}</span>
           </div>
@@ -309,6 +338,11 @@ def viewer_html() -> str:
       return String(text).replace(/[&<>"']/g, (m) => ({
         "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
       }[m]));
+    }
+
+    function docName(doc) {
+      const name = String((doc && doc.name) || "").trim();
+      return name || "Untitled document";
     }
 
     async function loadDocs() {
@@ -339,17 +373,56 @@ def viewer_html() -> str:
       state.selected = id;
       const doc = state.docs.find((d) => d.id === id);
       state.version = doc ? doc.version : null;
-      $("selectedName").textContent = doc ? (doc.name || "(unnamed)") : "No document selected";
+      state.versions = [];
+      state.selectedVersion = "current";
+      $("selectedName").textContent = doc ? docName(doc) : "No document selected";
       $("selectedId").textContent = doc ? `${doc.id} - ${doc.region_count} regions - v${doc.version}` : "";
+      renderVersions();
       if (pushRoute) updateRoute(id);
       renderList();
-      refreshPreview(true);
+      loadVersions().then(() => refreshPreview(true));
+    }
+
+    function renderVersions() {
+      const select = $("versionSelect");
+      select.innerHTML = "";
+      const versions = state.versions.length ? state.versions : [{ id: "current", label: "Current" }];
+      for (const version of versions) {
+        const option = document.createElement("option");
+        option.value = version.id;
+        option.textContent = version.label || version.name || version.id;
+        select.appendChild(option);
+      }
+      select.disabled = !state.selected;
+      select.value = versions.some((v) => v.id === state.selectedVersion) ? state.selectedVersion : "current";
+      state.selectedVersion = select.value;
+    }
+
+    async function loadVersions() {
+      if (!state.selected) return;
+      try {
+        const res = await fetch(`/viewer/${state.selected}/versions`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        state.versions = data.versions || [];
+      } catch (err) {
+        state.versions = [{ id: "current", label: `Current - ${err.message}` }];
+      }
+      renderVersions();
+    }
+
+    function previewPath() {
+      if (!state.selected) return "";
+      if (state.selectedVersion && state.selectedVersion !== "current") {
+        return `/preview/${state.selected}/versions/${encodeURIComponent(state.selectedVersion)}.svg`;
+      }
+      return `/preview/${state.selected}.svg`;
     }
 
     async function deleteSelectedDocument() {
       if (!state.selected) return;
       const doc = selectedDoc();
-      const label = doc.name ? `${doc.name} (${doc.id})` : doc.id;
+      const label = `${docName(doc)} (${doc.id})`;
       if (!confirm(`Delete document ${label}? This cannot be undone.`)) return;
 
       const res = await fetch("/tools/delete_document", {
@@ -365,8 +438,11 @@ def viewer_html() -> str:
       const deleted = state.selected;
       state.selected = null;
       state.version = null;
+      state.versions = [];
+      state.selectedVersion = "current";
       $("selectedName").textContent = "No document selected";
       $("selectedId").textContent = "";
+      renderVersions();
       $("frame").innerHTML = `<div class="empty">Deleted ${escapeHtml(deleted)}.</div>`;
       history.pushState({}, "", "/viewer");
       await loadDocs();
@@ -375,6 +451,12 @@ def viewer_html() -> str:
     async function refreshPreview(force = false) {
       if (!state.selected) return;
       try {
+        if (state.selectedVersion !== "current") {
+          if (!force) return;
+          const stamp = Date.now();
+          $("frame").innerHTML = `<object data="${previewPath()}?t=${stamp}" type="image/svg+xml"></object>`;
+          return;
+        }
         if (!force) {
           const res = await fetch(`/documents/${state.selected}`);
           if (res.ok) {
@@ -382,10 +464,11 @@ def viewer_html() -> str:
             const version = data.document && data.document.version;
             if (version === state.version) return;
             state.version = version;
+            await loadVersions();
           }
         }
         const stamp = Date.now();
-        $("frame").innerHTML = `<object data="/preview/${state.selected}.svg?t=${stamp}" type="image/svg+xml"></object>`;
+        $("frame").innerHTML = `<object data="${previewPath()}?t=${stamp}" type="image/svg+xml"></object>`;
       } catch (err) {
         $("frame").innerHTML = `<div class="status error">${escapeHtml(err.message)}</div>`;
       }
@@ -397,7 +480,11 @@ def viewer_html() -> str:
 
     function fileBaseName() {
       const doc = selectedDoc();
-      return String(doc.name || doc.id || "avge-document")
+      let base = String(doc.name || doc.id || "avge-document");
+      if (state.selectedVersion && state.selectedVersion !== "current") {
+        base += `-${state.selectedVersion}`;
+      }
+      return base
         .trim()
         .replace(/[^A-Za-z0-9._-]+/g, "-")
         .replace(/^[.-]+|[.-]+$/g, "")
@@ -418,7 +505,7 @@ def viewer_html() -> str:
     async function fetchSvgText() {
       if (!state.selected) throw new Error("No document selected");
       const params = new URLSearchParams({ t: Date.now() });
-      const res = await fetch(`/preview/${state.selected}.svg?${params}`);
+      const res = await fetch(`${previewPath()}?${params}`);
       if (!res.ok) throw new Error(await res.text());
       return await res.text();
     }
@@ -584,7 +671,11 @@ def viewer_html() -> str:
     $("search").addEventListener("input", () => { renderList(); });
     $("sort").addEventListener("change", loadDocs);
     $("order").addEventListener("change", loadDocs);
-    $("refresh").onclick = () => { loadDocs(); refreshPreview(true); };
+    $("versionSelect").addEventListener("change", () => {
+      state.selectedVersion = $("versionSelect").value;
+      refreshPreview(true);
+    });
+    $("refresh").onclick = async () => { await loadDocs(); await loadVersions(); refreshPreview(true); };
     $("live").onchange = configureLive;
     $("svg").onclick = () => download("svg");
     $("png").onclick = () => download("png");

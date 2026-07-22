@@ -26,6 +26,7 @@ class SceneGraph:
     def __init__(self) -> None:
         self._docs: dict[str, DocumentNode] = {}
         self._regions_by_doc: dict[str, dict[str, RegionNode]] = {}
+        self._groups: dict[str, list[str]] = {}
         self._checkpoints: dict[str, dict[str, tuple[DocumentNode | None, dict[str, RegionNode]]]] = {}
         self._checkpoint_meta: dict[str, dict[str, str]] = {}
         self._auto_counter: int = 0
@@ -37,6 +38,21 @@ class SceneGraph:
     def attach_storage(self, adapter: StorageAdapter) -> None:
         self._storage = adapter
 
+    @classmethod
+    def from_snapshot(
+        cls,
+        document_id: str,
+        doc: DocumentNode | None,
+        regions: dict[str, RegionNode],
+    ) -> "SceneGraph":
+        """Create a graph instance from an in-memory document snapshot."""
+        graph = cls()
+        if doc is not None:
+            graph._docs[document_id] = doc
+        graph._regions_by_doc[document_id] = regions
+        graph._last_doc_id = document_id
+        return graph
+
     def _persist(self, doc_id: str) -> None:
         if not self._storage:
             return
@@ -46,7 +62,7 @@ class SceneGraph:
             doc.updated_at = _dt.datetime.now().isoformat()
         regions = self._regions_by_doc.get(doc_id, {})
         groups_data = {}
-        if hasattr(self, '_groups') and self._groups:
+        if self._groups:
             prefix = f"{doc_id}::"
             for key, val in self._groups.items():
                 if key.startswith(prefix):
@@ -85,8 +101,6 @@ class SceneGraph:
         # Restore groups from storage
         groups_data = data.get("groups", {})
         if groups_data:
-            if not hasattr(self, '_groups'):
-                self._groups = {}
             prefix = f"{document_id}::"
             for name, ids in groups_data.items():
                 self._groups[f"{prefix}{name}"] = list(ids)
@@ -108,6 +122,10 @@ class SceneGraph:
             return document_id
         if self._last_doc_id is None:
             raise RuntimeError("No document exists. Call create_document first.")
+        return self._last_doc_id
+
+    def active_document_id(self) -> str | None:
+        """Return the active document ID, if any."""
         return self._last_doc_id
 
     # ── Document management ─────────────────────────────────────────
@@ -177,7 +195,7 @@ class SceneGraph:
             for rid, region in self._regions_by_doc.get(source_id, {}).items()
         }
 
-        if hasattr(self, "_groups") and self._groups:
+        if self._groups:
             source_prefix = f"{source_id}::"
             clone_prefix = f"{clone_id}::"
             for key, ids in list(self._groups.items()):
@@ -200,6 +218,26 @@ class SceneGraph:
                 f"Active: {list(self._docs.keys())}"
             )
         return doc
+
+    def delete_document(self, document_id: str) -> bool:
+        """Delete a document from memory and attached storage."""
+        existed = document_id in self._docs
+        self._docs.pop(document_id, None)
+        self._regions_by_doc.pop(document_id, None)
+
+        prefix = f"{document_id}::"
+        for key in list(self._groups):
+            if key.startswith(prefix):
+                self._groups.pop(key, None)
+        for key in list(self._checkpoints):
+            if key.startswith(prefix):
+                self._checkpoints.pop(key, None)
+                self._checkpoint_meta.pop(key, None)
+
+        deleted = self._storage.delete(document_id) if self._storage else False
+        if self._last_doc_id == document_id:
+            self._last_doc_id = next(iter(self._docs), None)
+        return existed or deleted
 
     def has_document(self, document_id: str | None = None) -> bool:
         doc_id = document_id or self._last_doc_id
@@ -457,8 +495,6 @@ class SceneGraph:
         When ``replace`` is True, replaces existing members instead of appending.
         """
         doc_id = self._resolve_doc(document_id)
-        if not hasattr(self, '_groups'):
-            self._groups: dict[str, list[str]] = {}
         key = f"{doc_id}::{group_name}"
         existing = [] if replace else self._groups.get(key, [])
         for rid in region_ids:
@@ -473,8 +509,6 @@ class SceneGraph:
         Returns the updated member list.
         """
         doc_id = self._resolve_doc(document_id)
-        if not hasattr(self, '_groups'):
-            self._groups: dict[str, list[str]] = {}
         key = f"{doc_id}::{group_name}"
         members = self._groups.get(key, [])
         for rid in region_ids:
@@ -489,8 +523,6 @@ class SceneGraph:
         Raises ValueError if the group doesn't exist.
         """
         doc_id = self._resolve_doc(document_id)
-        if not hasattr(self, '_groups'):
-            raise ValueError(f"Group '{group_name}' not found (no groups exist)")
         key = f"{doc_id}::{group_name}"
         if key not in self._groups:
             raise ValueError(f"Group '{group_name}' not found")
@@ -502,23 +534,24 @@ class SceneGraph:
     def ungroup_regions(self, group_name: str | list[str], document_id: str | None = None) -> bool | list[str]:
         """Remove one or more groups. Returns True (single) or list of removed names."""
         doc_id = self._resolve_doc(document_id)
-        if not hasattr(self, '_groups'):
-            return False if isinstance(group_name, str) else []
         if isinstance(group_name, str):
             key = f"{doc_id}::{group_name}"
-            return self._groups.pop(key, None) is not None
+            removed = self._groups.pop(key, None) is not None
+            if removed:
+                self._persist(doc_id)
+            return removed
         removed = []
         for name in group_name:
             key = f"{doc_id}::{name}"
             if self._groups.pop(key, None) is not None:
                 removed.append(name)
+        if removed:
+            self._persist(doc_id)
         return removed
 
     def get_group(self, group_name: str, document_id: str | None = None) -> list[dict]:
         """Get regions in a group with their IDs and bounds."""
         doc_id = self._resolve_doc(document_id)
-        if not hasattr(self, '_groups'):
-            return []
         key = f"{doc_id}::{group_name}"
         ids = self._groups.get(key, [])
         result = []
@@ -533,8 +566,6 @@ class SceneGraph:
     def list_groups(self, document_id: str | None = None) -> list[dict]:
         """List all groups and their sizes."""
         doc_id = self._resolve_doc(document_id)
-        if not hasattr(self, '_groups'):
-            return []
         prefix = f"{doc_id}::"
         return [{'name': k[len(prefix):], 'count': len(v)}
                 for k, v in self._groups.items() if k.startswith(prefix)]
@@ -604,8 +635,6 @@ class SceneGraph:
 
         if new_ids:
             group_key = f"{doc_id}::{new_prefix or group_name + '_copy'}"
-            if not hasattr(self, '_groups'):
-                self._groups = {}
             self._groups[group_key] = new_ids
             self.get_document(doc_id).version += 1
             self._auto_checkpoint(doc_id, "duplicate_group", str(new_ids))
@@ -2761,8 +2790,16 @@ class SceneGraph:
         doc_id = self._resolve_doc(document_id)
         doc = self.get_document(doc_id)
         regions = self._regions_for(doc_id)
-        snap_key = f"{document_id}::{name}"
+        snap_key = f"{doc_id}::{name}"
         self._checkpoints[snap_key] = (copy.deepcopy(doc), copy.deepcopy(regions))
+        ts = __import__("datetime").datetime.now().strftime("%H:%M:%S")
+        self._checkpoint_meta[snap_key] = {
+            "name": name,
+            "time": ts,
+            "action": "manual_checkpoint",
+            "detail": "",
+            "region_count": str(len(regions)),
+        }
         return name
 
     def restore(self, document_id: str, name: str = "default") -> bool:
@@ -2781,6 +2818,27 @@ class SceneGraph:
         """Return available checkpoint names for a document."""
         prefix = f"{document_id}::"
         return [k[len(prefix):] for k in self._checkpoints if k.startswith(prefix)]
+
+    def checkpoint_entries(self, document_id: str, limit: int | None = None) -> list[dict[str, str]]:
+        """Return checkpoint metadata entries for a document."""
+        entries: list[dict[str, str]] = []
+        for name in self.list_checkpoints(document_id):
+            entry = dict(self._checkpoint_meta.get(f"{document_id}::{name}", {}))
+            entry.setdefault("name", name)
+            entry.setdefault("time", "?")
+            entry.setdefault("action", "?")
+            entry.setdefault("detail", "")
+            entry.setdefault("region_count", "?")
+            entries.append(entry)
+        return entries[:limit] if limit is not None else entries
+
+    def checkpoint_snapshot(self, document_id: str, name: str) -> tuple[DocumentNode | None, dict[str, RegionNode]]:
+        """Return a deep-copied checkpoint snapshot."""
+        snap_key = f"{document_id}::{name}"
+        snap = self._checkpoints.get(snap_key)
+        if snap is None:
+            raise KeyError(name)
+        return copy.deepcopy(snap)
 
     # ── Extrude region outline ────────────────────────────────────
 

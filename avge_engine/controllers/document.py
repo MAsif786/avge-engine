@@ -1,4 +1,4 @@
-"""Document controller — create_document, get_document, list_documents, load_document MCP tools."""
+"""Document controller — create_document, get_document, list_documents MCP tools."""
 from __future__ import annotations
 
 from typing import Any
@@ -99,7 +99,7 @@ def create_tools(mcp):
     @mcp.tool(
         name="list_documents",
         description="List all saved documents on disk. Returns ID, name, version, "
-        "and region count for each. Use load_document to restore one.",
+        "and region count for each. Pass document_id directly to edit/view tools.",
     )
     def list_documents() -> str:
         """List all persisted documents."""
@@ -151,26 +151,6 @@ def create_tools(mcp):
             return "Error: No active document. Call create_document first."
         except ValueError as e:
             return f"Error: {e}"
-
-    @mcp.tool(
-        name="load_document",
-        description="Load a previously saved document from disk into the editor. "
-        "Use list_documents to see available documents.",
-    )
-    def load_document(document_id: str) -> str:
-        """Load a stored document back into the scene graph.
-
-        Args:
-            document_id: Document UUID to load.
-        """
-        summary = DocumentService().load_document(document_id)
-        if summary is not None:
-            return (
-                f"Document '{document_id}' loaded "
-                f"({summary.region_count} regions, version {summary.document['version']}). "
-                f"Ready for editing."
-            )
-        return f"Error: Document '{document_id}' not found on disk."
 
     @mcp.tool(
         name="delete_document",

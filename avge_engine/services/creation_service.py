@@ -264,7 +264,7 @@ class CreationService:
         return BooleanOperationResult(region_id=result.id, outline_points=len(result.outline))
 
     def _require_document(self, document_id: str | None) -> str:
-        doc_id = document_id or self.graph._last_doc_id
+        doc_id = document_id or self.graph.active_document_id()
         if not doc_id or not self.graph.has_document(doc_id):
             raise RuntimeError("No active document")
         return doc_id

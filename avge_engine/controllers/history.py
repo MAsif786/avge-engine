@@ -1,7 +1,8 @@
 """History controller — checkpoint, restore, get_history, batch."""
 from __future__ import annotations
 
-from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.services.history_service import HistoryService
+from avge_engine.services.tool_execution_service import ToolExecutionService
 
 
 def create_tools(mcp):
@@ -20,16 +21,14 @@ def create_tools(mcp):
                 for multiple snapshots.
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
+            data = HistoryService().checkpoint(name=name, document_id=document_id)
+        except (RuntimeError, ValueError):
             return "Error: No document — create one first"
-
-        scene.checkpoint(doc_id, name)
-        regions = scene.region_count(doc_id)
-        doc = scene.get_document(doc_id)
-        return f"Checkpoint '{name}' saved ({regions} regions at version {doc.version})"
+        return (
+            f"Checkpoint '{name}' saved "
+            f"({data['region_count']} regions at version {data['version']})"
+        )
 
     @mcp.tool(
         name="restore",
@@ -43,23 +42,17 @@ def create_tools(mcp):
             name: Checkpoint name to restore from (default "default").
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            data = HistoryService().restore(name=name, document_id=document_id)
         except RuntimeError:
             return "Error: No document"
-
-        if not scene.restore(doc_id, name):
-            available = scene.list_checkpoints(doc_id)
-            return (
-                f"Error: Checkpoint '{name}' not found. "
-                f"Available: {available}"
-            )
-        regions = scene.region_count(doc_id)
-        doc = scene.get_document(doc_id)
+        except LookupError:
+            return f"Error: Checkpoint '{name}' not found."
+        except ValueError as e:
+            return f"Error: {e}"
         return (
             f"Restored from checkpoint '{name}' "
-            f"({regions} regions at version {doc.version})"
+            f"({data['region_count']} regions at version {data['version']})"
         )
 
     @mcp.tool(
@@ -79,31 +72,26 @@ def create_tools(mcp):
             document_id: Document UUID (omit for active doc).
             limit: Max entries to show (default 20).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            entries = HistoryService().entries(document_id=document_id, limit=limit)
         except RuntimeError:
             return "Error: No active document"
+        except ValueError as e:
+            return f"Error: {e}"
 
-        history = scene.list_checkpoints(doc_id)
-        if not history:
+        if not entries:
             return "(no history)"
 
-        lines = [f"History for {doc_id} ({len(history)} entries):"]
-        # list_checkpoints returns checkpoint names; _checkpoint_meta has timestamps
-        meta_store = getattr(scene, "_checkpoint_meta", {})
-        for name in history[:limit]:
-            entry = meta_store.get(f"{doc_id}::{name}", {})
-            ts = entry.get("time", "?")
-            action = entry.get("action", "?")
-            detail = entry.get("detail", "")
-            rc = entry.get("region_count", "?")
+        label = document_id or "active document"
+        lines = [f"History for {label} ({len(entries)} entries):"]
+        for entry in entries:
             lines.append(
-                f"  {name} [{ts}] {action} {detail}  ({rc} regions)"
+                f"  {entry.name} [{entry.time}] {entry.action} "
+                f"{entry.detail}  ({entry.region_count} regions)"
             )
         if lines:
             lines.append(
-                f'Use restore(name="{history[0]}") to go back.'
+                f'Use restore(name="{entries[0].name}") to go back.'
             )
         return "\n".join(lines)
 
@@ -153,44 +141,8 @@ def create_tools(mcp):
             ops: List of operation dicts. Each must have a "tool" key.
             document_id: Document UUID (omit for active doc).
         """
-        from avge_engine.controllers import TOOL_DISPATCH
-
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            results = ToolExecutionService().execute_batch(ops, document_id=document_id)
         except RuntimeError:
             return "Error: No active document"
-
-        lines: list[str] = []
-        ok = 0
-        err = 0
-        for i, op in enumerate(ops):
-            tool_name = op.pop("tool", None)
-            if not tool_name:
-                err += 1
-                lines.append(f"  ✗ [{i}] Missing 'tool' key in op")
-                continue
-
-            fn = TOOL_DISPATCH.get(tool_name)
-            if fn is None:
-                err += 1
-                lines.append(
-                    f"  ✗ [{i}] Unknown tool '{tool_name}'"
-                )
-                continue
-
-            try:
-                # Inject document_id so tools can find their document
-                result = fn(**op, document_id=doc_id)
-                # Tool functions return strings (MCP convention)
-                ok += 1
-                msg = str(result).split('\n')[0][:120]
-                lines.append(f"  ✓ [{i}] {tool_name}: {msg}")
-            except (ValueError, RuntimeError, TypeError, KeyError) as e:
-                err += 1
-                op_id = op.get("region_id", op.get("group_name", ""))
-                ctx = f" ({op_id})" if op_id else ""
-                lines.append(f"  ✗ [{i}] {tool_name}: {e}{ctx}")
-
-        summary = f"Batch: {ok} ok, {err} errors"
-        return "\n".join([summary] + lines)
+        return ToolExecutionService().format_mcp_batch(results)

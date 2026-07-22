@@ -77,22 +77,6 @@ def list_stored_documents() -> list[dict]:
     return get_graph().list_stored_documents()
 
 
-def load_stored_document(doc_id: str) -> bool:
-    """Load a persisted document into the scene graph.
-
-    Args:
-        doc_id: Document UUID to load.
-
-    Returns:
-        True if the document was loaded, False if not found.
-    """
-    sg = get_graph()
-    if sg.load_document(doc_id):
-        set_active_doc(doc_id)
-        return True
-    return False
-
-
 def get_storage_dir() -> str:
     """Return the absolute path of the storage directory."""
     return str(Path(STORAGE_DIR).resolve())
@@ -163,8 +147,8 @@ def load_tool_reference() -> str:
 
 TOOL_MAP = """📋 TOOL MAP (63 tools — all available in batch):
 
-🗂 Document:   create_document · list_documents · load_document ·
-               clone_document · delete_document · set_background
+🗂 Document:   create_document · list_documents · clone_document ·
+               delete_document · set_background
 ✏️  Create:     create_region · create_primitive · create_curve ·
                create_ellipse_band · generate_cloud · create_text ·
                insert_image · import_svg_path
