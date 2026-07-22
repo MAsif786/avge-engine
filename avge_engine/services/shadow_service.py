@@ -5,15 +5,13 @@ from typing import Any, Literal
 
 from avge_engine.effects.color import apply_hsl_offset
 from avge_engine.schemas.service_results import ShadowResult, ShadingResult
-from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.services.base import BaseService
+from avge_engine.services.engine import resolve_doc
 from avge_engine.services.selector_service import select_region_ids
 
 
-class ShadowService:
+class ShadowService(BaseService):
     """Application service for shadows and directional shading."""
-
-    def __init__(self, graph=None) -> None:
-        self.graph = graph or get_graph()
 
     def create_shadow(
         self,

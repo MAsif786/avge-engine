@@ -11,14 +11,12 @@ import random
 from typing import Any
 
 from avge_engine.scene import CurveConstraints, Style
-from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.base import BaseService
+from avge_engine.services.engine import StrokeWidthInput, resolve_doc, stroke_width_to_norm
 
 
-class ProceduralService:
+class ProceduralService(BaseService):
     """Application service for procedural drawing tools."""
-
-    def __init__(self, graph=None) -> None:
-        self.graph = graph or get_graph()
 
     def create_line_pattern(
         self,

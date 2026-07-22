@@ -7,15 +7,12 @@ for ordinary tool operations.
 """
 from __future__ import annotations
 
-from avge_engine.scene import SceneGraph
-from avge_engine.services.engine import get_graph, set_active_doc
+from avge_engine.services.base import BaseService
+from avge_engine.services.engine import set_active_doc
 
 
-class DocumentLoadService:
+class DocumentLoadService(BaseService):
     """Hydrate documents from storage for API read/render paths."""
-
-    def __init__(self, graph: SceneGraph | None = None) -> None:
-        self.graph = graph or get_graph()
 
     def ensure_loaded_from_storage(self, document_id: str) -> str:
         """Load a persisted document into this process or raise ValueError."""

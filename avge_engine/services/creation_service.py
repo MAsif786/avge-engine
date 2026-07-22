@@ -11,14 +11,12 @@ from avge_engine.schemas.service_results import (
     CreatePrimitiveResult,
     CreateRegionResult,
 )
-from avge_engine.services.engine import get_graph, stroke_width_to_norm
+from avge_engine.services.base import BaseService
+from avge_engine.services.engine import stroke_width_to_norm
 
 
-class CreationService:
+class CreationService(BaseService):
     """Application service for graph creation operations."""
-
-    def __init__(self, graph=None) -> None:
-        self.graph = graph or get_graph()
 
     def create_region(
         self,

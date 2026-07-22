@@ -8,6 +8,7 @@ from avge_engine.services.engine import (
     load_environment_guidelines,
     SMOOTHNESS_GUIDANCE,
 )
+from avge_engine.services.base import BaseService
 from avge_engine.services.document_service import DocumentService
 from avge_engine.services.creation_service import CreationService
 from avge_engine.services.region_service import RegionService
@@ -17,6 +18,7 @@ from avge_engine.services.style_service import StyleService
 
 __all__ = [
     "DocumentService",
+    "BaseService",
     "CreationService",
     "RegionService",
     "SelectorService",

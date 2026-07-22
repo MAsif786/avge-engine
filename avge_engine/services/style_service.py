@@ -8,18 +8,16 @@ from avge_engine.effects import Style
 from avge_engine.geometry import CurveConstraints
 from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.schemas.service_results import DepthHazeResult, LineHierarchyResult, MaterialApplyResult
-from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.base import BaseService
+from avge_engine.services.engine import resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids
 from avge_engine.scene.models import RegionNode
 from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
 from avge_engine.utils.math_utils import clamp01
 
 
-class StyleService:
+class StyleService(BaseService):
     """Application service for style operations shared by MCP/API callers."""
-
-    def __init__(self, graph=None) -> None:
-        self.graph = graph or get_graph()
 
     def apply_depth_haze(
         self,

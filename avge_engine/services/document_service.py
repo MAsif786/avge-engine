@@ -9,20 +9,17 @@ from typing import Any
 
 from avge_engine.schemas.service_results import DeleteDocumentsResult, DocumentSummary
 from avge_engine.scene.models import DocumentNode
+from avge_engine.services.base import BaseService
 from avge_engine.services.document_load_service import DocumentLoadService
 from avge_engine.services.engine import (
-    get_graph,
     list_stored_documents,
     resolve_doc,
     set_active_doc,
 )
 
 
-class DocumentService:
+class DocumentService(BaseService):
     """Application service for document lifecycle operations."""
-
-    def __init__(self, graph=None) -> None:
-        self.graph = graph or get_graph()
 
     def create_document(
         self,

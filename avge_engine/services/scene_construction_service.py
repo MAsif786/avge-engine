@@ -6,15 +6,13 @@ import random
 from avge_engine.geometry.quad import cell_quad, clip_line_to_bounds, quad_point
 from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.schemas.service_results import FacadeGridResult, PerspectiveGridResult, SurfaceStripesResult
-from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.base import BaseService
+from avge_engine.services.engine import resolve_doc, stroke_width_to_norm
 from avge_engine.utils.math_utils import clamp01
 
 
-class SceneConstructionService:
+class SceneConstructionService(BaseService):
     """Application service for perspective grids, facade windows, and surface stripes."""
-
-    def __init__(self, graph=None) -> None:
-        self.graph = graph or get_graph()
 
     def create_perspective_grid(
         self,
@@ -258,4 +256,3 @@ class SceneConstructionService:
             if pos >= end:
                 break
         return SurfaceStripesResult(ids=created)
-

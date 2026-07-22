@@ -1,6 +1,7 @@
 """Geometry types and engines."""
 
 from avge_engine.geometry.curve import fit_curves, sample_curve
+from avge_engine.geometry.line_refinement import chaikin, moving_average, rdp
 from avge_engine.geometry.types import (
     CurveConstraints,
     Point2D,
@@ -20,6 +21,9 @@ from avge_engine.geometry.quad import cell_quad, clip_line_to_bounds, lerp_point
 __all__ = [
     "fit_curves",
     "sample_curve",
+    "chaikin",
+    "moving_average",
+    "rdp",
     "CurveConstraints",
     "Point2D",
     "Transform",

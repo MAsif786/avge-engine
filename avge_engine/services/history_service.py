@@ -3,15 +3,13 @@ from __future__ import annotations
 
 from avge_engine.scene import SceneGraph
 from avge_engine.schemas.service_results import HistoryEntry
+from avge_engine.services.base import BaseService
 from avge_engine.services.document_load_service import DocumentLoadService
-from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.services.engine import resolve_doc
 
 
-class HistoryService:
+class HistoryService(BaseService):
     """Application service for checkpoint and version operations."""
-
-    def __init__(self, graph: SceneGraph | None = None) -> None:
-        self.graph = graph or get_graph()
 
     def checkpoint(self, *, name: str = "default", document_id: str | None = None) -> dict:
         doc_id = self._resolve_existing_doc(document_id)
