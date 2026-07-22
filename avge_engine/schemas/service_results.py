@@ -108,6 +108,12 @@ class SurfaceStripesResult(BaseModel):
     ids: list[str]
 
 
+class MaterialApplyResult(BaseModel):
+    material: str
+    affected: int
+    detail_count: int
+
+
 class DepthHazeResult(BaseModel):
     affected: int
     haze_color: str
