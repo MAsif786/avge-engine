@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from avge_engine.storage.adapter import StorageAdapter
+from avge_engine.storage.compact import decode_snapshot, encode_snapshot
 
 
 class FileStorageAdapter(StorageAdapter):
@@ -39,7 +40,8 @@ class FileStorageAdapter(StorageAdapter):
         path = self._path(doc_id)
         serializable = _make_serializable(data)
         try:
-            content = json.dumps(serializable, indent=2, default=str)
+            compact = encode_snapshot(serializable)
+            content = json.dumps(compact, separators=(",", ":"), default=str)
             fd, tmp_path = tempfile.mkstemp(dir=self._dir, suffix=".tmp")
             try:
                 with os.fdopen(fd, "w") as f:
@@ -66,7 +68,7 @@ class FileStorageAdapter(StorageAdapter):
             return None
         try:
             raw = json.loads(path.read_text())
-            return raw
+            return decode_snapshot(raw)
         except (json.JSONDecodeError, OSError) as e:
             print(f"[FileStorage] Load error {doc_id}: {e}")
             return None
@@ -93,6 +95,7 @@ class FileStorageAdapter(StorageAdapter):
                     "version": doc.get("version", 0),
                     "region_count": len(data.get("regions", {})),
                     "updated": meta.get("updated", ""),
+                    "storage_format": meta.get("storage_format", "legacy"),
                 })
             except (json.JSONDecodeError, OSError):
                 continue

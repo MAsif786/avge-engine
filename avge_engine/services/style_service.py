@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from avge_engine.geometry import compute_bounds
 from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.schemas.service_results import DepthHazeResult, LineHierarchyResult
 from avge_engine.services.engine import get_graph, resolve_doc, stroke_width_to_norm
@@ -49,7 +48,7 @@ class StyleService:
                 region = self.graph.get_region(rid, doc_id)
             except ValueError:
                 continue
-            bounds = compute_bounds(region.outline)
+            bounds = region.bounds
             if not bounds:
                 continue
             cy = bounds["y"] + bounds["h"] / 2
@@ -103,7 +102,7 @@ class StyleService:
                 layers.setdefault(r.layer, []).append(r)
             regions = [r for layer_regions in layers.values() for r in layer_regions]
         elif basis == "bounding_size":
-            regions.sort(key=lambda r: (compute_bounds(r.outline) or {}).get("w", 0) or 0, reverse=True)
+            regions.sort(key=lambda r: (r.bounds or {}).get("w", 0) or 0, reverse=True)
         else:
             raise ValueError(f"Unknown basis '{basis}'")
 

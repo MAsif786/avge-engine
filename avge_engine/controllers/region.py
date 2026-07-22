@@ -23,7 +23,6 @@ from avge_engine.services.engine import (
 from avge_engine.services.region_service import RegionService
 from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star, ellipse_band
 from avge_engine.scene import CurveConstraints, Style
-from avge_engine.geometry import compute_bounds
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
@@ -165,8 +164,7 @@ def _relative_to_absolute(scene, doc_id, relative_to, points):
     region = scene.get_region(relative_to, doc_id)
     if region is None:
         raise ValueError(f"Reference region '{relative_to}' not found")
-    from avge_engine.geometry import compute_bounds
-    b = compute_bounds(region.outline)
+    b = region.bounds
     bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
     if bw < 1e-10:
         bw = 1e-10
@@ -180,8 +178,7 @@ def _relative_shape(scene, doc_id, relative_to, shape):
     region = scene.get_region(relative_to, doc_id)
     if region is None:
         raise ValueError(f"Reference region '{relative_to}' not found")
-    from avge_engine.geometry import compute_bounds
-    b = compute_bounds(region.outline)
+    b = region.bounds
     bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
     if bw < 1e-10:
         bw = 1e-10
@@ -361,7 +358,7 @@ def _apply_primitive_patterns(
             created.append(r.id)
 
     if base_region.constraints.closed and fill_pattern in ("hatch", "cross_hatch", "contour_hatch", "scribble", "stipple"):
-        b = compute_bounds(base_region.outline)
+        b = base_region.bounds
         if b:
             bounds = [b["x"], b["y"], b["w"], b["h"]]
             rng = random.Random(pattern_seed)
@@ -759,7 +756,7 @@ def create_tools(mcp):
             layer, resolved_z,
         )
 
-        bounds = compute_bounds(region.outline)
+        bounds = region.bounds
         bounds_str = (
             f"x={bounds['x']:.4f} y={bounds['y']:.4f} "
             f"w={bounds['w']:.4f} h={bounds['h']:.4f}"
@@ -924,7 +921,7 @@ def create_tools(mcp):
         except (ValueError, RuntimeError, KeyError) as e:
             return f"Error: {e}"
 
-        bounds = compute_bounds(region.outline)
+        bounds = region.bounds
         bounds_str = (
             f"x={bounds['x']:.4f} y={bounds['y']:.4f} "
             f"w={bounds['w']:.4f} h={bounds['h']:.4f}"

@@ -172,8 +172,7 @@ def create_tools(mcp):
                 r = scene.get_region(region_id, doc_id)
                 if not r:
                     return f"Error: Region '{region_id}' not found"
-                from avge_engine.geometry import compute_bounds
-                b = compute_bounds(r.outline)
+                b = r.bounds
                 margin = 0.05
                 crop = {"x": b["x"] - margin, "y": b["y"] - margin,
                         "w": b["w"] + margin * 2, "h": b["h"] + margin * 2}

@@ -17,7 +17,6 @@ COMIC_LAYOUT_MODES = Literal["grid", "feature_top", "feature_left", "vertical_st
 READING_DIRECTIONS = Literal["ltr", "rtl", "ttb"]
 WARP_MODES = Literal["bend", "bulge", "pinch", "wave", "handle_shift"]
 
-from avge_engine.geometry import compute_bounds
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids, selector_from_legacy
 from avge_engine.services.shadow_service import ShadowService
@@ -248,14 +247,13 @@ def create_tools(mcp):
 
         # ── Align mode ──
         if mode == "align":
-            from avge_engine.geometry import compute_bounds
             if not target_ids:
                 return "Error: No region IDs provided"
             bounds_list = []
             for rid in target_ids:
                 try:
                     r = scene.get_region(rid, doc_id)
-                    b = compute_bounds(r.outline)
+                    b = r.bounds
                     if b:
                         bounds_list.append({"id": rid, "bounds": b})
                 except ValueError:
@@ -355,9 +353,8 @@ def create_tools(mcp):
         # Include new bounds for first affected region
         bounds_info = ""
         if affected:
-            from avge_engine.geometry import compute_bounds
             r = scene.get_region(affected[0], doc_id)
-            b = compute_bounds(r.outline)
+            b = r.bounds
             if b:
                 bounds_info = (
                     f" [{affected[0]}] bounds: "
@@ -404,7 +401,7 @@ def create_tools(mcp):
             return f"Error: {exc}"
         if len(region.outline) < 2:
             return "Error: warp_region requires a region with at least 2 points"
-        bounds = compute_bounds(region.outline)
+        bounds = region.bounds
         if not bounds or bounds["w"] <= 0 or bounds["h"] <= 0:
             return "Error: Cannot warp degenerate region"
 

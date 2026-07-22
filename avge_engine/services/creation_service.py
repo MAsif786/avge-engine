@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from avge_engine.geometry import compute_bounds
 from avge_engine.scene import CurveConstraints, Style
 from avge_engine.schemas.service_results import (
     BooleanOperationResult,
@@ -75,7 +74,7 @@ class CreationService:
             warnings.append(f"Advisory: {len(outline)} points is high")
         return CreateRegionResult(
             region_id=region.id,
-            bounds=compute_bounds(region.outline),
+            bounds=region.bounds,
             outline_point_count=len(outline),
             warnings=warnings,
         )

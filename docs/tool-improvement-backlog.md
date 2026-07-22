@@ -50,6 +50,14 @@ These may be useful, but should not be promoted to tools until an eval shows age
 | `create_reference_board` | Likely composition-only: regions, text labels, palettes, and layer metadata. Build only if repeated failures show a tool is needed. |
 | Layer grouping metadata | Useful for organization, but not a drawing/rendering gap. Consider metadata support only if complex scenes become hard to manage. |
 
+## Engine And Storage Backlog
+
+These are not agent-facing tools. They are internal runtime/storage improvements that should preserve MCP/API schemas.
+
+| Candidate | Why defer |
+|---|---|
+| Compact raw in-memory regions | Current compact storage omits defaults/nulls and uses `outline_q`, but load still hydrates full `RegionNode` objects. A future `RegionStore` can keep full documents loaded as compact raw dicts, resolve defaults through helpers, and hydrate `RegionNode` only for touched regions. Measured memory reduction is roughly 38-56% on sampled docs, but this touches many scene/render/service paths, so keep it as a separate phase. |
+
 ## Removed Or Not Planned
 
 These should not be added as standalone tools.

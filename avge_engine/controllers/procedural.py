@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.scene import CurveConstraints, Style
-from avge_engine.geometry import compute_bounds
 
 PATTERNS = Literal[
     "radial_spread",
@@ -1295,7 +1294,7 @@ def _edge_segment(region, edge: str) -> tuple[tuple[float, float], tuple[float, 
     pts = list(region.outline)
     if not pts:
         raise ValueError(f"Region '{region.id}' has no outline")
-    b = compute_bounds(pts)
+    b = region.bounds
     min_x, min_y = b["x"], b["y"]
     max_x, max_y = b["x"] + b["w"], b["y"] + b["h"]
     if edge in ("top", "bottom"):
@@ -1508,8 +1507,7 @@ def _resolve_relative_box(scene, doc_id, relative_to, params):
     region = scene.get_region(relative_to, doc_id)
     if region is None:
         return
-    from avge_engine.geometry import compute_bounds
-    b = compute_bounds(region.outline)
+    b = region.bounds
     bx, by, bw, bh = b["x"], b["y"], b["w"], b["h"]
     if bw < 1e-10:
         bw = 1e-10

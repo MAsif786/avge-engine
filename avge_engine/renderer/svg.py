@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from avge_engine.scene import SceneGraph
 
-from avge_engine.geometry import compute_bounds, fit_curves
+from avge_engine.geometry import fit_curves
 from avge_engine.effects import resolve_fill, resolve_stroke, is_gradient, gradient_to_svg_def
 
 
@@ -266,7 +266,7 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
                 return None
             parts = [f'    <path d="{path_data}"']
             _append_style(parts)
-            bounds = compute_bounds(region.outline)
+            bounds = region.bounds
             if bounds:
                 _append_transform(parts, bounds["x"] + bounds["w"] / 2, bounds["y"] + bounds["h"] / 2)
             parts.append("/>")
@@ -337,7 +337,7 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
         tag = "polygon" if region.constraints.closed else "polyline"
         parts = [f'    <{tag} points="{pts}"']
         _append_style(parts)
-        bounds = compute_bounds(region.outline)
+        bounds = region.bounds
         if bounds:
             _append_transform(parts, bounds["x"] + bounds["w"] / 2, bounds["y"] + bounds["h"] / 2)
         parts.append("/>")
@@ -366,7 +366,7 @@ def _region_to_path(region, canvas_w: int, canvas_h: int) -> str | None:
 
     # Transform (use center of bounds for path-based regions)
     if region.outline:
-        bounds = compute_bounds(region.outline)
+        bounds = region.bounds
         if bounds:
             _append_transform(parts, bounds["x"] + bounds["w"] / 2, bounds["y"] + bounds["h"] / 2)
 

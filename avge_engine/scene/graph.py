@@ -11,7 +11,6 @@ from avge_engine.geometry import (
     CurveConstraints,
     Point2D,
     Transform,
-    compute_bounds,
     fit_curves,
     normalize_outline,
     sample_curve,
@@ -558,7 +557,7 @@ class SceneGraph:
         for rid in ids:
             try:
                 r = self.get_region(rid, doc_id)
-                result.append({'id': rid, 'bounds': compute_bounds(r.outline)})
+                result.append({'id': rid, 'bounds': r.bounds})
             except ValueError:
                 pass
         return result
@@ -737,7 +736,7 @@ class SceneGraph:
         for i, outer in enumerate(sorted_regions):
             if outer.z_index < 0:
                 continue
-            ob = compute_bounds(outer.outline)
+            ob = outer.bounds
             if not ob or ob["w"] < 0.05 or ob["h"] < 0.05:
                 continue
             ox1, oy1 = ob["x"], ob["y"]
@@ -745,7 +744,7 @@ class SceneGraph:
             for inner in sorted_regions[i+1:]:
                 if inner.z_index <= outer.z_index:
                     continue
-                ib = compute_bounds(inner.outline)
+                ib = inner.bounds
                 if not ib:
                     continue
                 ix1, iy1 = ib["x"], ib["y"]
@@ -771,7 +770,7 @@ class SceneGraph:
 
         # Rule 6: Off-canvas — region extends fully outside the viewport
         for r in regions.values():
-            b = compute_bounds(r.outline)
+            b = r.bounds
             if b and (b['x'] + b['w'] < 0 or b['x'] > 1 or b['y'] + b['h'] < 0 or b['y'] > 1):
                 findings.append(f"Rule 6 (grounding): region '{r.id}' is off-canvas")
 
@@ -870,7 +869,7 @@ class SceneGraph:
         for r in visible:
             if r.id in shadow_sources or r.metadata.get("shadow_source") or r.metadata.get("material_source"):
                 continue
-            b = compute_bounds(r.outline)
+            b = r.bounds
             if not b:
                 continue
             if b["w"] * b["h"] >= 0.015 and b["y"] + b["h"] >= 0.45 and r.style.fill is not None:
@@ -911,7 +910,7 @@ class SceneGraph:
             right_skew = abs(pts[2][0] - pts[1][0])
             skewed = left_skew > 0.025 or right_skew > 0.025
             no_foreshortening = abs(ratio - 1.0) < 0.06
-            b = compute_bounds(r.outline)
+            b = r.bounds
             if skewed and no_foreshortening and b and b["w"] * b["h"] > 0.025:
                 suspect_quads.append(r.id)
         if suspect_quads:
@@ -934,7 +933,7 @@ class SceneGraph:
             )
 
         # Dominant blob shape: one large smooth filled shape overwhelms composition.
-        filled_bounds = [(r, compute_bounds(r.outline)) for r in filled]
+        filled_bounds = [(r, r.bounds) for r in filled]
         filled_bounds = [(r, b) for r, b in filled_bounds if b]
         if len(filled_bounds) >= 3:
             areas = [(r, b["w"] * b["h"]) for r, b in filled_bounds]
@@ -1147,13 +1146,11 @@ class SceneGraph:
                 continue
             # Center for scaling/rotation
             if pivot_mode == "base":
-                from avge_engine.geometry import compute_bounds
-                b = compute_bounds(region.outline)
+                b = region.bounds
                 cx = b["x"] + b["w"] / 2
                 cy = b["y"] + b["h"]
             elif pivot_mode == "center":
-                from avge_engine.geometry import compute_bounds
-                b = compute_bounds(region.outline)
+                b = region.bounds
                 cx = b["x"] + b["w"] / 2
                 cy = b["y"] + b["h"] / 2
             elif group_mode or (pivot_x is not None and pivot_y is not None):
@@ -1286,7 +1283,7 @@ class SceneGraph:
                     continue
             if z_min is not None and r.z_index < z_min: continue
             if z_max is not None and r.z_index > z_max: continue
-            b = compute_bounds(r.outline)
+            b = r.bounds
             if b is None:
                 continue
             if min_x is not None and b["x"] < min_x: continue
@@ -2148,7 +2145,7 @@ class SceneGraph:
         if not source.outline:
             raise ValueError(f"Region '{region_id}' has no outline to shadow")
 
-        bounds = compute_bounds(source.outline)
+        bounds = source.bounds
         if not bounds:
             raise ValueError(f"Region '{region_id}' has empty bounds")
         cx = bounds["x"] + bounds["w"] / 2
@@ -2674,7 +2671,7 @@ class SceneGraph:
                     "opacity": r.style.opacity,
                     "blend_mode": r.style.blend_mode,
                 },
-                "bounds": compute_bounds(r.outline),
+                "bounds": r.bounds,
                 "version": r.version,
                 "metadata": r.metadata if r.metadata else None,
             }
@@ -2719,7 +2716,7 @@ class SceneGraph:
         regions = self._regions_for(doc_id)
         warnings: list[str] = []
         for r in regions.values():
-            b = compute_bounds(r.outline)
+            b = r.bounds
             if b and (b["x"] + b["w"] < 0 or b["x"] > 1.0 or b["y"] + b["h"] < 0 or b["y"] > 1.0):
                 warnings.append(f"Region '{r.id}' is entirely off-canvas")
         return warnings

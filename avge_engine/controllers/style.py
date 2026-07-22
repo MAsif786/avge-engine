@@ -9,7 +9,7 @@ from typing import Any, Literal
 from avge_engine.effects import Style
 from avge_engine.effects.brushes import BRUSH_PRESETS, BrushName, brush_preset_catalog
 from avge_engine.effects.style import VALID_BLEND_MODES
-from avge_engine.geometry import CurveConstraints, compute_bounds
+from avge_engine.geometry import CurveConstraints
 from avge_engine.scene.models import RegionNode
 from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
 from avge_engine.services.selector_service import select_region_ids
@@ -57,7 +57,7 @@ def _scene_bounds_for_ids(scene, doc_id: str, ids: list[str]) -> dict[str, float
     boxes = []
     for rid in ids:
         try:
-            bounds = compute_bounds(scene.get_region(rid, doc_id).outline)
+            bounds = scene.get_region(rid, doc_id).bounds
         except ValueError:
             continue
         if bounds:
@@ -208,7 +208,7 @@ def _add_overlay_line(scene, doc_id: str, source, rid: str, p1, p2, stroke: str,
 
 def _create_material_overlays(scene, doc_id: str, region_id: str, material: str, intensity: float) -> list[str]:
     source = scene.get_region(region_id, doc_id)
-    bounds = compute_bounds(source.outline)
+    bounds = source.bounds
     if bounds is None:
         return []
     min_x = bounds["x"]
