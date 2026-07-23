@@ -35,10 +35,11 @@ def register_all(mcp):
         def _make_tracked(name, fn):
             def tracked(*args, **kwargs):
                 # Extract document_id if present, otherwise use active doc
-                from avge_engine.services.engine import get_graph, resolve_doc
+                from avge_engine.services.engine import resolve_doc
+                from avge_engine.services.document_tool_service import DocumentToolService
                 try:
                     doc_id = kwargs.get("document_id") or resolve_doc(None)
-                    get_graph().track_op(doc_id, name)
+                    DocumentToolService().track_op(doc_id, name)
                 except Exception:
                     pass  # tracking is best-effort
                 return fn(*args, **kwargs)

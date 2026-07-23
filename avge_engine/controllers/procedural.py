@@ -6,9 +6,11 @@ import random
 from typing import Any, Literal
 
 from avge_engine.geometry.quad import quad_point
-from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.engine import StrokeWidthInput, resolve_doc, stroke_width_to_norm
+from avge_engine.services.document_tool_service import DocumentToolService
 from avge_engine.services.procedural_service import ProceduralService
-from avge_engine.scene import CurveConstraints, Style
+from avge_engine.services.scene_construction_service import SceneConstructionService
+from avge_engine.document import CurveConstraints, Style
 
 PATTERNS = Literal[
     "radial_spread",
@@ -220,7 +222,7 @@ def create_tools(mcp):
                 element's bounding box. ``width``, ``depth``, ``height`` are
                 always absolute (not scaled).
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -317,7 +319,7 @@ def create_tools(mcp):
                 💡 Import one half of a symmetrical character, mirror it.
             mirror_y: Mirror vertically.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -1045,7 +1047,7 @@ def _do_cornice(scene, doc_id: str, params: dict) -> str:
     sw = params.get("stroke_width", element.style.stroke_width)
     z = params.get("z_index", element.z_index + 4)
     try:
-        base = scene.project_quad(
+        base = SceneConstructionService().project_quad(
             quad, document_id=doc_id, element_id=rid, layer=element.layer,
             z_index=z, fill=fill, stroke=stroke, stroke_width=sw,
             metadata={"tool": "generate_shape", "pattern": "cornice", "source": element_id},
@@ -1059,7 +1061,7 @@ def _do_cornice(scene, doc_id: str, params: dict) -> str:
                 [p1[0] + nx * depth, p1[1] + ny * depth],
                 [p0[0] + nx * depth, p0[1] + ny * depth],
             ]
-            trim = scene.project_quad(
+            trim = SceneConstructionService().project_quad(
                 q2, document_id=doc_id, element_id=f"{rid}_trim", layer=element.layer,
                 z_index=z + 1, fill=params.get("trim_fill", "#F5FBFC"),
                 stroke=None, stroke_width=sw,
@@ -1097,7 +1099,7 @@ def _do_awning(scene, doc_id: str, params: dict) -> str:
     z = params.get("z_index", element.z_index + 8)
     created: list[str] = []
     try:
-        base = scene.project_quad(
+        base = SceneConstructionService().project_quad(
             q, document_id=doc_id, element_id=rid, layer=element.layer,
             z_index=z, fill=colors[0], stroke=params.get("stroke", "#5E6C70"),
             stroke_width=params.get("stroke_width", element.style.stroke_width),
@@ -1116,7 +1118,7 @@ def _do_awning(scene, doc_id: str, params: dict) -> str:
                 quad_point(q, u1, 1.0),
                 quad_point(q, u0, 1.0),
             ]
-            stripe = scene.project_quad(
+            stripe = SceneConstructionService().project_quad(
                 sq, document_id=doc_id, element_id=f"{rid}_stripe_{i:02d}",
                 layer=element.layer, z_index=z + 1, fill=colors[i % len(colors)],
                 stroke=None, stroke_width=params.get("stroke_width", element.style.stroke_width),

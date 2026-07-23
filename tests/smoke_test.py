@@ -7,7 +7,9 @@ Run: .venv/bin/python tests/smoke_test.py
 import sys, os, math
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from avge_engine.scene import SceneGraph, CurveConstraints, Style
+from avge_engine.document import CurveConstraints, Style
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.services.style_service import StyleService
 from avge_engine.renderer import svg_serialize, render_preview_base64
 from avge_engine.geometry import fit_curves, sample_curve
 
@@ -18,7 +20,8 @@ def _doc(scene):
 
 
 def test_create_document():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document(width=800, height=600, background="#F0F0F0")
     assert doc.id.startswith("doc_")
     assert doc.width == 800
@@ -28,7 +31,8 @@ def test_create_document():
 
 
 def test_create_element():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     element = scene.create_element(
         document_id=did, element_id="triangle",
@@ -43,10 +47,11 @@ def test_create_element():
 
 
 def test_style_objects():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
-    affected = scene.style_objects(["r1"], document_id=did, fill="#00FF00", stroke_width=0.02)
+    affected = StyleService(scene).style_objects(["r1"], document_id=did, fill="#00FF00", stroke_width=0.02)
     assert affected == ["r1"]
     r1 = scene.get_element("r1", did)
     assert r1.style.fill == "#00FF00"
@@ -55,7 +60,8 @@ def test_style_objects():
 
 
 def test_describe_scene():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
     desc = scene.describe_scene(detail="summary", document_id=did)
@@ -82,7 +88,8 @@ def test_curve_fitting():
 
 
 def test_renderer():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="sq",
         outline=[(0.1,0.1),(0.9,0.1),(0.9,0.9),(0.1,0.9)],
@@ -98,7 +105,8 @@ def test_renderer():
 
 
 def test_multi_element():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="body",
         outline=[(0.2,0.4),(0.8,0.4),(0.8,0.9),(0.2,0.9)],
@@ -114,7 +122,8 @@ def test_multi_element():
 
 
 def test_deterministic():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="t", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
     svg1 = svg_serialize(scene)

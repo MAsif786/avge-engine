@@ -1,6 +1,6 @@
 from avge_engine.controllers import procedural
 from avge_engine.renderer.svg import svg_serialize
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -15,10 +15,10 @@ class _FakeMCP:
 
 
 def _setup():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     procedural.create_tools(mcp)
-    graph = procedural.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     return mcp, graph, doc
 

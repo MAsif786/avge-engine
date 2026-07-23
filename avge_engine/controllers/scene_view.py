@@ -1,11 +1,13 @@
 """Scene view controller — describe_scene, render_preview, export_svg."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
-from avge_engine.services.engine import get_graph, resolve_doc
-from avge_engine.renderer import svg_serialize
+from avge_engine.services.engine import resolve_doc
+from avge_engine.services.element_service import ElementService
+from avge_engine.services.history_service import HistoryService
+from avge_engine.services.inspection_service import InspectionService
+from avge_engine.services.rendering_service import RenderingService
 
 
 def create_tools(mcp):
@@ -28,17 +30,14 @@ def create_tools(mcp):
             filter_layer: Optional — only describe objects in this layer.
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            desc = InspectionService().describe_scene(
+                detail=detail,
+                filter_layer=filter_layer,
+                document_id=document_id,
+            )
         except RuntimeError:
             return "Error: No active document — call create_document first"
-
-        desc = scene.describe_scene(
-            detail=detail,
-            filter_layer=filter_layer,
-            document_id=doc_id,
-        )
 
         lines: list[str] = []
         d = desc["document"]
@@ -99,13 +98,13 @@ def create_tools(mcp):
             document_id: Document UUID (omit for active doc).
             decimals: Rounding for coordinate output (default 4).
         """
-        scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document"
-        r = scene.get_element(element_id, doc_id)
-        if r is None:
+        try:
+            r = ElementService().get_element(doc_id, element_id)
+        except ValueError:
             return f"Error: Element '{element_id}' not found"
 
         lines = [f"Element: {element_id}"]
@@ -156,42 +155,21 @@ def create_tools(mcp):
             bbox: Optional — explicit crop area {x, y, w, h} in normalized coords.
                 💡 Combine with scale=4 for a detail zoom on a face or hand.
         """
-        scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document — call create_document first"
 
-        # If cropping requested, render SVG inline with modified viewBox
         if element_id or bbox:
-            from avge_engine.renderer.svg import svg_serialize
-            from avge_engine.renderer.raster import render_preview_base64
-            svg = svg_serialize(scene, doc_id)
-            import re
-            if element_id:
-                r = scene.get_element(element_id, doc_id)
-                if not r:
-                    return f"Error: Element '{element_id}' not found"
-                b = r.bounds
-                margin = 0.05
-                crop = {"x": b["x"] - margin, "y": b["y"] - margin,
-                        "w": b["w"] + margin * 2, "h": b["h"] + margin * 2}
-            elif bbox:
-                crop = bbox
-
-            # Modify viewBox to crop area
-            doc = scene.get_document(doc_id)
-            cw, ch = doc.width, doc.height
-            vx = crop["x"] * cw
-            vy = crop["y"] * ch
-            vw = crop["w"] * cw
-            vh = crop["h"] * ch
-            svg = re.sub(
-                r'viewBox="[^"]*"',
-                f'viewBox="{vx:.0f} {vy:.0f} {vw:.0f} {vh:.0f}"',
-                svg
-            )
-            b64 = render_preview_base64(svg, scale=scale)
+            try:
+                b64 = RenderingService().cropped_preview_base64(
+                    document_id=doc_id,
+                    scale=scale,
+                    element_id=element_id,
+                    bbox=bbox,
+                )
+            except ValueError as e:
+                return f"Error: {e}"
             return f"data:image/png;base64,{b64[:60]}... ({len(b64)} chars)"
 
         return f"http://localhost:8000/preview/{doc_id}.png"
@@ -219,25 +197,18 @@ def create_tools(mcp):
             exclude_element_ids: Optional exact element IDs to omit.
             exclude_prefixes: Optional ID prefixes to omit, e.g. ["guide_"].
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = RenderingService().export_svg(
+                filepath=filepath,
+                document_id=document_id,
+                exclude_layers=exclude_layers,
+                exclude_element_ids=exclude_element_ids,
+                exclude_prefixes=exclude_prefixes,
+            )
         except RuntimeError:
             return "Error: No document — call create_document first"
 
-        svg = svg_serialize(
-            scene,
-            doc_id,
-            exclude_layers=exclude_layers,
-            exclude_element_ids=exclude_element_ids,
-            exclude_prefixes=exclude_prefixes,
-        )
-
-        path = Path(filepath)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(svg)
-
-        return f"SVG saved: {path.resolve()} ({len(svg)} chars)"
+        return f"SVG saved: {result['filepath']} ({result['chars']} chars)"
 
     @mcp.tool(
         name="checkpoint_diff",
@@ -256,86 +227,10 @@ def create_tools(mcp):
             name: Checkpoint name (default "default").
             document_id: Document UUID (omit to use active document).
         """
-        import json
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            return HistoryService().checkpoint_diff(name=name, document_id=document_id)
         except RuntimeError:
             return "Error: No active document — call create_document first"
-
-        # Get list of checkpoint names for the document
-        cps = scene.list_checkpoints(doc_id)
-        if not cps:
-            return f"No checkpoints found for document '{doc_id}'"
-
-        # Get current element IDs
-        current_ids = set()
-        current_elements = {}
-        for r in scene.get_all_elements(doc_id):
-            current_ids.add(r.id)
-            current_elements[r.id] = {
-                "fill": r.style.fill, "stroke": r.style.stroke,
-                "stroke_width": r.style.stroke_width,
-                "z_index": r.z_index, "layer": r.layer, "version": r.version,
-                "outline_len": len(r.outline),
-                "primitive_type": r.primitive.get("type") if r.primitive else None,
-            }
-
-        try:
-            _doc_snap, elements_snap = scene.checkpoint_snapshot(doc_id, name)
-        except KeyError:
-            return f"Checkpoint '{name}' not found (available: {cps})"
-
-        checkpoint_ids = set(elements_snap.keys())
-        checkpoint_elements = {}
-        for rid, r in elements_snap.items():
-            checkpoint_elements[rid] = {
-                "fill": r.style.fill, "stroke": r.style.stroke,
-                "stroke_width": r.style.stroke_width,
-                "z_index": r.z_index, "layer": r.layer, "version": r.version,
-                "outline_len": len(r.outline),
-                "primitive_type": r.primitive.get("type") if r.primitive else None,
-            }
-
-        # Compute diff
-        added_ids = current_ids - checkpoint_ids
-        removed_ids = checkpoint_ids - current_ids
-        common_ids = current_ids & checkpoint_ids
-
-        modified = []
-        for rid in sorted(common_ids):
-            cur = current_elements[rid]
-            chk = checkpoint_elements[rid]
-            changes = []
-            if cur["fill"] != chk["fill"]:
-                changes.append(f"fill: {chk['fill']} → {cur['fill']}")
-            if cur["stroke"] != chk["stroke"]:
-                changes.append(f"stroke: {chk['stroke']} → {cur['stroke']}")
-            if cur["stroke_width"] != chk["stroke_width"]:
-                changes.append(f"stroke_width: {chk['stroke_width']} → {cur['stroke_width']}")
-            if cur["z_index"] != chk["z_index"]:
-                changes.append(f"z_index: {chk['z_index']} → {cur['z_index']}")
-            if cur["layer"] != chk["layer"]:
-                changes.append(f"layer: {chk['layer']} → {cur['layer']}")
-            if cur["outline_len"] != chk["outline_len"]:
-                changes.append(f"points: {chk['outline_len']} → {cur['outline_len']}")
-            if cur["primitive_type"] != chk["primitive_type"]:
-                changes.append(f"type: {chk['primitive_type']} → {cur['primitive_type']}")
-            if changes:
-                modified.append({"id": rid, "changes": changes})
-
-        lines = [
-            f"Checkpoint: '{name}'",
-            f"Added: {sorted(added_ids)}" if added_ids else "Added: (none)",
-            f"Removed: {sorted(removed_ids)}" if removed_ids else "Removed: (none)",
-            f"Modified: {len(modified)} element(s)",
-        ]
-        if not added_ids and not removed_ids and not modified:
-            lines.append("  (no changes since checkpoint)")
-        for m in modified:
-            lines.append(f"  {m['id']}: {'; '.join(m['changes'])}")
-
-        return "\n".join(lines)
 
     @mcp.tool(
         name="render_diff",
@@ -356,94 +251,7 @@ def create_tools(mcp):
             document_id: Document UUID (omit to use active document).
             scale: Render scale (0.25–2.0).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            return HistoryService().render_diff(name=name, document_id=document_id, scale=scale)
         except RuntimeError:
             return "Error: No active document — call create_document first"
-
-        cps = scene.list_checkpoints(doc_id)
-        if not cps:
-            return f"No checkpoints found for '{doc_id}'"
-
-        try:
-            _doc_snap, checkpoint_elements = scene.checkpoint_snapshot(doc_id, name)
-        except KeyError:
-            return f"Checkpoint '{name}' not found"
-
-        # Get current elements
-        current_elements = {r.id: r for r in scene.get_all_elements(doc_id)}
-        doc = scene.get_document(doc_id)
-
-        # Build diff SVG overlay
-        w, h = doc.width, doc.height
-        svg_lines = [
-            '<?xml version="1.0" encoding="UTF-8"?>',
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
-            f'  <rect width="{w}" height="{h}" fill="#1a1a2e"/>',
-            '  <text x="10" y="20" font-size="14" font-family="monospace" fill="#888">',
-            f'    Diff vs checkpoint "{name}" — green=added, red=removed, yellow=modified</text>',
-        ]
-
-        cp_ids = set(checkpoint_elements.keys())
-        cur_ids = set(current_elements.keys())
-
-        added = cur_ids - cp_ids
-        removed = cp_ids - cur_ids
-        common = cur_ids & cp_ids
-
-        # Checkpoint state (gray ghosts)
-        for rid in sorted(cp_ids):
-            r = checkpoint_elements[rid]
-            if not r.outline:
-                continue
-            pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
-            if r.constraints.closed:
-                svg_lines.append(f'  <polygon points="{pts}" fill="#666" fill-opacity="0.12" stroke="#666" stroke-opacity="0.25" stroke-width="1"/>')
-            else:
-                svg_lines.append(f'  <polyline points="{pts}" fill="none" stroke="#666" stroke-opacity="0.25" stroke-width="1"/>')
-
-        # Current state (color overlay on top)
-        for rid in sorted(cur_ids):
-            r = current_elements[rid]
-            if not r.outline:
-                continue
-            if rid in added:
-                color, label = "#33ff33", "added"
-            elif rid in removed:
-                continue  # already shown in red above
-            else:
-                # Check if modified
-                chk = checkpoint_elements.get(rid)
-                if chk:
-                    cur_fill = str(r.style.fill)
-                    chk_fill = str(chk.style.fill)
-                    if cur_fill == chk_fill and len(r.outline) == len(chk.outline):
-                        continue  # unchanged — skip for clarity
-                color, label = "#ffdd33", "modified"
-
-            pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
-            svg_lines.append(f'  <polygon points="{pts}" fill="{color}" fill-opacity="0.35" stroke="{color}" stroke-width="2"/>')
-
-        # Special handling for removed — red X marks
-        for rid in sorted(removed):
-            r = checkpoint_elements[rid]
-            if not r.outline:
-                continue
-            pts = " ".join(f"{p[0]*w:.1f},{p[1]*h:.1f}" for p in r.outline)
-            svg_lines.append(f'  <polygon points="{pts}" fill="#ff3333" fill-opacity="0.25" stroke="#ff3333" stroke-width="2"/>')
-            cx = sum(p[0] for p in r.outline) / len(r.outline) * w
-            cy = sum(p[1] for p in r.outline) / len(r.outline) * h
-            s = 6
-            svg_lines.append(f'  <line x1="{cx-s}" y1="{cy-s}" x2="{cx+s}" y2="{cy+s}" stroke="#ff3333" stroke-width="2"/>')
-            svg_lines.append(f'  <line x1="{cx-s}" y1="{cy+s}" x2="{cx+s}" y2="{cy-s}" stroke="#ff3333" stroke-width="2"/>')
-
-        svg_lines.append("</svg>")
-        diff_svg = "\n".join(svg_lines)
-
-        try:
-            from avge_engine.renderer.raster import render_preview_base64
-            b64 = render_preview_base64(diff_svg, scale=scale)
-            return f"Diff rendered: data:image/png;base64,{b64[:50]}... ({len(b64)} chars)"
-        except Exception as e:
-            return f"Diff SVG generated but PNG render failed: {e}"

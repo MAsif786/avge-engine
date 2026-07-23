@@ -1,7 +1,7 @@
 from avge_engine.controllers import element as element_controller
 from avge_engine.geometry import compute_bounds
 from avge_engine.geometry.procedural import ellipse_band
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -53,10 +53,10 @@ def test_ellipse_band_perspective_widens_near_side():
 
 
 def test_create_ellipse_band_controller_tool_creates_element():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element_controller.create_tools(mcp)
-    doc = element_controller.get_graph().create_document()
+    doc = get_document_operations().create_document()
 
     result = mcp.tools["create_ellipse_band"](
         document_id=doc.id,
@@ -72,7 +72,7 @@ def test_create_ellipse_band_controller_tool_creates_element():
     )
 
     assert "Ellipse band created: id=ring" in result
-    created = element_controller.get_graph().get_element("ring", doc.id)
+    created = get_document_operations().get_element("ring", doc.id)
     assert len(created.outline) == 26
     assert created.style.fill == "#445566"
     assert created.style.stroke is None

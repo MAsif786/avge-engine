@@ -3,12 +3,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from avge_engine.document import DocumentRepository, DocumentSessionManager
+from avge_engine.services.element_query import find_matching_elements
+
 
 class SelectorService:
     """Resolve AVGE shared selectors into ordered element IDs."""
 
     def __init__(self, graph) -> None:
         self.graph = graph
+        self.documents = DocumentRepository(graph, DocumentSessionManager(graph))
 
     def select_element_ids(
         self,
@@ -31,7 +35,7 @@ class SelectorService:
         if selector.get("ids"):
             candidates = list(selector["ids"])
         elif selector.get("group_name"):
-            members = self.graph.get_group(selector["group_name"], doc_id)
+            members = self.documents.get_group(doc_id, selector["group_name"])
             candidates = [m["id"] for m in members] if members else []
 
         bounds = selector.get("bounds") or {}
@@ -54,7 +58,26 @@ class SelectorService:
         }
         has_filters = any(v is not None for k, v in query_kwargs.items() if k != "document_id")
         if has_filters:
-            matched = [r["id"] for r in self.graph.find_objects(**query_kwargs)]
+            matched = [
+                r["id"]
+                for r in find_matching_elements(
+                    self.documents.list_elements(doc_id),
+                    fill=query_kwargs["fill"],
+                    min_x=query_kwargs["min_x"],
+                    max_x=query_kwargs["max_x"],
+                    min_y=query_kwargs["min_y"],
+                    max_y=query_kwargs["max_y"],
+                    min_w=query_kwargs["min_w"],
+                    max_w=query_kwargs["max_w"],
+                    min_h=query_kwargs["min_h"],
+                    max_h=query_kwargs["max_h"],
+                    z_min=query_kwargs["z_min"],
+                    z_max=query_kwargs["z_max"],
+                    has_stroke=query_kwargs["has_stroke"],
+                    layer=query_kwargs["layer"],
+                    tags=query_kwargs["tags"],
+                )
+            ]
             if candidates is not None:
                 matched_set = set(matched)
                 return [rid for rid in candidates if rid in matched_set]

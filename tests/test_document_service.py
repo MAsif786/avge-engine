@@ -1,10 +1,11 @@
-from avge_engine.scene import Style
+from avge_engine.document import Style
 from avge_engine.services.document_service import DocumentService
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.engine import reset_documents
 
 
 def test_document_service_clones_document_deeply():
-    reset_graph()
+    reset_documents()
     service = DocumentService()
     doc = service.create_document(width=800, height=600, name="source", background="#101820")
     service.graph.create_element(
@@ -14,7 +15,8 @@ def test_document_service_clones_document_deeply():
         style=Style(fill="#336699"),
         metadata={"kind": "facade"},
     )
-    service.graph.group_elements("facades", ["panel"], document_id=doc.id)
+    structure = DocumentStructureService(service.graph)
+    structure.group_elements("facades", ["panel"], document_id=doc.id)
 
     clone, source_id, element_count = service.clone_document(
         source_document_id=doc.id,
@@ -26,11 +28,11 @@ def test_document_service_clones_document_deeply():
     assert clone.name == "copy"
     assert element_count == 1
     assert service.graph.get_element("panel", clone.id) is not service.graph.get_element("panel", doc.id)
-    assert [r["id"] for r in service.graph.get_group("facades", clone.id)] == ["panel"]
+    assert [r["id"] for r in structure.get_group("facades", clone.id)] == ["panel"]
 
 
 def test_document_service_set_background_updates_version():
-    reset_graph()
+    reset_documents()
     service = DocumentService()
     doc = service.create_document(background="#FFFFFF")
 

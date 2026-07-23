@@ -2,7 +2,7 @@ import json
 
 from avge_engine.storage.compact import decode_snapshot, encode_snapshot
 from avge_engine.storage.file_adapter import FileStorageAdapter
-from avge_engine.scene.models import ElementNode
+from avge_engine.document.models import ElementNode
 from scripts.migrate_compact_storage import _normalize_element_keys
 
 

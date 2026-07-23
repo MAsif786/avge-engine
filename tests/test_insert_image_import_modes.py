@@ -1,5 +1,6 @@
 from avge_engine.controllers import element
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -14,10 +15,10 @@ class _FakeMCP:
 
 
 def _setup():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     return graph, doc, mcp
 
@@ -75,4 +76,4 @@ def test_insert_image_imports_svg_paths_as_editable_elements(tmp_path):
     assert outer.outline[2] == (0.6, 0.5)
     assert inner.style.fill is None
     assert inner.style.stroke == "#445566"
-    assert {"name": "icon", "count": 2} in graph.list_groups(doc.id)
+    assert {"name": "icon", "count": 2} in DocumentStructureService(graph).list_groups(document_id=doc.id)

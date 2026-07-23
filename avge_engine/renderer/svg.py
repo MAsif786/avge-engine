@@ -13,35 +13,49 @@ before any <path> elements.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from avge_engine.scene import SceneGraph
-
 from avge_engine.geometry import fit_curves
 from avge_engine.effects import resolve_fill, resolve_stroke, is_gradient, gradient_to_svg_def
+from avge_engine.document.models import DocumentNode, ElementNode
 
 
 def svg_serialize(
-    scene: SceneGraph,
+    scene,
     document_id: str | None = None,
     exclude_layers: list[str] | None = None,
     exclude_element_ids: list[str] | None = None,
     exclude_prefixes: list[str] | None = None,
 ) -> str:
-    """Produce a canonical SVG string from the scene graph.
+    """Produce a canonical SVG string from the current document state.
 
     Args:
-        scene: The scene graph instance.
+        scene: Object exposing document lookup methods.
         document_id: Specific doc to render (uses last active if omitted).
 
-    Returns byte-identical SVG for identical scene graph input.
+    Returns byte-identical SVG for identical document input.
     """
     doc_id = document_id or scene.active_document_id()
     if not doc_id or not scene.has_document(doc_id):
         return ""  # No document to render
     doc = scene.get_document(doc_id)
     elements = scene.get_all_elements(doc_id)
+    return svg_serialize_document(
+        doc,
+        elements,
+        exclude_layers=exclude_layers,
+        exclude_element_ids=exclude_element_ids,
+        exclude_prefixes=exclude_prefixes,
+    )
+
+
+def svg_serialize_document(
+    doc: DocumentNode,
+    elements: list[ElementNode],
+    *,
+    exclude_layers: list[str] | None = None,
+    exclude_element_ids: list[str] | None = None,
+    exclude_prefixes: list[str] | None = None,
+) -> str:
+    """Produce a canonical SVG string from a document and element snapshot."""
     if exclude_layers or exclude_element_ids or exclude_prefixes:
         layer_set = set(exclude_layers or [])
         id_set = set(exclude_element_ids or [])

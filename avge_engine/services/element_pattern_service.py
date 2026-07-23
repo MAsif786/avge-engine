@@ -13,7 +13,7 @@ from avge_engine.geometry.line_patterns import (
     scribble_paths,
     width_profile_values,
 )
-from avge_engine.scene import CurveConstraints, Style
+from avge_engine.document import CurveConstraints, Style
 
 
 def sample_element_outline(element, samples_per_segment: int = 8) -> list[list[float]]:
@@ -61,10 +61,9 @@ def apply_primitive_patterns(
     if outline_pattern in ("dashed", "dotted"):
         dash = "1,5" if outline_pattern == "dotted" else "7,5"
         sampled = sample_element_outline(base_element)
-        r = scene.create_line(
+        r = scene.documents.create_line(doc_id,
             points=sampled,
-            document_id=doc_id,
-            element_id=f"{base_element.id}_{outline_pattern}_outline",
+                        element_id=f"{base_element.id}_{outline_pattern}_outline",
             layer=layer,
             z_index=z_index + 2,
             stroke=color,
@@ -83,10 +82,9 @@ def apply_primitive_patterns(
             repeats = 2 if outline_pattern == "sketch" else 1
             for i in range(repeats):
                 pts = jitter_points(sampled, max(pattern_jitter, pattern_amplitude * 0.45), rng)
-                r = scene.create_line(
+                r = scene.documents.create_line(doc_id,
                     points=pts,
-                    document_id=doc_id,
-                    element_id=f"{base_element.id}_{outline_pattern}_outline_{i:02d}",
+                                        element_id=f"{base_element.id}_{outline_pattern}_outline_{i:02d}",
                     layer=layer,
                     z_index=z_index + 2 + i,
                     stroke=color,
@@ -106,10 +104,9 @@ def apply_primitive_patterns(
                 pattern_width,
             )
             ribbon = ribbon_outline(sampled, widths)
-            r = scene.create_element(
+            r = scene.documents.create_element_node(doc_id,
                 outline=ribbon,
-                document_id=doc_id,
-                element_id=f"{base_element.id}_{outline_pattern}_outline",
+                                element_id=f"{base_element.id}_{outline_pattern}_outline",
                 layer=layer,
                 z_index=z_index + 2,
                 constraints=CurveConstraints(smoothness=0.55, closed=True),
@@ -130,10 +127,9 @@ def apply_primitive_patterns(
                     pattern_amplitude,
                     1.0,
                 ))
-            r = scene.create_compound_path(
+            r = scene.documents.create_compound_path(doc_id,
                 subpaths=subpaths,
-                document_id=doc_id,
-                element_id=f"{base_element.id}_{outline_pattern}_outline",
+                                element_id=f"{base_element.id}_{outline_pattern}_outline",
                 layer=layer,
                 z_index=z_index + 2,
                 fill=None,
@@ -156,10 +152,9 @@ def apply_primitive_patterns(
                 subpaths = hatch_subpaths(
                     bounds, pattern_density, 25.0, fill_pattern, pattern_amplitude, pattern_jitter, rng
                 )
-                r = scene.create_compound_path(
+                r = scene.documents.create_compound_path(doc_id,
                     subpaths=subpaths,
-                    document_id=doc_id,
-                    element_id=f"{base_element.id}_{fill_pattern}_fill",
+                                        element_id=f"{base_element.id}_{fill_pattern}_fill",
                     layer=layer,
                     z_index=z_index + 1,
                     fill=None,
@@ -175,10 +170,9 @@ def apply_primitive_patterns(
                 created.append(r.id)
             elif fill_pattern == "scribble":
                 for i, pts in enumerate(scribble_paths(bounds, pattern_density, pattern_jitter, rng)):
-                    r = scene.create_line(
+                    r = scene.documents.create_line(doc_id,
                         points=pts,
-                        document_id=doc_id,
-                        element_id=f"{base_element.id}_{fill_pattern}_{i:02d}",
+                                                element_id=f"{base_element.id}_{fill_pattern}_{i:02d}",
                         layer=layer,
                         z_index=z_index + 1,
                         stroke=color,
@@ -194,12 +188,11 @@ def apply_primitive_patterns(
                 total = max(1, min(600, int(pattern_density)))
                 for i in range(total):
                     dot_w = pattern_width * rng.uniform(0.7, 1.6)
-                    r = scene.create_ellipse(
-                        b["x"] + rng.random() * b["w"],
-                        b["y"] + rng.random() * b["h"],
-                        dot_w,
-                        dot_w,
-                        document_id=doc_id,
+                    r = scene.documents.create_ellipse(doc_id,
+                        cx=b["x"] + rng.random() * b["w"],
+                        cy=b["y"] + rng.random() * b["h"],
+                        rx=dot_w,
+                        ry=dot_w,
                         element_id=f"{base_element.id}_{fill_pattern}_{i:03d}",
                         layer=layer,
                         z_index=z_index + 1,
@@ -212,5 +205,5 @@ def apply_primitive_patterns(
                     created.append(r.id)
 
     if created:
-        scene._persist(doc_id)
+        scene.documents.commit(doc_id, action="create_element_pattern", target=",".join(created))
     return created

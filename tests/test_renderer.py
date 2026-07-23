@@ -1,5 +1,7 @@
 """Tests for SVG renderer and curve engine edge cases."""
-from avge_engine.scene import SceneGraph, CurveConstraints, Style
+from avge_engine.document import CurveConstraints, Style
+from avge_engine.services.element_service import ElementService
+from avge_engine.services.engine import get_document_operations, reset_documents
 from avge_engine.renderer.svg import svg_serialize
 from avge_engine.geometry.curve import fit_curves, sample_curve
 
@@ -9,7 +11,8 @@ def _doc(scene):
 
 
 def test_svg_output():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
     svg = svg_serialize(scene, did)
@@ -20,14 +23,16 @@ def test_svg_output():
 
 
 def test_svg_background():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = scene.create_document(background="#FF0000").id
     svg = svg_serialize(scene, did)
     assert '#FF0000' in svg
 
 
 def test_svg_multiple_elements():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.create_element(document_id=did, element_id="r2", outline=[(0.2,0.2),(0.8,0.2),(0.8,0.8),(0.2,0.8)])
@@ -36,7 +41,8 @@ def test_svg_multiple_elements():
 
 
 def test_svg_primitive_rect():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_rect(0.1, 0.1, 0.5, 0.3, document_id=did, rx=0.05)
     svg = svg_serialize(scene, did)
@@ -45,7 +51,8 @@ def test_svg_primitive_rect():
 
 
 def test_svg_primitive_ellipse():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_ellipse(0.5, 0.5, 0.2, document_id=did)
     svg = svg_serialize(scene, did)
@@ -53,7 +60,8 @@ def test_svg_primitive_ellipse():
 
 
 def test_svg_polygon_smoothness_zero():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)],
                         constraints=CurveConstraints(smoothness=0.0))
@@ -62,7 +70,8 @@ def test_svg_polygon_smoothness_zero():
 
 
 def test_svg_clip_path():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="clip", outline=[(0.1,0.1),(0.9,0.1),(0.9,0.9),(0.1,0.9)])
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)], clip_to="clip")
@@ -72,7 +81,8 @@ def test_svg_clip_path():
 
 
 def test_svg_z_order():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="back", outline=[(0,0),(1,0),(1,1),(0,1)], z_index=0)
     scene.create_element(document_id=did, element_id="front", outline=[(0.2,0.2),(0.8,0.2),(0.8,0.8),(0.2,0.8)], z_index=10)
@@ -85,7 +95,8 @@ def test_svg_z_order():
 
 
 def test_svg_gradient():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     from avge_engine.effects import Style
     gradient_style = Style(
@@ -127,7 +138,8 @@ def test_curve_sample():
 
 
 def test_svg_blend_mode():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#F00", blend_mode="multiply"))
@@ -136,7 +148,8 @@ def test_svg_blend_mode():
 
 
 def test_svg_opacity():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#F00", opacity=0.5))
@@ -145,9 +158,10 @@ def test_svg_opacity():
 
 
 def test_svg_text():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
-    r = scene.create_text(0.5, 0.5, "Hello", document_id=did, font_size=0.05, font_family="Arial")
+    r = ElementService(scene).create_text(0.5, 0.5, "Hello", document_id=did, font_size=0.05, font_family="Arial")
     assert r.primitive["type"] == "text"
     svg = svg_serialize(scene, did)
     assert '<text' in svg
@@ -159,9 +173,10 @@ def test_svg_text():
 def test_svg_text_combines_primitive_and_style_opacity_once():
     import xml.etree.ElementTree as ET
 
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
-    r = scene.create_text(0.5, 0.5, "Hello", document_id=did, opacity=0.9)
+    r = ElementService(scene).create_text(0.5, 0.5, "Hello", document_id=did, opacity=0.9)
     scene.edit_element(r.id, document_id=did, opacity=0.5)
 
     svg = svg_serialize(scene, did)
@@ -173,15 +188,25 @@ def test_svg_text_combines_primitive_and_style_opacity_once():
 
 
 def test_svg_empty_scene():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     svg = svg_serialize(scene, None)
     assert svg == ""  # no document to render
 
 
 def test_svg_image():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
-    r = scene.insert_image(0.2, 0.3, 0.6, 0.4, "https://example.com/img.png", document_id=did)
+    result = ElementService(scene).insert_image(
+        x=0.2,
+        y=0.3,
+        width=0.6,
+        height=0.4,
+        href="https://example.com/img.png",
+        document_id=did,
+    )
+    r = scene.get_element(result.element_id, did)
     assert r.primitive["type"] == "image"
     svg = svg_serialize(scene, did)
     assert '<image' in svg
@@ -191,15 +216,16 @@ def test_svg_image():
 
 
 def test_svg_image_clip_path():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_ellipse(0.5, 0.5, 0.2, 0.15, document_id=did, element_id="clip")
-    scene.insert_image(
-        0.2,
-        0.2,
-        0.6,
-        0.5,
-        "data:image/png;base64,abc",
+    ElementService(scene).insert_image(
+        x=0.2,
+        y=0.2,
+        width=0.6,
+        height=0.5,
+        href="data:image/png;base64,abc",
         document_id=did,
         element_id="img",
         clip_to="clip",
@@ -214,7 +240,8 @@ def test_svg_image_clip_path():
 
 
 def test_edit_element_shape_rect():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.edit_element("r", document_id=did, shape={"type": "rect", "x": 0.1, "y": 0.1,
@@ -225,7 +252,8 @@ def test_edit_element_shape_rect():
 
 
 def test_edit_element_shape_ellipse():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.edit_element("r", document_id=did,
@@ -235,7 +263,8 @@ def test_edit_element_shape_ellipse():
 
 
 def test_edit_element_outline_update():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.edit_element("r", document_id=did, smoothness=0.8,
@@ -247,17 +276,19 @@ def test_edit_element_outline_update():
 def test_png_symbol_font_fallback():
     """Verify Unicode symbols ★✦ render via font-family fallback in SVG."""
     from avge_engine.renderer.svg import svg_serialize
-    from avge_engine.scene import SceneGraph
-    s = SceneGraph()
+    from avge_engine.services.engine import get_document_operations, reset_documents
+    reset_documents()
+    s = get_document_operations()
     did = s.create_document(name='test', background='#FFFFFF').id
-    s.create_text(0.5, 0.5, '✦ ★ —', document_id=did, font_size=0.06)
+    ElementService(s).create_text(0.5, 0.5, '✦ ★ —', document_id=did, font_size=0.06)
     svg = svg_serialize(s, did)
     # Font-family should include Apple Symbols for Unicode symbol coverage
     assert 'Apple Symbols' in svg, 'SVG should include Apple Symbols font fallback'
 
 
 def test_edit_element_stroke_dasharray():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_line(0.1, 0.1, 0.9, 0.9, document_id=did, element_id="line1")
     scene.edit_element("line1", document_id=did, stroke_dasharray="4,2")

@@ -1,11 +1,12 @@
-from avge_engine.scene import Style
-from avge_engine.services.engine import reset_graph
+from avge_engine.document import Style
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.engine import reset_documents
 from avge_engine.services.element_service import ElementService
 from avge_engine.services.element_service import ElementService
 
 
 def _setup_scene():
-    reset_graph()
+    reset_documents()
     service = ElementService()
     graph = service.graph
     source = graph.create_document(width=1000, height=800, name="source")
@@ -18,7 +19,7 @@ def _setup_scene():
         style=Style(fill="#CC3333", stroke="#111111", stroke_width=0.002),
         metadata={"kind": "prop"},
     )
-    graph.group_elements("props", ["box"], document_id=source.id)
+    DocumentStructureService(graph).group_elements("props", ["box"], document_id=source.id)
     return service, source, target
 
 

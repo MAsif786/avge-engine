@@ -1,5 +1,11 @@
-"""Tests for SceneGraph operations — boolean, transform, groups, batch, etc."""
-from avge_engine.scene import SceneGraph, CurveConstraints, Style
+"""Tests for DocumentLayer operations — boolean, transform, groups, batch, etc."""
+from avge_engine.document import CurveConstraints, Style
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.element_service import ElementService
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.services.inspection_service import InspectionService
+from avge_engine.services.style_service import StyleService
+from avge_engine.services.transform_service import TransformService
 
 
 def _doc(scene):
@@ -7,7 +13,8 @@ def _doc(scene):
 
 
 def test_boolean_union():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r1 = scene.create_element(document_id=did, element_id="a", outline=[(0.1,0.1),(0.5,0.1),(0.5,0.5),(0.1,0.5)])
     r2 = scene.create_element(document_id=did, element_id="b", outline=[(0.3,0.3),(0.7,0.3),(0.7,0.7),(0.3,0.7)])
@@ -19,7 +26,8 @@ def test_boolean_union():
 
 
 def test_boolean_keep_originals():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r1 = scene.create_element(document_id=did, element_id="a", outline=[(0.1,0.1),(0.5,0.1),(0.5,0.5),(0.1,0.5)])
     r2 = scene.create_element(document_id=did, element_id="b", outline=[(0.3,0.3),(0.7,0.3),(0.7,0.7),(0.3,0.7)])
@@ -29,7 +37,8 @@ def test_boolean_keep_originals():
 
 
 def test_boolean_subtract():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r1 = scene.create_element(document_id=did, element_id="a", outline=[(0.1,0.1),(0.5,0.1),(0.5,0.5),(0.1,0.5)])
     r2 = scene.create_element(document_id=did, element_id="b", outline=[(0.2,0.2),(0.4,0.2),(0.4,0.4),(0.2,0.4)])
@@ -38,103 +47,117 @@ def test_boolean_subtract():
 
 
 def test_transform_translate():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    scene.transform_objects(["r"], document_id=did, dx=0.1, dy=0.05)
+    TransformService(scene).transform_objects(document_id=did, ids=["r"], dx=0.1, dy=0.05)
     r = scene.get_element("r", did)
     assert r.outline[0][0] > 0.15
 
 
 def test_transform_rotate():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    scene.transform_objects(["r"], document_id=did, rotate=45)
+    TransformService(scene).transform_objects(document_id=did, ids=["r"], rotate=45)
     r = scene.get_element("r", did)
     assert r.outline is not None
 
 
 def test_transform_mirror():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    scene.transform_objects(["r"], document_id=did, mirror_x=True)
+    TransformService(scene).transform_objects(document_id=did, ids=["r"], mirror_x=True)
     r = scene.get_element("r", did)
     assert r.outline is not None
 
 
 def test_transform_scale():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    scene.transform_objects(["r"], document_id=did, scale=2.0)
+    TransformService(scene).transform_objects(document_id=did, ids=["r"], scale=2.0)
     r = scene.get_element("r", did)
     assert r.outline is not None
 
 
 def test_duplicate_element():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    dup = scene.duplicate_element("r", document_id=did, offset_x=0.2)
+    dup = ElementService(scene).duplicate_element("r", document_id=did, offset_x=0.2)
     assert dup.id != "r"
     assert scene.has_element(dup.id, did)
 
 
 def test_duplicate_with_mirror():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    dup = scene.duplicate_element("r", document_id=did, mirror_x=True, mirror_axis_x=0.5)
+    dup = ElementService(scene).duplicate_element("r", document_id=did, mirror_x=True, mirror_axis_x=0.5)
     assert scene.has_element(dup.id, did)
 
 
 def test_duplicate_shadow_mode():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    dup = scene.duplicate_element("r", document_id=did, shadow_mode=True, offset_x=0.01)
+    dup = ElementService(scene).duplicate_element("r", document_id=did, shadow_mode=True, offset_x=0.01)
     assert dup.style.stroke is None
     assert dup.z_index == scene.get_element("r", did).z_index - 1
 
 
 def test_duplicate_with_scale_rotate():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
-    dup = scene.duplicate_element("r", document_id=did, scale=0.5, rotate=30)
+    dup = ElementService(scene).duplicate_element("r", document_id=did, scale=0.5, rotate=30)
     assert scene.has_element(dup.id, did)
 
 
 def test_groups_create():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
+    structure = DocumentStructureService(scene)
     scene.create_element(document_id=did, element_id="a", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.create_element(document_id=did, element_id="b", outline=[(0,0),(1,0),(1,1),(0,1)])
-    members = scene.group_elements("my_group", ["a", "b"], document_id=did)
+    members = structure.group_elements("my_group", ["a", "b"], document_id=did)
     assert len(members) == 2
 
 
 def test_groups_add_remove():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
+    structure = DocumentStructureService(scene)
     scene.create_element(document_id=did, element_id="a", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.create_element(document_id=did, element_id="b", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.group_elements("g", ["a"], document_id=did)
-    scene.add_to_group("g", ["b"], document_id=did)
-    assert len(scene.get_group("g", did)) == 2
-    scene.remove_from_group("g", ["a"], did)
-    assert len(scene.get_group("g", did)) == 1
+    structure.group_elements("g", ["a"], document_id=did)
+    structure.add_to_group("g", ["b"], document_id=did)
+    assert len(structure.get_group("g", did)) == 2
+    structure.remove_from_group("g", ["a"], did)
+    assert len(structure.get_group("g", did)) == 1
 
 
 def test_duplicate_group():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
+    structure = DocumentStructureService(scene)
     scene.create_element(document_id=did, element_id="a", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.create_element(document_id=did, element_id="b", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.group_elements("g", ["a", "b"], document_id=did)
-    new_ids = scene.duplicate_group("g", document_id=did, dx=0.1)
+    structure.group_elements("g", ["a", "b"], document_id=did)
+    new_ids = structure.duplicate_group(group_name="g", document_id=did, dx=0.1)["new_ids"]
     assert len(new_ids) == 2
     # Check copies exist
     for nid in new_ids:
@@ -142,7 +165,8 @@ def test_duplicate_group():
 
 
 def test_create_rect():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r = scene.create_rect(0.1, 0.1, 0.5, 0.3, document_id=did)
     assert r.primitive["type"] == "rect"
@@ -150,7 +174,8 @@ def test_create_rect():
 
 
 def test_create_ellipse():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r = scene.create_ellipse(0.5, 0.5, 0.2, document_id=did)
     assert r.primitive["type"] == "ellipse"
@@ -158,65 +183,72 @@ def test_create_ellipse():
 
 
 def test_create_line():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r = scene.create_line(0.1, 0.1, 0.9, 0.9, document_id=did)
     assert r.primitive["type"] == "line"
 
 
 def test_create_polyline():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r = scene.create_line(points=[[0.1,0.1],[0.5,0.8],[0.9,0.1]], document_id=did)
     assert r.primitive is None  # polyline is path-based
 
 
 def test_find_objects():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#FF0000"))
     scene.create_element(document_id=did, element_id="r2", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#00FF00"))
-    results = scene.find_objects(document_id=did, fill="#FF0000")
+    results = InspectionService(scene).find_objects(document_id=did, fill="#FF0000")
     assert len(results) == 1
     assert results[0]["id"] == "r1"
 
 
 def test_find_objects_z_range():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)], z_index=5)
     scene.create_element(document_id=did, element_id="r2", outline=[(0,0),(1,0),(1,1),(0,1)], z_index=15)
-    results = scene.find_objects(document_id=did, z_min=10, z_max=20)
+    results = InspectionService(scene).find_objects(document_id=did, z_min=10, z_max=20)
     assert len(results) == 1
     assert results[0]["id"] == "r2"
 
 
 def test_find_objects_layer():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)], layer="bg")
     scene.create_element(document_id=did, element_id="r2", outline=[(0,0),(1,0),(1,1),(0,1)], layer="fg")
-    results = scene.find_objects(document_id=did, layer="fg")
+    results = InspectionService(scene).find_objects(document_id=did, layer="fg")
     assert len(results) == 1
 
 
 def test_find_objects_has_stroke():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#F00", stroke="#000"))
     scene.create_element(document_id=did, element_id="r2", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#0F0", stroke=None))
-    results = scene.find_objects(document_id=did, has_stroke=True)
+    results = InspectionService(scene).find_objects(document_id=did, has_stroke=True)
     assert len(results) == 1
-    results2 = scene.find_objects(document_id=did, has_stroke=False)
+    results2 = InspectionService(scene).find_objects(document_id=did, has_stroke=False)
     assert len(results2) == 1
 
 
 def test_extrude_element():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0.1,0.1),(0.5,0.8),(0.9,0.1)])
     scene.extrude_element_outline("r", document_id=did, segment_indices=[0])
@@ -225,7 +257,8 @@ def test_extrude_element():
 
 
 def test_checkpoint_restore():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)], z_index=1)
     scene.checkpoint(did, "before")
@@ -238,7 +271,8 @@ def test_checkpoint_restore():
 
 
 def test_delete_element():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     assert scene.has_element("r", did)
@@ -248,14 +282,16 @@ def test_delete_element():
 
 
 def test_delete_element_not_found():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     deleted = scene.delete_element(document_id=did, element_id="nonexistent")
     assert deleted is False
 
 
 def test_create_element_defaults():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r = scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     assert r.style.fill == "#CCCCCC"
@@ -266,7 +302,8 @@ def test_create_element_defaults():
 
 
 def test_create_element_with_metadata():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     r = scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
                             metadata={"part": "handle"})
@@ -274,7 +311,8 @@ def test_create_element_with_metadata():
 
 
 def test_edit_element_outline():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.edit_element("r", document_id=did, outline=[(0,0),(1,0),(1,1),(0,1),(0,0)])
@@ -283,7 +321,8 @@ def test_edit_element_outline():
 
 
 def test_edit_element_style():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.edit_element("r", document_id=did, fill="#FF0000", stroke="none")
@@ -293,21 +332,23 @@ def test_edit_element_style():
 
 
 def test_style_objects():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r1", outline=[(0,0),(1,0),(1,1),(0,1)])
     scene.create_element(document_id=did, element_id="r2", outline=[(0,0),(1,0),(1,1),(0,1)])
-    affected = scene.style_objects(["r1", "r2"], document_id=did, fill="#00FF00")
+    affected = StyleService(scene).style_objects(["r1", "r2"], document_id=did, fill="#00FF00")
     assert len(affected) == 2
     assert scene.get_element("r1", did).style.fill == "#00FF00"
 
 
 def test_style_objects_partial():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)],
                         style=Style(fill="#F00", stroke="#000"))
-    scene.style_objects(["r"], document_id=did, stroke_width=0.02)
+    StyleService(scene).style_objects(["r"], document_id=did, stroke_width=0.02)
     r = scene.get_element("r", did)
     assert r.style.fill == "#F00"  # unchanged
     assert r.style.stroke == "#000"  # unchanged
@@ -315,7 +356,8 @@ def test_style_objects_partial():
 
 
 def test_track_op():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.track_op(did, "test_tool")
     stats = scene.get_doc_stats(did)
@@ -324,7 +366,8 @@ def test_track_op():
 
 
 def test_describe_scene():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="r", outline=[(0,0),(1,0),(1,1),(0,1)])
     desc = scene.describe_scene(did)
@@ -333,17 +376,20 @@ def test_describe_scene():
 
 
 def test_list_groups():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     scene.create_element(document_id=did, element_id="a", outline=[(0,0),(1,0),(1,1),(0,1)])
-    scene.group_elements("g", ["a"], document_id=did)
-    groups = scene.list_groups(did)
+    structure = DocumentStructureService(scene)
+    structure.group_elements("g", ["a"], document_id=did)
+    groups = structure.list_groups(document_id=did)
     assert len(groups) == 1
     assert groups[0]["name"] == "g"
 
 
 def test_composite_element():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = _doc(scene)
     result = scene.create_composite_element(
         outline=[(0.1,0.3),(0.5,0.3),(0.9,0.3),(0.9,0.7),(0.1,0.7)],

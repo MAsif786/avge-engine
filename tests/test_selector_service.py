@@ -1,12 +1,13 @@
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.engine import reset_documents
+from avge_engine.services.document_structure_service import DocumentStructureService
 from avge_engine.services.selector_service import SelectorService, selector_from_legacy
 
 
 def _setup_scene():
-    reset_graph()
-    from avge_engine.services.engine import get_graph
+    reset_documents()
+    from avge_engine.services.engine import get_document_operations
 
-    graph = get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     graph.create_element(
         document_id=doc.id,
@@ -32,7 +33,7 @@ def _setup_scene():
         metadata={"kind": "skip"},
     )
     graph.edit_element("blue", document_id=doc.id, fill="#3366CC")
-    graph.group_elements("targets", ["near_red", "far_red"], document_id=doc.id)
+    DocumentStructureService(graph).group_elements("targets", ["near_red", "far_red"], document_id=doc.id)
     return graph, doc
 
 

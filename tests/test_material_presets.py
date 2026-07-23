@@ -1,5 +1,5 @@
 from avge_engine.controllers import element, style
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -14,12 +14,12 @@ class _FakeMCP:
 
 
 def _setup_scene():
-    reset_graph()
+    reset_documents()
     element_mcp = _FakeMCP()
     style_mcp = _FakeMCP()
     element.create_tools(element_mcp)
     style.create_tools(style_mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     graph.create_element(
         document_id=doc.id,

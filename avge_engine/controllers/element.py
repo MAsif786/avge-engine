@@ -5,17 +5,13 @@ import math
 import json as _json
 from typing import Any, Literal
 
-from avge_engine.services.engine import (
-    StrokeWidthInput,
-    get_graph,
-    resolve_doc,
-    validate_input,
-    stroke_width_to_norm,
-)
+from avge_engine.services.engine import StrokeWidthInput, resolve_doc, validate_input, stroke_width_to_norm
 from avge_engine.services.element_service import ElementService
+from avge_engine.services.document_structure_service import DocumentStructureService
 from avge_engine.services.element_pattern_service import apply_primitive_patterns
+from avge_engine.services.document_tool_service import DocumentToolService
 from avge_engine.geometry.procedural import compute_arc, compute_polygon, compute_star, ellipse_band
-from avge_engine.scene import CurveConstraints, Style
+from avge_engine.document import CurveConstraints, Style
 
 BLEND_MODES = Literal[
     "normal", "multiply", "screen", "overlay", "darken", "lighten",
@@ -28,7 +24,7 @@ def _relative_to_absolute(scene, doc_id, relative_to, points):
     """Transform relative (0-1) coordinates to absolute within a reference element's bounds.
 
     Args:
-        scene: Scene graph instance.
+        scene: Document store instance.
         doc_id: Document ID.
         relative_to: Element ID to use as reference bounding box.
         points: List of [x, y] or (x, y) coordinates in 0-1 space.
@@ -209,7 +205,7 @@ def create_tools(mcp):
             pattern_stroke_width: Pattern overlay stroke width in canvas pixels.
             pattern_opacity: Pattern overlay opacity.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -265,7 +261,7 @@ def create_tools(mcp):
                     )
                     if groups:
                         for g in groups:
-                            scene.add_to_group(g, [r.id], doc_id)
+                            DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[r.id], document_id=doc_id)
                     pattern_ids = apply_primitive_patterns(
                         scene, doc_id, r, outline_pattern, fill_pattern,
                         pattern_density, pattern_amplitude, pattern_jitter,
@@ -289,7 +285,7 @@ def create_tools(mcp):
                     )
                     if groups:
                         for g in groups:
-                            scene.add_to_group(g, [e.id], doc_id)
+                            DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[e.id], document_id=doc_id)
                     pattern_ids = apply_primitive_patterns(
                         scene, doc_id, e, outline_pattern, fill_pattern,
                         pattern_density, pattern_amplitude, pattern_jitter,
@@ -313,7 +309,7 @@ def create_tools(mcp):
                         )
                         if groups:
                             for g in groups:
-                                scene.add_to_group(g, [lr.id], doc_id)
+                                DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[lr.id], document_id=doc_id)
                         return f"Polyline created: id={lr.id}, {len(pts)} points"
                     else:
                         lr = scene.create_line(
@@ -327,7 +323,7 @@ def create_tools(mcp):
                         )
                         if groups:
                             for g in groups:
-                                scene.add_to_group(g, [lr.id], doc_id)
+                                DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[lr.id], document_id=doc_id)
                         return f"Line created: id={lr.id}, ({shape['x1']:.4f},{shape['y1']:.4f}) → ({shape['x2']:.4f},{shape['y2']:.4f})"
                 elif  stype == "arc":
                     pts = compute_arc(shape["cx"], shape["cy"], shape["r"],
@@ -516,7 +512,7 @@ def create_tools(mcp):
                 and narrow the upper/far side.
             skew_x: Horizontal shear based on vertical position.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -584,7 +580,7 @@ def create_tools(mcp):
             )
             if groups:
                 for g in groups:
-                    scene.add_to_group(g, [element.id], doc_id)
+                    DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[element.id], document_id=doc_id)
             pattern_ids = apply_primitive_patterns(
                 scene, doc_id, element, outline_pattern, fill_pattern,
                 pattern_density, pattern_amplitude, pattern_jitter,
@@ -901,14 +897,13 @@ def create_tools(mcp):
                 stroke (default "none"), z_index_offset (default -1).
                 💡 Saves 1 call per text label — no separate rect creation.
         """
-        scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
 
         try:
-            r = scene.create_text(
+            r = ElementService().create_text(
                 x, y, text,
                 document_id=doc_id, element_id=element_id,
                 layer=layer, z_index=z_index,
@@ -919,7 +914,7 @@ def create_tools(mcp):
             )
             if groups:
                 for g in groups:
-                    scene.add_to_group(g, [r.id], doc_id)
+                    DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[r.id], document_id=doc_id)
 
             box_info = ""
             if background_box is not None:
@@ -936,7 +931,7 @@ def create_tools(mcp):
                 box_y = y - th + pad * 0.5
                 box_w = tw + pad * 2
                 box_h = th + pad
-                box = scene.create_rect(
+                box = DocumentToolService().create_rect(
                     box_x, box_y, box_w, box_h,
                     rx=rx,
                     document_id=doc_id,
@@ -946,7 +941,7 @@ def create_tools(mcp):
                 )
                 if groups:
                     for g in groups:
-                        scene.add_to_group(g, [box.id], doc_id)
+                        DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[box.id], document_id=doc_id)
                 box_info = f", box=({box_x:.4f},{box_y:.4f}) {box_w:.4f}x{box_h:.4f}"
 
             return (
@@ -1132,7 +1127,7 @@ def create_tools(mcp):
             pattern_stroke_width: Pattern overlay stroke width in canvas pixels.
             pattern_opacity: Pattern overlay opacity.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -1172,7 +1167,7 @@ def create_tools(mcp):
                 )
                 if groups:
                     for g in groups:
-                        scene.add_to_group(g, [r.id], doc_id)
+                        DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[r.id], document_id=doc_id)
                 pattern_ids = apply_primitive_patterns(
                     scene, doc_id, r, outline_pattern, fill_pattern,
                     pattern_density, pattern_amplitude, pattern_jitter,
@@ -1196,7 +1191,7 @@ def create_tools(mcp):
                 )
                 if groups:
                     for g in groups:
-                        scene.add_to_group(g, [e.id], doc_id)
+                        DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[e.id], document_id=doc_id)
                 pattern_ids = apply_primitive_patterns(
                     scene, doc_id, e, outline_pattern, fill_pattern,
                     pattern_density, pattern_amplitude, pattern_jitter,
@@ -1246,7 +1241,7 @@ def create_tools(mcp):
                         )
                     if groups:
                         for g in groups:
-                            scene.add_to_group(g, [lr.id], doc_id)
+                            DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[lr.id], document_id=doc_id)
                     pattern_ids = apply_primitive_patterns(
                         scene, doc_id, lr, outline_pattern, fill_pattern if is_closed else None,
                         pattern_density, pattern_amplitude, pattern_jitter,
@@ -1270,7 +1265,7 @@ def create_tools(mcp):
                     )
                     if groups:
                         for g in groups:
-                            scene.add_to_group(g, [lr.id], doc_id)
+                            DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[lr.id], document_id=doc_id)
                     pattern_ids = apply_primitive_patterns(
                         scene, doc_id, lr, outline_pattern, None,
                         pattern_density, pattern_amplitude, pattern_jitter,
@@ -1302,7 +1297,7 @@ def create_tools(mcp):
                     )
                     if groups:
                         for g in groups:
-                            scene.add_to_group(g, [r.id], doc_id)
+                            DocumentStructureService().edit_group(action="add", group_name=g, element_ids=[r.id], document_id=doc_id)
                     pattern_ids = apply_primitive_patterns(
                         scene, doc_id, r, outline_pattern, fill_pattern if r.constraints.closed else None,
                         pattern_density, pattern_amplitude, pattern_jitter,
@@ -1419,7 +1414,7 @@ def create_tools(mcp):
             pattern_stroke_width: Pattern overlay stroke width in canvas pixels.
             pattern_opacity: Pattern overlay opacity.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:

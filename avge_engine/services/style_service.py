@@ -1,23 +1,99 @@
 """Style application service."""
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from avge_engine.constants.style import MATERIAL_PRESETS
 from avge_engine.effects import Style
+from avge_engine.effects.color import apply_hsl_offset
 from avge_engine.geometry import CurveConstraints
+from avge_engine.effects import GradientDef
 from avge_engine.schemas.common import StrokeWidthInput
 from avge_engine.schemas.service_results import DepthHazeResult, LineHierarchyResult, MaterialApplyResult
-from avge_engine.services.base import BaseService
-from avge_engine.services.engine import resolve_doc, stroke_width_to_norm
+from avge_engine.services.base_element import BaseElementService
 from avge_engine.services.selector_service import select_element_ids
-from avge_engine.scene.models import ElementNode
+from avge_engine.document.models import ElementNode
 from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
 from avge_engine.utils.math_utils import clamp01
 
 
-class StyleService(BaseService):
+class StyleService(BaseElementService):
     """Application service for style operations shared by MCP/API callers."""
+
+    def style_objects(
+        self,
+        ids: list[str],
+        document_id: str | None = None,
+        *,
+        fill: str | GradientDef | None = None,
+        stroke: str | None = None,
+        stroke_width: float | None = None,
+        opacity: float | None = None,
+        fill_gradient: str | dict | None = None,
+        blend_mode: str | None = None,
+        clip_to: str | None = None,
+        stroke_linecap: str | None = None,
+        stroke_dasharray: str | None = None,
+        blur: float | None = None,
+        fill_hsl_offset: dict | None = None,
+        stroke_hsl_offset: dict | None = None,
+    ) -> list[str]:
+        """Update style on existing elements. Returns list of actually updated IDs."""
+        doc_id = self.require_document_id(document_id)
+        affected: list[str] = []
+        for element_id in ids:
+            try:
+                element = self.get_element(doc_id, element_id)
+            except ValueError:
+                continue
+            old = element.style
+            resolved_fill = fill
+            if fill_gradient is not None:
+                if isinstance(fill_gradient, str):
+                    try:
+                        resolved_fill = json.loads(fill_gradient)
+                    except json.JSONDecodeError:
+                        resolved_fill = fill_gradient
+                else:
+                    resolved_fill = fill_gradient
+            elif fill is not None:
+                resolved_fill = fill
+            elif fill_hsl_offset is not None and isinstance(old.fill, str) and old.fill.startswith("#"):
+                resolved_fill = apply_hsl_offset(
+                    old.fill,
+                    h_offset=fill_hsl_offset.get("h", 0),
+                    s_offset=fill_hsl_offset.get("s", 0),
+                    l_offset=fill_hsl_offset.get("l", 0),
+                )
+
+            resolved_stroke = stroke
+            if stroke is None and stroke_hsl_offset is not None and isinstance(old.stroke, str) and old.stroke.startswith("#"):
+                resolved_stroke = apply_hsl_offset(
+                    old.stroke,
+                    h_offset=stroke_hsl_offset.get("h", 0),
+                    s_offset=stroke_hsl_offset.get("s", 0),
+                    l_offset=stroke_hsl_offset.get("l", 0),
+                )
+
+            self.documents.update_element(
+                doc_id,
+                element_id,
+                fill=resolved_fill if resolved_fill is not None else old.fill,
+                stroke=resolved_stroke if resolved_stroke is not None else old.stroke,
+                stroke_width=stroke_width,
+                opacity=opacity,
+                blend_mode=blend_mode,
+                stroke_linecap=stroke_linecap,
+                stroke_dasharray=stroke_dasharray,
+                blur=blur,
+            )
+            if clip_to is not None:
+                element.clip_to = clip_to
+            affected.append(element_id)
+        if affected:
+            self.commit(doc_id, action="style_objects", target=str(affected))
+        return affected
 
     def apply_depth_haze(
         self,
@@ -33,7 +109,7 @@ class StyleService(BaseService):
         opacity_falloff: float = 0.0,
     ) -> DepthHazeResult:
         """Blend selected elements toward haze_color based on vertical depth."""
-        doc_id = resolve_doc(document_id)
+        doc_id = self.require_document_id(document_id)
 
         if hex_to_rgb(haze_color) is None:
             raise ValueError("haze_color must be a #RRGGBB hex color")
@@ -49,7 +125,7 @@ class StyleService(BaseService):
         affected = 0
         for rid in target_ids:
             try:
-                element = self.graph.get_element(rid, doc_id)
+                element = self.get_element(doc_id, rid)
             except ValueError:
                 continue
             bounds = element.bounds
@@ -74,7 +150,8 @@ class StyleService(BaseService):
                 kwargs["opacity"] = max(0.0, element.style.opacity * (1.0 - opacity_falloff * depth_t))
             if not kwargs:
                 continue
-            self.graph.edit_element(element_id=rid, document_id=doc_id, **kwargs)
+            self.documents.update_element(doc_id, rid, **kwargs)
+            self.commit(doc_id, action="apply_depth_haze", target=rid)
             affected += 1
 
         return DepthHazeResult(affected=affected, haze_color=haze_color, max_strength=max_strength)
@@ -89,12 +166,12 @@ class StyleService(BaseService):
         basis: str = "z_index",
     ) -> LineHierarchyResult:
         """Apply stroke-weight hierarchy to selected elements."""
-        doc_id = resolve_doc(document_id)
-        outer_norm = stroke_width_to_norm(doc_id, outer_width)
-        inner_norm = stroke_width_to_norm(doc_id, inner_width)
+        doc_id = self.require_document_id(document_id)
+        outer_norm = self.stroke_width_to_norm(doc_id, outer_width)
+        inner_norm = self.stroke_width_to_norm(doc_id, inner_width)
 
         target_ids = set(select_element_ids(self.graph, doc_id, selector, default_all=True))
-        elements = [r for r in self.graph.get_all_elements(doc_id) if r.id in target_ids]
+        elements = [r for r in self.list_elements(doc_id) if r.id in target_ids]
         if not elements:
             raise LookupError("No elements found")
 
@@ -116,12 +193,14 @@ class StyleService(BaseService):
 
         for r in outer:
             try:
-                self.graph.edit_element(element_id=r.id, document_id=doc_id, stroke_width=outer_norm)
+                self.documents.update_element(doc_id, r.id, stroke_width=outer_norm)
+                self.commit(doc_id, action="apply_line_hierarchy", target=r.id)
             except (ValueError, RuntimeError):
                 pass
         for r in inner:
             try:
-                self.graph.edit_element(element_id=r.id, document_id=doc_id, stroke_width=inner_norm)
+                self.documents.update_element(doc_id, r.id, stroke_width=inner_norm)
+                self.commit(doc_id, action="apply_line_hierarchy", target=r.id)
             except (ValueError, RuntimeError):
                 pass
 
@@ -146,15 +225,15 @@ class StyleService(BaseService):
         material_intensity: float = 0.65,
     ) -> MaterialApplyResult:
         """Apply a built-in material preset and optional generated detail overlays."""
-        doc_id = resolve_doc(document_id)
+        doc_id = self.require_document_id(document_id)
         if material not in MATERIAL_PRESETS:
             available = ", ".join(MATERIAL_PRESETS)
             raise ValueError(f"Unknown material '{material}'. Available: {available}")
 
-        resolved_stroke_width = stroke_width_to_norm(doc_id, stroke_width)
+        resolved_stroke_width = self.stroke_width_to_norm(doc_id, stroke_width)
         cfg = MATERIAL_PRESETS[material]
-        affected = self.graph.style_objects(
-            ids=ids,
+        affected = self.style_objects(
+            ids,
             document_id=doc_id,
             fill_gradient=cfg.get("fill_gradient"),
             stroke=stroke if stroke is not None else cfg.get("stroke"),
@@ -172,7 +251,7 @@ class StyleService(BaseService):
         return MaterialApplyResult(material=material, affected=len(affected), detail_count=len(overlays))
 
     def _create_material_overlays(self, doc_id: str, element_id: str, material: str, intensity: float) -> list[str]:
-        source = self.graph.get_element(element_id, doc_id)
+        source = self.get_element(doc_id, element_id)
         bounds = source.bounds
         if bounds is None:
             return []
@@ -189,11 +268,11 @@ class StyleService(BaseService):
             return f"{element_id}_{material}_{suffix}"
 
         stale = [
-            r.id for r in self.graph.get_all_elements(doc_id)
+            r.id for r in self.list_elements(doc_id)
             if r.metadata.get("material_source") == element_id
         ]
         if stale:
-            self.graph.delete_elements(doc_id, stale)
+            self.documents.delete_elements(doc_id, stale)
 
         if material == "glass":
             created.append(self._add_overlay_element(doc_id, source, oid("shine"),
@@ -252,15 +331,22 @@ class StyleService(BaseService):
                     "screen" if i % 2 == 0 else "multiply", None, 0.001, 0.75))
 
         if created:
-            self.graph.group_elements(f"material_{material}_{element_id}", [element_id, *created], doc_id, replace=True)
+            from avge_engine.services.document_structure_service import DocumentStructureService
+
+            DocumentStructureService(self.graph).group_elements(
+                f"material_{material}_{element_id}",
+                [element_id, *created],
+                document_id=doc_id,
+                replace=True,
+            )
         return created
 
     def _add_overlay_element(self, doc_id: str, source, rid: str, outline, fill, opacity: float,
                             z_offset: int, material: str, blend_mode: str | None = None,
                             stroke: str | None = None, stroke_width: float = 0.001,
                             smoothness: float = 0.2) -> str:
-        element = self.graph.create_element(
-            document_id=doc_id,
+        element = self.documents.create_element_node(
+            doc_id,
             element_id=rid,
             outline=outline,
             layer=source.layer,
@@ -276,6 +362,7 @@ class StyleService(BaseService):
             ),
             metadata=_material_tag(source.id, material),
         )
+        self.commit(doc_id, action="material_overlay", target=rid)
         return element.id
 
     def _add_overlay_line(self, doc_id: str, source, rid: str, p1, p2, stroke: str,
@@ -300,10 +387,8 @@ class StyleService(BaseService):
             ),
             metadata=_material_tag(source.id, material),
         )
-        self.graph._elements_for(doc_id)[rid] = element
-        self.graph.get_document(doc_id).version += 1
-        self.graph._auto_checkpoint(doc_id, "material_overlay", rid)
-        self.graph._persist(doc_id)
+        self.add_element(doc_id, element)
+        self.commit(doc_id, action="material_overlay", target=rid)
         return rid
 
 def _material_tag(element_id: str, material: str) -> dict[str, str]:

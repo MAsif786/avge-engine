@@ -1,7 +1,8 @@
 from avge_engine.controllers import scene_ops
 from avge_engine.geometry.perspective import project_unit_points
-from avge_engine.scene import SceneGraph, Style
-from avge_engine.services.engine import reset_graph
+from avge_engine.document import Style
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -23,7 +24,8 @@ def test_project_unit_square_to_quad_corners():
 
 
 def test_scene_project_quad_creates_panel():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = scene.create_document().id
     r = scene.project_quad(
         target_quad=[(0.1, 0.2), (0.8, 0.1), (0.72, 0.62), (0.18, 0.7)],
@@ -42,7 +44,8 @@ def test_scene_project_quad_creates_panel():
 
 
 def test_scene_project_quad_warps_source_element_copy():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = scene.create_document().id
     scene.create_element(
         document_id=did,
@@ -68,7 +71,8 @@ def test_scene_project_quad_warps_source_element_copy():
 
 
 def test_scene_project_quad_replace_source():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     did = scene.create_document().id
     scene.create_element(
         document_id=did,
@@ -88,10 +92,10 @@ def test_scene_project_quad_replace_source():
 
 
 def test_project_quad_controller_tool_creates_element():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["project_quad"](

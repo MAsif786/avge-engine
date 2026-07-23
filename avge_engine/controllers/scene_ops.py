@@ -17,10 +17,15 @@ COMIC_LAYOUT_MODES = Literal["grid", "feature_top", "feature_left", "vertical_st
 READING_DIRECTIONS = Literal["ltr", "rtl", "ttb"]
 WARP_MODES = Literal["bend", "bulge", "pinch", "wave", "handle_shift"]
 
-from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.engine import StrokeWidthInput, resolve_doc, stroke_width_to_norm
+from avge_engine.services.creation_service import CreationService
+from avge_engine.services.document_tool_service import DocumentToolService
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.element_service import ElementService
 from avge_engine.services.scene_construction_service import SceneConstructionService
 from avge_engine.services.selector_service import select_element_ids, selector_from_legacy
 from avge_engine.services.shadow_service import ShadowService
+from avge_engine.services.transform_service import TransformService
 from avge_engine.utils.math_utils import clamp01
 
 
@@ -59,7 +64,6 @@ def create_tools(mcp):
             stroke_width: Stroke width in canvas pixels for the result element.
             opacity: Opacity for the result element.
         """
-        scene = get_graph()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -75,7 +79,7 @@ def create_tools(mcp):
         stroke_width = stroke_width_to_norm(doc_id, stroke_width)
 
         try:
-            result = scene.boolean_operation(
+            result = CreationService()._boolean_operation(
                 operation=operation,
                 element_ids=element_ids,
                 new_element_id=new_element_id,
@@ -167,88 +171,13 @@ def create_tools(mcp):
             layer: Layer name — transforms all elements in that layer.
                 💡 transform_objects(layer='sky', dy=0.02) shifts whole skyline.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document"
-        resolved_selector = selector or selector_from_legacy(ids=ids, group_name=group_name, layer=layer)
-        target_ids = select_element_ids(scene, doc_id, resolved_selector)
-
-        # ── Align mode ──
-        if mode == "align":
-            if not target_ids:
-                return "Error: No element IDs provided"
-            bounds_list = []
-            for rid in target_ids:
-                try:
-                    r = scene.get_element(rid, doc_id)
-                    b = r.bounds
-                    if b:
-                        bounds_list.append({"id": rid, "bounds": b})
-                except ValueError:
-                    continue
-            if len(bounds_list) < 2:
-                return "Error: Need at least 2 valid elements"
-            a = alignment or "center_h"
-            if a == "top":
-                t = min(b["bounds"]["y"] for b in bounds_list)
-                for b in bounds_list:
-                    d = t - b["bounds"]["y"]
-                    if abs(d) > 0.0001: scene.transform_objects([b["id"]], document_id=doc_id, dy=d)
-            elif a == "bottom":
-                t = max(b["bounds"]["y"] + b["bounds"]["h"] for b in bounds_list)
-                for b in bounds_list:
-                    d = t - (b["bounds"]["y"] + b["bounds"]["h"])
-                    if abs(d) > 0.0001: scene.transform_objects([b["id"]], document_id=doc_id, dy=d)
-            elif a == "left":
-                t = min(b["bounds"]["x"] for b in bounds_list)
-                for b in bounds_list:
-                    d = t - b["bounds"]["x"]
-                    if abs(d) > 0.0001: scene.transform_objects([b["id"]], document_id=doc_id, dx=d)
-            elif a == "right":
-                t = max(b["bounds"]["x"] + b["bounds"]["w"] for b in bounds_list)
-                for b in bounds_list:
-                    d = t - (b["bounds"]["x"] + b["bounds"]["w"])
-                    if abs(d) > 0.0001: scene.transform_objects([b["id"]], document_id=doc_id, dx=d)
-            elif a == "center_h":
-                avg = sum(b["bounds"]["x"] + b["bounds"]["w"]/2 for b in bounds_list) / len(bounds_list)
-                for b in bounds_list:
-                    d = avg - (b["bounds"]["x"] + b["bounds"]["w"]/2)
-                    if abs(d) > 0.0001: scene.transform_objects([b["id"]], document_id=doc_id, dx=d)
-            elif a == "center_v":
-                avg = sum(b["bounds"]["y"] + b["bounds"]["h"]/2 for b in bounds_list) / len(bounds_list)
-                for b in bounds_list:
-                    d = avg - (b["bounds"]["y"] + b["bounds"]["h"]/2)
-                    if abs(d) > 0.0001: scene.transform_objects([b["id"]], document_id=doc_id, dy=d)
-            elif a in ("distribute_h", "distribute_v"):
-                horiz = a == "distribute_h"
-                sb = sorted(bounds_list, key=lambda x: x["bounds"]["x" if horiz else "y"])
-                dim = "w" if horiz else "h"
-                pos = "x" if horiz else "y"
-                total = sum(b["bounds"][dim] for b in sb)
-                first = sb[0]["bounds"][pos]
-                last = sb[-1]["bounds"][pos] + sb[-1]["bounds"][dim]
-                gap = (last - first - total) / (len(sb) - 1)
-                cursor = sb[0]["bounds"][pos] + sb[0]["bounds"][dim] + gap
-                for b in sb[1:-1]:
-                    d = cursor - b["bounds"][pos]
-                    if abs(d) > 0.0001:
-                        kw = {"dx": d} if horiz else {"dy": d}
-                        scene.transform_objects([b["id"]], document_id=doc_id, **kw)
-                    cursor += b["bounds"][dim] + gap
-            else:
-                return f"Error: Unknown alignment '{a}'"
-            return f"Aligned {len(bounds_list)} element(s): '{a}'"
-
-        # ── Transform mode ──
-        if not target_ids:
-            return "Error: No element IDs provided"
-
-        try:
-            affected = scene.transform_objects(
-                ids=target_ids,
-                document_id=doc_id,
+            result = TransformService().transform_objects(
+                ids=ids,
+                selector=selector,
+                document_id=document_id,
+                mode=mode,
+                alignment=alignment,
                 dx=dx,
                 dy=dy,
                 scale=scale,
@@ -261,11 +190,17 @@ def create_tools(mcp):
                 pivot_mode=pivot_mode,
                 z_index=z_index,
                 group_name=group_name,
+                layer=layer,
                 mirror_x=mirror_x,
                 mirror_y=mirror_y,
             )
-        except RuntimeError as e:
+        except RuntimeError:
+            return "Error: No active document"
+        except ValueError as e:
             return f"Error: {e}"
+
+        if mode == "align":
+            return f"Aligned {result['count']} element(s): '{result['alignment']}'"
 
         parts = [f"dx={dx}", f"dy={dy}"]
         if sx is not None:
@@ -282,8 +217,9 @@ def create_tools(mcp):
             parts.append("group_mode")
         # Include new bounds for first affected element
         bounds_info = ""
+        affected = result["affected"]
         if affected:
-            r = scene.get_element(affected[0], doc_id)
+            r = TransformService().get_element(result["document_id"], affected[0])
             b = r.bounds
             if b:
                 bounds_info = (
@@ -320,7 +256,7 @@ def create_tools(mcp):
         """Warp a element outline in normalized coordinates."""
         import math
 
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -455,7 +391,7 @@ def create_tools(mcp):
             inherit_style: When warping a source element, copy its style unless
                 explicit style values are supplied.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -474,7 +410,7 @@ def create_tools(mcp):
             stroke_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
 
         try:
-            element = scene.project_quad(
+            element = SceneConstructionService().project_quad(
                 target_quad=[(float(p[0]), float(p[1])) for p in target_quad],
                 document_id=doc_id,
                 element_id=element_id,
@@ -493,7 +429,7 @@ def create_tools(mcp):
                 metadata={"projection": "quad"},
             )
             if group_name:
-                scene.add_to_group(group_name, [element.id], doc_id)
+                DocumentStructureService().edit_group(action="add", group_name=group_name, element_ids=[element.id], document_id=doc_id)
         except (ValueError, RuntimeError, TypeError) as e:
             return f"Error: {e}"
 
@@ -651,49 +587,32 @@ def create_tools(mcp):
             element_ids: Element IDs for create/add/remove actions (omit for delete).
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = DocumentStructureService().edit_group(
+                action=action,
+                group_name=group_name,
+                element_ids=element_ids,
+                document_id=document_id,
+            )
         except RuntimeError:
             return "Error: No active document — call create_document first"
+        except ValueError as e:
+            return f"Error: {e}"
 
         if action == "delete":
-            result = scene.ungroup_elements(group_name, doc_id)
-            if result:
+            if result["deleted"]:
                 return f"Group '{group_name}' deleted"
             return f"Error: Group '{group_name}' not found"
 
-        if not element_ids:
-            return "Error: No element IDs provided"
-
-        if action == "create":
-            members = scene.group_elements(
-                group_name=group_name, element_ids=element_ids,
-                document_id=doc_id, replace=True,
-            )
-        elif action == "add":
-            members = scene.add_to_group(
-                group_name=group_name, element_ids=element_ids,
-                document_id=doc_id,
-            )
-        elif action == "remove":
-            try:
-                removed = scene.remove_from_group(
-                    group_name=group_name, element_ids=element_ids,
-                    document_id=doc_id,
-                )
-            except ValueError as e:
-                return f"Error: {e}"
+        if action == "remove":
             return (
-                f"Removed {len(removed)} element(s) from '{group_name}': "
-                f"{', '.join(removed)}"
+                f"Removed {len(result['removed'])} element(s) from '{group_name}': "
+                f"{', '.join(result['removed'])}"
             )
-        else:
-            return f"Error: Unknown action '{action}'. Valid: create, add, remove, delete"
 
         return (
-            f"Group '{group_name}': {len(members)} member(s) "
-            f"({', '.join(members)})"
+            f"Group '{group_name}': {len(result['members'])} member(s) "
+            f"({', '.join(result['members'])})"
         )
 
     @mcp.tool(
@@ -702,13 +621,11 @@ def create_tools(mcp):
     )
     def list_groups(document_id: str | None = None) -> str:
         """List all element groups in the current document."""
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            groups = DocumentStructureService().list_groups(document_id=document_id)
         except RuntimeError:
             return "Error: No active document"
 
-        groups = scene.list_groups(document_id=doc_id)
         if not groups:
             return "(no groups)"
 
@@ -744,9 +661,9 @@ def create_tools(mcp):
         clip_content: bool = True,
     ) -> str:
         """Create page/comic panels as editable elements."""
-        from avge_engine.scene import CurveConstraints, Style
+        from avge_engine.document import CurveConstraints, Style
 
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -836,7 +753,7 @@ def create_tools(mcp):
             )
             created.append(element.id)
 
-        scene.group_elements(group_name, created, doc_id, replace=True)
+        DocumentStructureService().edit_group(action="create", group_name=group_name, element_ids=created, document_id=doc_id)
         scene._persist(doc_id)
         return f"Comic panel layout created: layout={layout}, panels={len(created)}, group={group_name}, ids={', '.join(created)}"
 
@@ -872,7 +789,7 @@ def create_tools(mcp):
             direction: "outward" (bump protrudes out) or "inward" (notch/indentation).
             shape: "round" (smooth rounded bump) or "sharp" (pointy ridge).
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -979,7 +896,7 @@ def create_tools(mcp):
             scale_falloff: Linear-only multiplier applied to each copy's scale.
         """
         import math
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -990,12 +907,13 @@ def create_tools(mcp):
             if not group_name:
                 return "Error: group_name required for pattern 'group'"
             try:
-                new_ids = scene.duplicate_group(
+                result = DocumentStructureService().duplicate_group(
                     group_name=group_name, document_id=doc_id,
                     new_prefix=new_prefix, dx=dx, dy=dy,
                     scale=scale, rotate=rotate,
                     mirror_x=mirror_x, mirror_y=mirror_y,
                 )
+                new_ids = result["new_ids"]
                 if variations:
                     prefix = new_prefix or f"{group_name}_copy"
                     for orig_id, props in variations.items():
@@ -1030,12 +948,12 @@ def create_tools(mcp):
         if pattern == "single":
             new_id = new_prefix or f"{element_id}_copy"
             try:
-                dup = scene.duplicate_element(
+                dup = ElementService(scene).duplicate_element(
                     element_id=element_id, document_id=doc_id,
                     offset_x=dx, offset_y=dy,
                     scale=scale, rotate=rotate,
                     mirror_x=mirror_x, mirror_y=mirror_y,
-                    mirror_axis_x=mirror_axis_x, mirror_axis_y=mirror_axis_y,
+                    mirror_axis_x=mirror_axis_x,
                     shadow_mode=shadow_mode, z_index=resolved_z,
                 )
                 created.append(dup.id)
@@ -1052,7 +970,7 @@ def create_tools(mcp):
                 copy_scale = scale * (scale_falloff ** i)
                 new_id = f"{new_prefix or element_id}_copy_{i}"
                 try:
-                    dup = scene.duplicate_element(
+                    dup = ElementService(scene).duplicate_element(
                         element_id=element_id, document_id=doc_id,
                         new_element_id=new_id,
                         offset_x=cur_x, offset_y=cur_y,
@@ -1074,7 +992,7 @@ def create_tools(mcp):
                     off_y = row * (oh + spacing_y)
                     new_id = f"{new_prefix or element_id}_g{row}_{col}"
                     try:
-                        dup = scene.duplicate_element(
+                        dup = ElementService(scene).duplicate_element(
                             element_id=element_id, document_id=doc_id,
                             new_element_id=new_id,
                             offset_x=off_x, offset_y=off_y,
@@ -1096,7 +1014,7 @@ def create_tools(mcp):
                 ty = by + rng.random() * bh
                 new_id = f"{new_prefix or element_id}_scatter_{i}"
                 try:
-                    dup = scene.duplicate_element(
+                    dup = ElementService(scene).duplicate_element(
                         element_id=element_id, document_id=doc_id,
                         new_element_id=new_id,
                         offset_x=tx - ocx, offset_y=ty - ocy,
@@ -1118,7 +1036,7 @@ def create_tools(mcp):
                 rotation = math.degrees(angle) if rotate_copies else 0.0
                 new_id = f"{new_prefix or element_id}_rad_{i}"
                 try:
-                    dup = scene.duplicate_element(
+                    dup = ElementService(scene).duplicate_element(
                         element_id=element_id, document_id=doc_id,
                         new_element_id=new_id,
                         offset_x=off_x, offset_y=off_y,
@@ -1146,7 +1064,9 @@ def create_tools(mcp):
                         continue
                     kw = {}
                     if s_max or r_max:
-                        scene.transform_objects([cid], document_id=doc_id,
+                        TransformService(scene).transform_objects(
+                            ids=[cid],
+                            document_id=doc_id,
                             scale=1.0 + _r.uniform(-s_max, s_max) if s_max else 1.0,
                             rotate=_r.uniform(-r_max, r_max) if r_max else 0.0,
                         )
@@ -1256,9 +1176,9 @@ def create_tools(mcp):
             shade_fill: Underside shadow color.
         """
         import math
-        from avge_engine.scene import CurveConstraints, Style
+        from avge_engine.document import CurveConstraints, Style
 
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -1346,9 +1266,9 @@ def create_tools(mcp):
         clip_to: str | None = None,
     ) -> str:
         """Generate editable background asset clusters inside a bounds rectangle."""
-        from avge_engine.scene import CurveConstraints, Style
+        from avge_engine.document import CurveConstraints, Style
 
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -1478,7 +1398,7 @@ def create_tools(mcp):
         else:
             return f"Error: Unknown background asset mode '{mode}'"
 
-        scene.group_elements(prefix, created, doc_id, replace=True)
+        DocumentStructureService().edit_group(action="create", group_name=prefix, element_ids=created, document_id=doc_id)
         scene._persist(doc_id)
         return f"Background asset generated: mode={mode}, elements={len(created)}, group={prefix}, ids={', '.join(created[:6])}"
 

@@ -1,4 +1,4 @@
-"""Shared engine services — graph access, doc resolution, validation, storage.
+"""Shared engine services — document access, doc resolution, validation, storage.
 
 Controllers import these helpers to avoid duplicating global state management.
 The storage adapter is attached at startup so every mutation auto-persists to disk.
@@ -6,31 +6,42 @@ The storage adapter is attached at startup so every mutation auto-persists to di
 from __future__ import annotations
 
 from pathlib import Path
+from types import ModuleType
 
+from avge_engine.document import DocumentSessionManager
+import avge_engine.document.operations as document_ops
 from avge_engine.schemas.common import StrokeWidthInput
-from avge_engine.scene import SceneGraph
 from avge_engine.schema_registry import validate_input as _validate
 from avge_engine.storage import FileStorageAdapter
 
-# ── Global scene graph (single-process, M0b) ──────────────────────
-_graph: SceneGraph | None = None
-_active_doc: str | None = None
+# ── Global document operations module (single-process, M0b) ────────────────
+_document_operations: ModuleType | None = None
+_session: DocumentSessionManager | None = None
 
 # Storage directory (relative to project root)
 STORAGE_DIR: str = ".avge_data"
 
-def get_graph() -> SceneGraph:
-    """Return the singleton SceneGraph instance (lazily created).
+def get_document_operations() -> ModuleType:
+    """Return the document operations module.
 
     Attaches the file-storage adapter on first creation so every
     document mutation is persisted to ``.avge_data/<doc_id>.json``.
     """
-    global _graph
-    if _graph is None:
-        _graph = SceneGraph()
+    global _document_operations
+    if _document_operations is None:
+        _document_operations = document_ops
         adapter = FileStorageAdapter(directory=STORAGE_DIR)
-        _graph.attach_storage(adapter)
-    return _graph
+        _document_operations.attach_storage(adapter)
+    return _document_operations
+
+
+def get_session_manager() -> DocumentSessionManager:
+    """Return the process-local document session manager."""
+    global _session
+    operations = get_document_operations()
+    if _session is None or _session.graph is not operations:
+        _session = DocumentSessionManager(operations)
+    return _session
 
 
 def resolve_doc(document_id: str | None = None) -> str:
@@ -38,25 +49,22 @@ def resolve_doc(document_id: str | None = None) -> str:
 
     Raises RuntimeError if neither is available.
     """
-    global _active_doc
-    if document_id:
-        return document_id
-    if _active_doc is None:
-        raise RuntimeError("No active document. Call create_document first.")
-    return _active_doc
+    return get_session_manager().resolve_id(document_id)
 
 
 def set_active_doc(doc_id: str) -> None:
     """Set the active document ID (called by create_document)."""
-    global _active_doc
-    _active_doc = doc_id
+    get_session_manager().set_active(doc_id)
 
 
-def reset_graph() -> None:
-    """Reset the scene graph (used by /tools/reset and between benchmarks)."""
-    global _graph, _active_doc
-    _graph = None
-    _active_doc = None
+def reset_documents() -> None:
+    """Reset in-memory documents (used by /tools/reset and between benchmarks)."""
+    global _document_operations, _session
+    if _document_operations is not None:
+        _document_operations.reset()
+    document_ops.reset()
+    _document_operations = None
+    _session = None
 
 
 def validate_input(tool_name: str, data: dict) -> list[str]:
@@ -74,7 +82,7 @@ def list_stored_documents() -> list[dict]:
         List of summary dicts (id, name, version, element_count, updated).
         Empty list when no stored documents exist.
     """
-    return get_graph().list_stored_documents()
+    return get_document_operations().list_stored_documents()
 
 
 def get_storage_dir() -> str:
@@ -90,7 +98,7 @@ def stroke_width_to_norm(document_id: str, stroke_width: float | None) -> float 
     """
     if stroke_width is None:
         return None
-    doc = get_graph().get_document(document_id)
+    doc = get_document_operations().get_document(document_id)
     shorter = max(1, min(doc.width, doc.height))
     return max(0.001, min(0.1, float(stroke_width) / shorter))
 
@@ -176,8 +184,6 @@ TOOL_MAP = """📋 TOOL MAP (63 tools — all available in batch):
 
 ⚠️ DEPRECATED — use new names:
   style_objects     → restyle(selector={...}, mode="exact")
-  group_elements     → edit_group(action="create", ...)
-  ungroup_elements   → edit_group(action="delete", ...)
   duplicate_element  → duplicate(pattern="single", ...)
   duplicate_grid    → duplicate(pattern="grid", ...)
   duplicate_radial  → duplicate(pattern="radial", ...)

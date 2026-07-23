@@ -6,7 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from avge_engine.schemas.common import StrokeWidthInput
-from avge_engine.scene.models import ElementNode
+from avge_engine.document.models import ElementNode
 
 
 class DocumentSummary(BaseModel):

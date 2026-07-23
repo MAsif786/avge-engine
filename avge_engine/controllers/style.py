@@ -6,12 +6,15 @@ import math
 import random
 from typing import Any, Literal
 
-from avge_engine.constants.style import LAYER_ROLE_Z, MATERIAL_PRESETS
+from avge_engine.constants.style import LAYER_ROLE_Z, MATERIAL_PRESETS, STYLE_PRESETS
 from avge_engine.effects import Style
 from avge_engine.effects.brushes import BRUSH_PRESETS, BrushName, brush_preset_catalog
 from avge_engine.effects.style import VALID_BLEND_MODES
 from avge_engine.geometry import CurveConstraints
-from avge_engine.services.engine import StrokeWidthInput, get_graph, resolve_doc, stroke_width_to_norm
+from avge_engine.services.engine import StrokeWidthInput, resolve_doc, stroke_width_to_norm
+from avge_engine.services.document_tool_service import DocumentToolService
+from avge_engine.services.element_service import ElementService
+from avge_engine.services.inspection_service import InspectionService
 from avge_engine.services.selector_service import select_element_ids
 from avge_engine.services.style_service import StyleService
 from avge_engine.utils.color_utils import hex_to_rgb, mix_hex
@@ -62,12 +65,11 @@ def _apply_preset(preset_name: str, scene, doc_id: str, ids: list[str]) -> str |
     """Apply a named style preset to a list of element IDs.
     Returns error string on failure, None on success.
     """
-    presets = getattr(scene, "PRESETS", None)
-    if presets is None or preset_name not in presets:
-        available = ", ".join(presets.keys()) if presets else "(none)"
+    if preset_name not in STYLE_PRESETS:
+        available = ", ".join(STYLE_PRESETS.keys())
         return f"Error: Unknown preset '{preset_name}'. Available: {available}"
 
-    cfg = presets[preset_name].copy()
+    cfg = STYLE_PRESETS[preset_name].copy()
     fg = cfg.pop("fill_gradient", None)
     bm = cfg.pop("blend_mode", None)
     fill = json.loads(fg) if fg else cfg.get("fill")
@@ -148,7 +150,7 @@ def create_tools(mcp):
             material_intensity: Overlay strength from 0.0 to 1.0.
         """
         import json
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -177,12 +179,12 @@ def create_tools(mcp):
         if mode == "palette_swap":
             if not from_color or not to_color:
                 return "Error: from_color and to_color required for palette_swap"
-            matches = scene.find_objects(document_id=doc_id, fill=from_color)
+            matches = InspectionService(scene).find_objects(document_id=doc_id, fill=from_color)
             p_ids = [m["id"] for m in matches if m["id"] in target_ids]
             if not p_ids:
                 return f"No elements found with fill='{from_color}'"
             resolved = None if to_color in ("none", "transparent") else to_color
-            affected = scene.style_objects(ids=p_ids, document_id=doc_id, fill=resolved)
+            affected = StyleService(scene).style_objects(p_ids, document_id=doc_id, fill=resolved)
             return f"Palette swap: replaced '{from_color}' with '{to_color}' on {len(affected)} element(s)"
 
         if mode == "hsl_offset":
@@ -241,9 +243,8 @@ def create_tools(mcp):
             return f"Material '{result.material}' applied to {result.affected} element(s){detail}"
 
         if preset:
-            presets = getattr(scene, "PRESETS", {})
-            if preset in presets:
-                cfg = presets[preset].copy()
+            if preset in STYLE_PRESETS:
+                cfg = STYLE_PRESETS[preset].copy()
                 fg = cfg.pop("fill_gradient", None)
                 bm = cfg.pop("blend_mode", None)
                 preset_fill = json.loads(fg) if fg else cfg.get("fill")
@@ -276,8 +277,8 @@ def create_tools(mcp):
                 fill_gradient["x2"] = round(0.5 + 0.5 * __import__("math").cos(_rad), 2)
                 fill_gradient["y2"] = round(0.5 + 0.5 * __import__("math").sin(_rad), 2)
 
-        affected = scene.style_objects(
-            ids=target_ids, document_id=doc_id,
+        affected = StyleService(scene).style_objects(
+            target_ids, document_id=doc_id,
             fill=fill, stroke=stroke,
             stroke_width=stroke_width, opacity=opacity,
             fill_gradient=fill_gradient, blend_mode=blend_mode,
@@ -333,7 +334,7 @@ def create_tools(mcp):
             pressure: Mark linework as pressure-sensitive in metadata.
             texture_strength: 0.0-1.0 amount of extra rough overlay strokes.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -423,7 +424,7 @@ def create_tools(mcp):
         blend_mode: BLEND_MODES | None = None,
     ) -> str:
         """Tag every element on a layer with a workflow role."""
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -484,7 +485,7 @@ def create_tools(mcp):
         seed: int = 1,
     ) -> str:
         """Add vector texture/effect overlays."""
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -675,7 +676,7 @@ def create_tools(mcp):
         seed: int = 1,
     ) -> str:
         """Create vector FX elements and lines."""
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -842,7 +843,7 @@ def create_tools(mcp):
         blend_mode: BLEND_MODES | None = None,
     ) -> dict[str, Any] | str:
         """Mix two existing element colors and optionally apply the result."""
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
         except RuntimeError:
@@ -898,7 +899,7 @@ def create_tools(mcp):
             return f"Mixed color {mixed} applied to target element '{target_element_id}'"
         if output == "new_element":
             rid = new_element_id or f"{source_element_id}_mix_{target_element_id}"
-            duplicate = scene.duplicate_element(
+            duplicate = ElementService(scene).duplicate_element(
                 element_id=source_element_id,
                 new_element_id=rid,
                 document_id=doc_id,
@@ -1080,7 +1081,7 @@ def create_tools(mcp):
             grad["x2"] = round(0.5 + 0.5 * __import__("math").cos(rad), 2)
             grad["y2"] = round(0.5 + 0.5 * __import__("math").sin(rad), 2)
         # Store in document for reference by name
-        scene = get_graph()
+        scene = DocumentToolService()
         try:
             doc_id = resolve_doc(document_id)
             doc = scene.get_document(doc_id)
@@ -1148,7 +1149,7 @@ def create_tools(mcp):
         Args:
             document_ids: Two or more document UUIDs to compare.
         """
-        scene = get_graph()
+        scene = DocumentToolService()
         results = []
         for doc_id in document_ids:
             if not scene.load_document(doc_id):

@@ -4,7 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from avge_engine.services.engine import get_graph, resolve_doc
+from avge_engine.services.engine import get_session_manager
+from avge_engine.services.document_tool_service import DocumentToolService
 
 
 @dataclass
@@ -48,14 +49,17 @@ class ToolExecutionService:
             )
 
         call_params = dict(params or {})
-        doc_id = call_params.get("document_id") or document_id
+        try:
+            doc_id = call_params.get("document_id") or get_session_manager().resolve_id(document_id)
+        except RuntimeError:
+            doc_id = None
         if doc_id:
             call_params["document_id"] = doc_id
 
         try:
             result = fn(**call_params)
             if doc_id:
-                get_graph().track_op(doc_id, tool_name)
+                DocumentToolService().track_op(doc_id, tool_name)
             return ToolExecutionResult(status="ok", tool=tool_name, result=result)
         except (ValueError, RuntimeError, TypeError, KeyError) as e:
             return ToolExecutionResult(status="error", tool=tool_name, message=str(e))
@@ -66,7 +70,7 @@ class ToolExecutionService:
         *,
         document_id: str | None = None,
     ) -> list[ToolExecutionResult]:
-        doc_id = resolve_doc(document_id)
+        doc_id = get_session_manager().resolve_id(document_id)
         results: list[ToolExecutionResult] = []
         for op in ops:
             params = dict(op)

@@ -1,8 +1,8 @@
 """Compact persisted document format helpers.
 
-The public API and in-memory scene graph use the full ElementNode-compatible
+The public API and in-memory document layer use the full ElementNode-compatible
 shape. Storage can use a smaller representation as long as load normalizes it
-back to the full shape before SceneGraph hydrates models.
+back to the full shape before the document layer hydrates models.
 """
 
 from __future__ import annotations

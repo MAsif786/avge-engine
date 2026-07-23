@@ -1,8 +1,9 @@
 import json
 
 from avge_engine.controllers import query
-from avge_engine.scene import CurveConstraints, SceneGraph, Style
-from avge_engine.services.engine import reset_graph
+from avge_engine.document import CurveConstraints, Style
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -21,7 +22,8 @@ def _codes(findings):
 
 
 def test_preview_critique_flags_too_flat_and_missing_contact_shadows():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
     for i in range(6):
         x = 0.08 + i * 0.13
@@ -39,7 +41,8 @@ def test_preview_critique_flags_too_flat_and_missing_contact_shadows():
 
 
 def test_preview_critique_flags_over_rounded_rects():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
     for i in range(4):
         scene.create_rect(
@@ -58,7 +61,8 @@ def test_preview_critique_flags_over_rounded_rects():
 
 
 def test_preview_critique_flags_bad_perspective_quad():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
     scene.create_element(
         document_id=doc.id,
@@ -80,7 +84,8 @@ def test_preview_critique_flags_bad_perspective_quad():
 
 
 def test_preview_critique_flags_dominant_blob_shape():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
     scene.create_element(
         document_id=doc.id,
@@ -107,10 +112,10 @@ def test_preview_critique_flags_dominant_blob_shape():
 
 
 def test_critique_tool_visual_json_output():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     query.create_tools(mcp)
-    graph = query.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     for i in range(4):
         graph.create_element(
@@ -128,10 +133,10 @@ def test_critique_tool_visual_json_output():
 
 
 def test_critique_tool_both_json_output_includes_rules_and_visual():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     query.create_tools(mcp)
-    graph = query.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     for i in range(6):
         graph.create_element(

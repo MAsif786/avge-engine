@@ -1,10 +1,10 @@
-from avge_engine.scene import Style
-from avge_engine.services.engine import reset_graph
+from avge_engine.document import Style
+from avge_engine.services.engine import reset_documents
 from avge_engine.services.shadow_service import ShadowService
 
 
 def _setup_scene():
-    reset_graph()
+    reset_documents()
     service = ShadowService()
     graph = service.graph
     doc = graph.create_document(width=1000, height=800)

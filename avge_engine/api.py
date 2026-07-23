@@ -5,7 +5,7 @@ FastAPI HTTP server — the underlying API layer beneath the MCP interface.
 (debug tooling, direct API access, integration tests), though MCP is the
 primary LLM-facing interface.
 
-M0b scope: single-process, no auth, in-memory scene graph.
+M0b scope: single-process, no auth, in-memory documents.
 Mirrors the MCP tool set at avge_engine/controllers/ — keep in sync.
 """
 
@@ -14,7 +14,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import mimetypes
 from pathlib import Path
-import re
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
@@ -23,19 +22,17 @@ from fastapi.responses import Response
 
 from avge_engine import __version__, __tool_set_version__
 from avge_engine.api_viewer import viewer_html
-from avge_engine.services.engine import get_graph, reset_graph
+from avge_engine.services.engine import reset_documents
 from avge_engine.services.creation_service import CreationService
-from avge_engine.services.document_load_service import DocumentLoadService
 from avge_engine.services.document_service import DocumentService
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.inspection_service import InspectionService
+from avge_engine.services.rendering_service import RenderingService
+from avge_engine.services.transform_service import TransformService
 from avge_engine.services.history_service import HistoryService
 from avge_engine.services.element_service import ElementService
 from avge_engine.services.tool_execution_service import ToolExecutionService
 from avge_engine.schema_registry import list_tool_names
-from avge_engine.renderer import (
-    svg_serialize,
-    render_preview_base64,
-    render_preview_png,
-)
 from avge_engine.schemas import (
     BatchRequest,
     BooleanOpRequest,
@@ -485,114 +482,87 @@ async def boolean_operation(req: BooleanOpRequest):
 
 @app.post("/tools/transform_objects", response_model=ToolResponse)
 async def transform_objects(req: TransformObjectsRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-
-    ids = req.ids
-    if req.group_name is not None:
-        members = graph.get_group(req.group_name, doc_id)
-        if not members:
-            raise HTTPException(status_code=404, detail=f"Group '{req.group_name}' not found")
-        ids = [m["id"] for m in members]
-    elif not ids:
-        raise HTTPException(status_code=400, detail="No element IDs provided")
-
     try:
-        affected = graph.transform_objects(
-            ids=ids, document_id=doc_id,
-            dx=req.dx, dy=req.dy, scale=req.scale,
-            sx=req.sx, sy=req.sy, rotate=req.rotate,
+        result = TransformService().transform_objects(
+            ids=req.ids,
+            document_id=req.document_id,
+            dx=req.dx,
+            dy=req.dy,
+            scale=req.scale,
+            sx=req.sx,
+            sy=req.sy,
+            rotate=req.rotate,
             group_mode=req.group_mode,
-            pivot_x=req.pivot_x, pivot_y=req.pivot_y,
-            pivot_mode=req.pivot_mode, z_index=req.z_index,
-            mirror_x=req.mirror_x, mirror_y=req.mirror_y,
+            pivot_x=req.pivot_x,
+            pivot_y=req.pivot_y,
+            pivot_mode=req.pivot_mode,
+            z_index=req.z_index,
+            group_name=req.group_name,
+            mirror_x=req.mirror_x,
+            mirror_y=req.mirror_y,
         )
-        return ToolResponse(data={"affected": affected, "count": len(affected)})
-    except RuntimeError as e:
+        return ToolResponse(data={"affected": result["affected"], "count": result["count"]})
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/edit_group", response_model=ToolResponse)
 async def edit_group(req: ManageGroupRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-
-    if req.action == "delete":
-        result = graph.ungroup_elements(req.group_name, doc_id)
-        if not result:
-            raise HTTPException(status_code=404, detail=f"Group '{req.group_name}' not found")
-        return ToolResponse(data={"group": req.group_name, "deleted": True})
-
-    if not req.element_ids:
-        raise HTTPException(status_code=400, detail="No element IDs provided")
-
     try:
-        if req.action == "create":
-            members = graph.group_elements(req.group_name, req.element_ids, doc_id, replace=True)
-        elif req.action == "add":
-            members = graph.add_to_group(req.group_name, req.element_ids, doc_id)
-        elif req.action == "remove":
-            removed = graph.remove_from_group(req.group_name, req.element_ids, doc_id)
-            return ToolResponse(data={"group": req.group_name, "removed": removed})
-        else:
-            raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
-        return ToolResponse(data={"group": req.group_name, "members": members, "count": len(members)})
-    except ValueError as e:
+        result = DocumentStructureService().edit_group(
+            action=req.action,
+            group_name=req.group_name,
+            element_ids=req.element_ids,
+            document_id=req.document_id,
+        )
+        if req.action == "delete" and not result["deleted"]:
+            raise HTTPException(status_code=404, detail=f"Group '{req.group_name}' not found")
+        return ToolResponse(data=result)
+    except RuntimeError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/tools/list_groups", response_model=ToolResponse)
 async def list_groups(req: DocIdBody):
-    graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
-    groups = graph.list_groups(req.document_id)
-    return ToolResponse(data={"groups": groups, "count": len(groups)})
+    try:
+        groups = DocumentStructureService().list_groups(document_id=req.document_id)
+        return ToolResponse(data={"groups": groups, "count": len(groups)})
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/duplicate_group", response_model=ToolResponse)
 async def duplicate_group(req: DuplicateGroupRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        new_ids = graph.duplicate_group(
-            group_name=req.group_name, document_id=doc_id,
+        return ToolResponse(data=DocumentStructureService().duplicate_group(
+            group_name=req.group_name,
+            document_id=req.document_id,
             new_prefix=req.new_prefix,
             dx=req.dx, dy=req.dy, scale=req.scale,
             sx=req.sx, sy=req.sy, rotate=req.rotate,
             mirror_x=req.mirror_x, mirror_y=req.mirror_y,
-        )
-        return ToolResponse(data={
-            "source_group": req.group_name,
-            "new_ids": new_ids, "count": len(new_ids),
-        })
+        ))
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/tools/add_bumps", response_model=ToolResponse)
 async def add_bumps(req: ExtrudeOutlineRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
     try:
-        graph.extrude_element_outline(
-            element_id=req.element_id, document_id=doc_id,
+        return ToolResponse(data=ElementService().add_bumps(
+            element_id=req.element_id,
+            document_id=req.document_id,
             segment_indices=req.segment_indices,
             extrusion_length=req.extrusion_length,
             extrusion_width=req.extrusion_width,
             angle_offset=req.angle_offset,
             direction=req.direction,
             shape=req.shape,
-        )
-        return ToolResponse(data={"element_id": req.element_id})
+        ))
     except (ValueError, RuntimeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -601,11 +571,14 @@ async def add_bumps(req: ExtrudeOutlineRequest):
 
 @app.post("/tools/describe_scene")
 async def describe_scene(req: DescribeSceneRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    desc = graph.describe_scene(detail=req.detail, filter_layer=req.filter_layer, document_id=doc_id)
+    try:
+        desc = InspectionService().describe_scene(
+            document_id=req.document_id,
+            detail=req.detail,
+            filter_layer=req.filter_layer,
+        )
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return {
         "document": desc["document"],
         "elements": desc["elements"],
@@ -616,98 +589,84 @@ async def describe_scene(req: DescribeSceneRequest):
 
 @app.post("/tools/find_objects", response_model=ToolResponse)
 async def find_objects(req: FindObjectsRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    parsed_tags = dict(req.tags) if req.tags else None
-    results = graph.find_objects(
-        document_id=doc_id, fill=req.fill,
-        min_x=req.min_x, max_x=req.max_x,
-        min_y=req.min_y, max_y=req.max_y,
-        min_w=req.min_w, max_w=req.max_w,
-        min_h=req.min_h, max_h=req.max_h,
-        layer=req.layer, has_stroke=req.has_stroke,
-        tags=parsed_tags,
-    )
-    return ToolResponse(data={"results": results, "count": len(results)})
+    try:
+        results = InspectionService().find_objects(
+            document_id=req.document_id,
+            fill=req.fill,
+            min_x=req.min_x, max_x=req.max_x,
+            min_y=req.min_y, max_y=req.max_y,
+            min_w=req.min_w, max_w=req.max_w,
+            min_h=req.min_h, max_h=req.max_h,
+            layer=req.layer,
+            has_stroke=req.has_stroke,
+            tags=req.tags,
+        )
+        return ToolResponse(data={"results": results, "count": len(results)})
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/critique", response_model=ToolResponse)
 async def critique(req: CritiqueRequest):
-    graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
-    rules = graph.critique_composition(req.document_id) if req.mode in ("rules", "both") else []
-    visual = [
-        f for f in graph.critique_preview_quality(req.document_id)
-        if f.get("confidence", 0.0) >= req.min_confidence
-    ] if req.mode in ("visual", "both") else []
-    return ToolResponse(data={
-        "mode": req.mode,
-        "rules": {"findings": rules, "count": len(rules)},
-        "visual": {"findings": visual, "count": len(visual)},
-        "count": len(rules) + len(visual),
-    })
+    try:
+        return ToolResponse(data=InspectionService().critique(
+            document_id=req.document_id,
+            mode=req.mode,
+            min_confidence=req.min_confidence,
+        ))
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/list_layers", response_model=ToolResponse)
 async def list_layers(req: DocIdBody):
-    graph = get_graph()
-    if not graph.has_document(req.document_id):
-        raise HTTPException(status_code=404, detail="Document not found")
-    layers = graph.list_layers(req.document_id)
-    return ToolResponse(data={"layers": layers})
+    try:
+        layers = DocumentStructureService().list_layers(document_id=req.document_id)
+        return ToolResponse(data={"layers": layers})
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/shift_layer_z", response_model=ToolResponse)
 async def reorder_layer(req: ReorderLayerRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    count = graph.reorder_layer(req.layer, req.z_offset, doc_id)
-    return ToolResponse(data={"layer": req.layer, "z_offset": req.z_offset, "count": count})
+    try:
+        count = DocumentStructureService().shift_layer_z(
+            layer=req.layer,
+            z_offset=req.z_offset,
+            document_id=req.document_id,
+        )
+        return ToolResponse(data={"layer": req.layer, "z_offset": req.z_offset, "count": count})
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/tools/render_preview", response_model=ToolResponse)
 async def render_preview(req: PreviewRequest):
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=400, detail="No active document")
-    svg = svg_serialize(
-        graph,
-        doc_id,
-        exclude_layers=req.exclude_layers,
-        exclude_element_ids=req.exclude_element_ids,
-        exclude_prefixes=req.exclude_prefixes,
-    )
     try:
-        b64 = render_preview_base64(svg, scale=max(0.25, min(2.0, req.scale)))
+        b64 = RenderingService().preview_base64(
+            document_id=req.document_id,
+            scale=req.scale,
+            exclude_layers=req.exclude_layers,
+            exclude_element_ids=req.exclude_element_ids,
+            exclude_prefixes=req.exclude_prefixes,
+        )
         return ToolResponse(data={"preview": b64})
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/tools/export_svg", response_model=ToolResponse)
 async def export_svg(req: ExportSvgRequest):
-    from pathlib import Path
-    graph = get_graph()
-    doc_id = req.document_id or graph.active_document_id()
-    if not doc_id or not graph.has_document(doc_id):
-        raise HTTPException(status_code=404, detail="No active document")
-    svg = svg_serialize(
-        graph,
-        doc_id,
-        exclude_layers=req.exclude_layers,
-        exclude_element_ids=req.exclude_element_ids,
-        exclude_prefixes=req.exclude_prefixes,
-    )
-    path = Path(req.filepath)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(svg)
-    return ToolResponse(data={"filepath": str(path.resolve()), "chars": len(svg)})
+    try:
+        return ToolResponse(data=RenderingService().export_svg(
+            filepath=req.filepath,
+            document_id=req.document_id,
+            exclude_layers=req.exclude_layers,
+            exclude_element_ids=req.exclude_element_ids,
+            exclude_prefixes=req.exclude_prefixes,
+        ))
+    except (RuntimeError, ValueError) as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ── Preview (direct PNG) ───────────────────────────────────────────
@@ -715,14 +674,11 @@ async def export_svg(req: ExportSvgRequest):
 @app.get("/preview/{document_id}.png")
 async def preview_doc_png(document_id: str | None = None):
     """Render a PNG preview of a specific document by ID."""
-    graph = get_graph()
     try:
-        DocumentLoadService(graph).ensure_loaded_from_storage(document_id)
+        png = RenderingService().preview_png(document_id=document_id, scale=1.0)
     except ValueError:
         return Response(f"Document '{document_id}' not found", status_code=404)
     try:
-        svg = svg_serialize(graph, document_id)
-        png = render_preview_png(svg, scale=1.0)
         return Response(
             content=png,
             media_type="image/png",
@@ -735,13 +691,11 @@ async def preview_doc_png(document_id: str | None = None):
 @app.get("/preview/{document_id}.svg")
 async def preview_doc_svg(document_id: str | None = None):
     """Render an SVG preview of a specific document by ID."""
-    graph = get_graph()
     try:
-        DocumentLoadService(graph).ensure_loaded_from_storage(document_id)
+        svg = RenderingService().svg(document_id=document_id, load_from_storage=True)
     except ValueError:
         return Response(f"Document '{document_id}' not found", status_code=404)
     try:
-        svg = svg_serialize(graph, document_id)
         return Response(
             content=svg,
             media_type="image/svg+xml",
@@ -755,11 +709,12 @@ async def preview_doc_svg(document_id: str | None = None):
 async def preview_doc_version_svg(document_id: str, checkpoint_name: str):
     """Render an SVG preview of a checkpoint without restoring it."""
     try:
-        version_graph = HistoryService().snapshot_graph(
+        doc, elements = HistoryService().snapshot_document(
             document_id=document_id,
             checkpoint_name=checkpoint_name,
         )
-        svg = svg_serialize(version_graph, document_id)
+        from avge_engine.renderer import svg_serialize_document
+        svg = svg_serialize_document(doc, elements)
         return Response(
             content=svg,
             media_type="image/svg+xml",
@@ -783,24 +738,19 @@ async def download_document(document_id: str, fmt: str):
     The browser viewer rasterizes PNG/JPG/PDF client-side from SVG so it does
     not depend on the server PNG renderer.
     """
-    graph = get_graph()
     try:
-        DocumentLoadService(graph).ensure_loaded_from_storage(document_id)
+        safe_name, content = RenderingService().download_svg(document_id=document_id)
     except ValueError:
         return Response(f"Document '{document_id}' not found", status_code=404)
 
-    doc = graph.get_document(document_id)
-    safe_name = _download_name(doc.name or document_id)
     fmt = fmt.lower()
 
     try:
-        svg = svg_serialize(graph, document_id)
         if fmt != "svg":
             return Response(
                 "Unsupported server download format. Use /viewer for browser-side PNG, JPG, and PDF export.",
                 status_code=400,
             )
-        content = svg.encode("utf-8")
         media_type = "image/svg+xml"
     except Exception as e:
         return Response(f"Error: {e}", status_code=500)
@@ -813,11 +763,6 @@ async def download_document(document_id: str, fmt: str):
             "Content-Disposition": f'attachment; filename="{safe_name}.{fmt}"',
         },
     )
-
-
-def _download_name(name: str) -> str:
-    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", name.strip()).strip(".-")
-    return safe[:80] or "avge-document"
 
 
 def _read_viewer_image_url(url: str) -> tuple[bytes, str]:
@@ -923,28 +868,25 @@ async def tool_docs():
 
 @app.post("/tools/reset")
 async def reset():
-    """Reset the scene graph (test/debug endpoint)."""
-    reset_graph()
-    return ToolResponse(data={"message": "Scene graph reset"})
+    """Reset in-memory documents (test/debug endpoint)."""
+    reset_documents()
+    return ToolResponse(data={"message": "Documents reset"})
 
 
 # ── Generic Tool Dispatch ───────────────────────────────────────────
 # All MCP tools are also accessible via REST using a unified endpoint.
-# The tool name maps to the scene graph method name.
+# The tool name maps to the document/tool method name.
 
 @app.post("/tools/{tool_name}")
 async def tool_dispatch(tool_name: str, body: dict):
-    """Generic dispatch — route any tool call to the scene graph method.
+    """Generic dispatch — route any tool call to the document/tool method.
 
     The ``tool_name`` path segment matches the MCP tool name. Parameters
     are passed as a JSON body dict. This avoids maintaining individual
     endpoints for every tool.
     """
-    graph = get_graph()
     params = dict(body)
-    doc_id = params.pop("document_id", None) or graph.active_document_id()
-    if not doc_id:
-        raise HTTPException(status_code=400, detail="No active document")
+    doc_id = params.pop("document_id", None)
     result = ToolExecutionService().execute_tool(tool_name, params, document_id=doc_id)
     if result.status == "error" and result.message.startswith("Unknown tool:"):
         raise HTTPException(status_code=404, detail=f"Unknown tool: {tool_name}")

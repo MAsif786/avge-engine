@@ -350,4 +350,4 @@ batch([
 ])
 ```
 
-**Adding a new tool to batch:** When creating a new scene graph method, add a matching `elif tool == "new_tool":` branch in `SceneGraph.batch()` in `scene/graph.py`. Extract params via `op.pop()` for required args (consumes them) and `op.get()` for optional args (leaves them in the dict for other branches).
+**Adding a new tool to batch:** Register the tool through the controller registry so `TOOL_DISPATCH` can route batch operations to the same callable used by MCP/API tools. Keep shared logic in services, and avoid adding batch-only behavior.

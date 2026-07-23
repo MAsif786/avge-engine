@@ -1,5 +1,6 @@
 from avge_engine.controllers import query, element, scene_ops, style
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -14,7 +15,7 @@ class _FakeMCP:
 
 
 def _setup():
-    reset_graph()
+    reset_documents()
     qm = _FakeMCP()
     rm = _FakeMCP()
     sm = _FakeMCP()
@@ -23,7 +24,7 @@ def _setup():
     element.create_tools(rm)
     style.create_tools(sm)
     scene_ops.create_tools(tm)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     graph.create_element(
         document_id=doc.id,
@@ -49,7 +50,7 @@ def _setup():
         metadata={"kind": "skip"},
     )
     graph.edit_element("blue", document_id=doc.id, fill="#3366CC")
-    graph.group_elements("targets", ["near_red", "far_red"], document_id=doc.id)
+    DocumentStructureService(graph).group_elements("targets", ["near_red", "far_red"], document_id=doc.id)
     return graph, doc, qm, sm, tm
 
 

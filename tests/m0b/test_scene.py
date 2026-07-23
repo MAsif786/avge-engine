@@ -1,19 +1,23 @@
 """
-M0b test suite — scene graph, geometry engine, and determinism tests.
+M0b test suite — engine document layer, geometry engine, and determinism tests.
 """
 
 import math
 
 import pytest
 
-from avge_engine.scene import SceneGraph, CurveConstraints, ElementNode, Style, ElementNode
+from avge_engine.document import CurveConstraints, ElementNode, Style
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.services.style_service import StyleService
 from avge_engine.geometry import fit_curves, compute_bounds, normalize_outline
 from avge_engine.renderer import svg_serialize
 
 
-class TestSceneGraph:
+class TestDocumentLayer:
     def test_create_document(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         doc = scene.create_document(800, 600, background="#F0F0F0")
         assert doc.id.startswith("doc_")
         assert doc.width == 800
@@ -21,18 +25,21 @@ class TestSceneGraph:
         assert doc.unit == "px"
 
     def test_no_document_by_default(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         assert scene.has_document() is False
 
     def test_create_document_twice(self):
         """Multi-document: creating twice works, returns different IDs."""
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         doc1 = scene.create_document()
         doc2 = scene.create_document()
         assert doc1.id != doc2.id
 
     def test_clone_document_copies_elements_gradients_and_groups(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         doc = scene.create_document(width=800, height=600, name="source", background="#101820")
         doc.gradients["sky"] = {"type": "linear", "stops": [{"offset": 0, "color": "#000000"}]}
         scene.create_element(
@@ -43,7 +50,8 @@ class TestSceneGraph:
             layer="buildings",
             metadata={"kind": "facade"},
         )
-        scene.group_elements("facades", ["panel"], document_id=doc.id)
+        structure = DocumentStructureService(scene)
+        structure.group_elements("facades", ["panel"], document_id=doc.id)
 
         clone = scene.clone_document(doc.id, name="copy")
 
@@ -54,10 +62,11 @@ class TestSceneGraph:
         assert scene.get_element("panel", clone.id) is not scene.get_element("panel", doc.id)
         assert scene.get_document(clone.id).gradients == scene.get_document(doc.id).gradients
         assert scene.get_document(clone.id).gradients is not scene.get_document(doc.id).gradients
-        assert [r["id"] for r in scene.get_group("facades", clone.id)] == ["panel"]
+        assert [r["id"] for r in structure.get_group("facades", clone.id)] == ["panel"]
 
     def test_create_element(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         element = scene.create_element(
             outline=[(0.1, 0.1), (0.5, 0.8), (0.9, 0.1)],
@@ -68,7 +77,8 @@ class TestSceneGraph:
         assert isinstance(element, ElementNode)
 
     def test_element_aliases_wrap_element_store(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         doc = scene.create_document()
         element = scene.create_element(
             outline=[(0.1, 0.1), (0.5, 0.8), (0.9, 0.1)],
@@ -85,31 +95,36 @@ class TestSceneGraph:
         assert scene.has_element("tri", doc.id) is False
 
     def test_create_element_no_document(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         with pytest.raises(RuntimeError):
             scene.create_element(outline=[(0, 0), (1, 1)])
 
     def test_create_element_duplicate_id(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
         with pytest.raises(ValueError):
             scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
 
     def test_get_element(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         r = scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
         assert scene.get_element("r1").id == "r1"
 
     def test_get_element_not_found(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         with pytest.raises(ValueError):
             scene.get_element("nonexistent")
 
     def test_element_count(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         assert scene.element_count() == 0
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)])
@@ -118,22 +133,24 @@ class TestSceneGraph:
         assert scene.element_count() == 2
 
     def test_style_objects(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r2")
 
-        affected = scene.style_objects(["r1", "r2"], fill="#00FF00")
+        affected = StyleService(scene).style_objects(["r1", "r2"], fill="#00FF00")
         assert len(affected) == 2
         assert scene.get_element("r1").style.fill == "#00FF00"
         assert scene.get_element("r2").style.fill == "#00FF00"
 
     def test_style_objects_partial_update(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
 
-        scene.style_objects(["r1"], stroke_width=0.02, opacity=0.5)
+        StyleService(scene).style_objects(["r1"], stroke_width=0.02, opacity=0.5)
         r = scene.get_element("r1")
         assert r.style.stroke_width == 0.02
         assert r.style.opacity == 0.5
@@ -141,7 +158,8 @@ class TestSceneGraph:
         assert r.style.stroke == "#333333"  # unchanged
 
     def test_describe_scene_structure(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)], element_id="r1")
 
@@ -153,13 +171,15 @@ class TestSceneGraph:
         assert "warnings" in desc
 
     def test_describe_scene_empty(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         desc = scene.describe_scene()
         assert desc["element_count"] == 0
 
     def test_reset(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document()
         scene.create_element(outline=[(0, 0), (1, 0), (1, 1)])
         scene.reset()
@@ -256,7 +276,8 @@ class TestGeometry:
 
 class TestDeterminism:
     def _make_scene(self):
-        scene = SceneGraph()
+        reset_documents()
+        scene = get_document_operations()
         scene.create_document(1000, 1000)
         scene.create_element(
             element_id="r1",

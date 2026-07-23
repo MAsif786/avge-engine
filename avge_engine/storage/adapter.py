@@ -1,7 +1,7 @@
 """
-Storage adapter interface for scene graph persistence.
+Storage adapter interface for document persistence.
 
-Each adapter stores/loads document snapshots. The SceneGraph uses
+Each adapter stores/loads document snapshots. The document layer uses
 an adapter (if attached) to persist every mutation and to reload
 documents across server restarts.
 

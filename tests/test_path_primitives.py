@@ -1,7 +1,7 @@
 from avge_engine.controllers import element
 from avge_engine.renderer.svg import svg_serialize
-from avge_engine.scene import SceneGraph
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -16,7 +16,8 @@ class _FakeMCP:
 
 
 def test_create_line_uses_two_point_points_argument():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
 
     line = scene.create_line(points=[[0.2, 0.3], [0.7, 0.8]], document_id=doc.id)
@@ -31,10 +32,10 @@ def test_create_line_uses_two_point_points_argument():
 
 
 def test_create_primitive_polyline_supports_dasharray_and_smoothness():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_primitive"](
@@ -54,7 +55,8 @@ def test_create_primitive_polyline_supports_dasharray_and_smoothness():
 
 
 def test_compound_path_renders_as_single_svg_path_with_subpaths():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document(width=1000, height=800)
 
     scene.create_compound_path(
@@ -76,7 +78,8 @@ def test_compound_path_renders_as_single_svg_path_with_subpaths():
 
 
 def test_batch_create_primitive_compound_path():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
 
     result = scene.batch([
@@ -99,10 +102,10 @@ def test_batch_create_primitive_compound_path():
 
 
 def test_create_primitive_rect_supports_wavy_outline_pattern():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_element"](
@@ -125,10 +128,10 @@ def test_create_primitive_rect_supports_wavy_outline_pattern():
 
 
 def test_create_primitive_ellipse_supports_clipped_hatch_fill_pattern():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_element"](
@@ -151,10 +154,10 @@ def test_create_primitive_ellipse_supports_clipped_hatch_fill_pattern():
 
 
 def test_create_primitive_polygon_supports_dotted_outline_pattern():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     mcp.tools["create_element"](
@@ -173,10 +176,10 @@ def test_create_primitive_polygon_supports_dotted_outline_pattern():
 
 
 def test_create_element_outline_supports_patterned_outline_and_fill():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_element"](
@@ -199,10 +202,10 @@ def test_create_element_outline_supports_patterned_outline_and_fill():
 
 
 def test_create_curve_supports_outline_pattern_without_closing_curve():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_curve"](
@@ -221,10 +224,10 @@ def test_create_curve_supports_outline_pattern_without_closing_curve():
 
 
 def test_create_ellipse_band_supports_dotted_outline_pattern():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_ellipse_band"](
@@ -245,10 +248,10 @@ def test_create_ellipse_band_supports_dotted_outline_pattern():
 
 
 def test_create_primitive_supports_pattern_options_directly():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
 
     result = mcp.tools["create_primitive"](

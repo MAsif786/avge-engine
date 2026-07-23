@@ -34,7 +34,7 @@ def ellipse_band(
     """Generate a filled elliptical or partial-arc band outline.
 
     The returned outline walks the outer arc, then the inner arc in reverse,
-    creating a single closed polygon suitable for ``SceneGraph.create_element``.
+    creating a single closed polygon suitable for ``DocumentLayer.create_element``.
 
     Args:
         cx, cy: Center of the band in normalized canvas coordinates.

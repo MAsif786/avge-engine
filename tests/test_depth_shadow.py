@@ -1,8 +1,8 @@
 from avge_engine.controllers import scene_ops
 from avge_engine.renderer.svg import svg_serialize
-from avge_engine.scene import SceneGraph
-from avge_engine.scene import Style
-from avge_engine.services.engine import reset_graph
+from avge_engine.services.engine import get_document_operations, reset_documents
+from avge_engine.document import Style
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -17,7 +17,8 @@ class _FakeMCP:
 
 
 def test_scene_graph_add_depth_shadow_creates_blurred_shadow():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document(width=1000, height=800)
     scene.create_element(
         document_id=doc.id,
@@ -52,10 +53,10 @@ def test_scene_graph_add_depth_shadow_creates_blurred_shadow():
 
 
 def test_create_shadow_tool_renders_blur_filter():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     graph.create_element(
         document_id=doc.id,
@@ -78,10 +79,10 @@ def test_create_shadow_tool_renders_blur_filter():
 
 
 def test_create_shadow_clips_to_receiver():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1000, height=800)
     graph.create_element(
         document_id=doc.id,
@@ -113,7 +114,8 @@ def test_create_shadow_clips_to_receiver():
 
 
 def test_batch_create_shadow():
-    scene = SceneGraph()
+    reset_documents()
+    scene = get_document_operations()
     doc = scene.create_document()
     scene.create_element(
         document_id=doc.id,

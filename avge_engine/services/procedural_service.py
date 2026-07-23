@@ -19,12 +19,12 @@ from avge_engine.geometry.line_patterns import (
     scribble_paths,
     width_profile_values,
 )
-from avge_engine.scene import CurveConstraints, Style
-from avge_engine.services.base import BaseService
-from avge_engine.services.engine import StrokeWidthInput, resolve_doc, stroke_width_to_norm
+from avge_engine.document import CurveConstraints, Style
+from avge_engine.schemas.common import StrokeWidthInput
+from avge_engine.services.base_element import BaseElementService
 
 
-class ProceduralService(BaseService):
+class ProceduralService(BaseElementService):
     """Application service for procedural drawing tools."""
 
     def create_line_pattern(
@@ -60,13 +60,13 @@ class ProceduralService(BaseService):
     ) -> str:
         """Create procedural linework and return the created element IDs."""
         try:
-            doc_id = resolve_doc(document_id)
+            doc_id = self.require_document_id(document_id)
         except RuntimeError:
             return "Error: No active document. Call create_document first."
 
-        base_width = stroke_width_to_norm(doc_id, stroke_width) or 0.005
-        start_norm = stroke_width_to_norm(doc_id, start_width) or base_width
-        end_norm = stroke_width_to_norm(doc_id, end_width) or max(0.001, base_width * 0.25)
+        base_width = self.stroke_width_to_norm(doc_id, stroke_width) or 0.005
+        start_norm = self.stroke_width_to_norm(doc_id, start_width) or base_width
+        end_norm = self.stroke_width_to_norm(doc_id, end_width) or max(0.001, base_width * 0.25)
         resolved_opacity = role_opacity(role, opacity)
         resolved_dash = dash if dash is not None else role_dash(role, pattern)
         prefix = element_id or f"line_pattern_{abs(hash((pattern, seed, count))) & 0xFFFF:x}"
@@ -77,9 +77,9 @@ class ProceduralService(BaseService):
                 path = line_pattern_points(pattern, points, center, radius, turns, count, amplitude, frequency)
                 path = jitter_points(path, jitter, random.Random(seed))
                 if width_profile == "uniform":
-                    r = self.graph.create_line(
+                    r = self.documents.create_line(
+                        doc_id,
                         points=path,
-                        document_id=doc_id,
                         element_id=prefix,
                         layer=layer,
                         z_index=z_index,
@@ -90,12 +90,13 @@ class ProceduralService(BaseService):
                         stroke_dasharray=resolved_dash,
                         smoothness=smoothness if pattern != "zigzag" else 0.0,
                     )
+                    self.commit(doc_id, action="create_line_pattern", target=r.id)
                 else:
                     widths = width_profile_values(len(path), width_profile, start_norm, end_norm, base_width)
                     outline = ribbon_outline(path, widths)
-                    r = self.graph.create_element(
+                    r = self.documents.create_element_node(
+                        doc_id,
                         outline=outline,
-                        document_id=doc_id,
                         element_id=prefix,
                         layer=layer,
                         z_index=z_index,
@@ -103,13 +104,14 @@ class ProceduralService(BaseService):
                         style=Style(fill=stroke, stroke=None, opacity=resolved_opacity),
                         metadata={"tool": "create_line_pattern", "pattern": pattern, "role": role, "width_profile": width_profile},
                     )
+                    self.commit(doc_id, action="create_line_pattern", target=r.id)
                 r.metadata.update({"tool": "create_line_pattern", "pattern": pattern, "role": role, "width_profile": width_profile})
                 created.append(r.id)
             elif pattern in ("hatch", "cross_hatch", "contour_hatch"):
                 subpaths = hatch_subpaths(bounds, density, angle, pattern, amplitude, jitter, random.Random(seed))
-                r = self.graph.create_compound_path(
+                r = self.documents.create_compound_path(
+                    doc_id,
                     subpaths=subpaths,
-                    document_id=doc_id,
                     element_id=prefix,
                     layer=layer,
                     z_index=z_index,
@@ -122,14 +124,15 @@ class ProceduralService(BaseService):
                     smoothness=smoothness if pattern == "contour_hatch" else 0.0,
                     closed=False,
                 )
+                self.commit(doc_id, action="create_line_pattern", target=r.id)
                 r.metadata.update({"tool": "create_line_pattern", "pattern": pattern, "role": role})
                 created.append(r.id)
             elif pattern == "scribble":
                 rng = random.Random(seed)
                 for i, path in enumerate(scribble_paths(bounds, count, jitter, rng)):
-                    r = self.graph.create_line(
+                    r = self.documents.create_line(
+                        doc_id,
                         points=path,
-                        document_id=doc_id,
                         element_id=f"{prefix}_{i:02d}",
                         layer=layer,
                         z_index=z_index,
@@ -139,6 +142,7 @@ class ProceduralService(BaseService):
                         stroke_linecap=linecap,
                         smoothness=0.65,
                     )
+                    self.commit(doc_id, action="create_line_pattern", target=r.id)
                     r.metadata.update({"tool": "create_line_pattern", "pattern": pattern, "role": role})
                     created.append(r.id)
             elif pattern == "stipple":
@@ -149,12 +153,12 @@ class ProceduralService(BaseService):
                     px = x + rng.random() * w
                     py = y + rng.random() * h
                     dot_w = base_width * rng.uniform(0.7, 1.6)
-                    r = self.graph.create_ellipse(
-                        px,
-                        py,
-                        dot_w,
-                        dot_w,
-                        document_id=doc_id,
+                    r = self.documents.create_ellipse(
+                        doc_id,
+                        cx=px,
+                        cy=py,
+                        rx=dot_w,
+                        ry=dot_w,
                         element_id=f"{prefix}_{i:03d}",
                         layer=layer,
                         z_index=z_index,
@@ -162,6 +166,7 @@ class ProceduralService(BaseService):
                         stroke=None,
                         opacity=resolved_opacity * rng.uniform(0.55, 1.0),
                     )
+                    self.commit(doc_id, action="create_line_pattern", target=r.id)
                     r.metadata.update({"tool": "create_line_pattern", "pattern": pattern, "role": role})
                     created.append(r.id)
             else:
@@ -169,7 +174,7 @@ class ProceduralService(BaseService):
         except (ValueError, RuntimeError, TypeError) as e:
             return f"Error: {e}"
 
-        self.graph._persist(doc_id)
+        self.documents.persist(doc_id)
         return (
             f"Line pattern created: pattern={pattern}, elements={len(created)}, "
             f"width_profile={width_profile}, role={role}, ids={', '.join(created[:6])}"

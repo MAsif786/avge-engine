@@ -1,6 +1,7 @@
 from avge_engine.controllers import procedural, scene_ops, scene_view, style
-from avge_engine.scene import Style
-from avge_engine.services.engine import reset_graph
+from avge_engine.document import Style
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.engine import get_document_operations, reset_documents
 
 
 class _FakeMCP:
@@ -15,10 +16,10 @@ class _FakeMCP:
 
 
 def test_create_perspective_grid_clips_off_canvas_vanishing_points():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["create_perspective_grid"](
@@ -38,10 +39,10 @@ def test_create_perspective_grid_clips_off_canvas_vanishing_points():
 
 
 def test_create_facade_grid_creates_base_and_windows_with_lit_ratio():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["create_facade_grid"](
@@ -63,12 +64,12 @@ def test_create_facade_grid_creates_base_and_windows_with_lit_ratio():
 
 
 def test_apply_depth_haze_blends_far_element_toward_haze_color():
-    reset_graph()
+    reset_documents()
     scene_mcp = _FakeMCP()
     style_mcp = _FakeMCP()
     scene_ops.create_tools(scene_mcp)
     style.create_tools(style_mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     graph.create_element(
         document_id=doc.id,
@@ -90,10 +91,10 @@ def test_apply_depth_haze_blends_far_element_toward_haze_color():
 
 
 def test_duplicate_linear_supports_spacing_and_scale_falloff():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     graph.create_element(
         document_id=doc.id,
@@ -120,10 +121,10 @@ def test_duplicate_linear_supports_spacing_and_scale_falloff():
 
 
 def test_duplicate_scatter_places_copies_inside_bounds_by_center():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     graph.create_element(
         document_id=doc.id,
@@ -152,10 +153,10 @@ def test_duplicate_scatter_places_copies_inside_bounds_by_center():
 
 
 def test_duplicate_missing_element_message_includes_pattern():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["duplicate"](
@@ -169,10 +170,10 @@ def test_duplicate_missing_element_message_includes_pattern():
 
 
 def test_add_shading_gradient_styles_existing_element():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     graph.create_element(
         document_id=doc.id,
@@ -196,10 +197,10 @@ def test_add_shading_gradient_styles_existing_element():
 
 
 def test_generate_cloud_creates_soft_layered_elements():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["generate_cloud"](
@@ -224,10 +225,10 @@ def test_generate_cloud_creates_soft_layered_elements():
 
 
 def test_generate_background_asset_facade_detail_groups_parts():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["generate_background_asset"](
@@ -246,14 +247,14 @@ def test_generate_background_asset_facade_detail_groups_parts():
     assert "Background asset generated: mode=facade_detail" in result
     assert len(created) >= 5
     assert {r.metadata["part"] for r in created} >= {"mullion", "sill", "cornice"}
-    assert {"name": "facade_bits", "count": len(created)} in graph.list_groups(doc.id)
+    assert {"name": "facade_bits", "count": len(created)} in DocumentStructureService(graph).list_groups(document_id=doc.id)
 
 
 def test_generate_background_asset_tree_cluster_creates_trunks_and_leaves():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     result = mcp.tools["generate_background_asset"](
@@ -274,10 +275,10 @@ def test_generate_background_asset_tree_cluster_creates_trunks_and_leaves():
 
 
 def test_create_comic_panel_layout_grid_adds_reading_order_metadata():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1200, height=1600)
 
     result = mcp.tools["create_comic_panel_layout"](
@@ -295,14 +296,14 @@ def test_create_comic_panel_layout_grid_adds_reading_order_metadata():
     assert "Comic panel layout created: layout=grid, panels=4" in result
     assert {p.metadata["reading_index"] for p in panels} == {0, 1, 2, 3}
     assert panels[1].metadata["reading_index"] == 0
-    assert {"name": "page_one", "count": 4} in graph.list_groups(doc.id)
+    assert {"name": "page_one", "count": 4} in DocumentStructureService(graph).list_groups(document_id=doc.id)
 
 
 def test_create_comic_panel_layout_feature_top_creates_large_opening_panel():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
 
     mcp.tools["create_comic_panel_layout"](
@@ -322,10 +323,10 @@ def test_create_comic_panel_layout_feature_top_creates_large_opening_panel():
 
 
 def test_create_surface_stripes_projects_repeated_road_markings():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1200, height=800)
 
     result = mcp.tools["create_surface_stripes"](
@@ -349,10 +350,10 @@ def test_create_surface_stripes_projects_repeated_road_markings():
 
 
 def test_environment_densify_generate_shape_patterns():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     procedural.create_tools(mcp)
-    graph = procedural.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     graph.create_element(
         document_id=doc.id,
@@ -382,10 +383,10 @@ def test_environment_densify_generate_shape_patterns():
 
 
 def test_export_svg_can_exclude_construction_guides(tmp_path):
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_view.create_tools(mcp)
-    graph = scene_view.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document()
     graph.create_element(
         document_id=doc.id,

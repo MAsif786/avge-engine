@@ -1,21 +1,17 @@
 """Document lifecycle service.
 
 Controllers and HTTP handlers should call this service instead of reaching
-directly into ``SceneGraph`` internals for document operations.
+directly into document-store internals for document layer.
 """
 from __future__ import annotations
 
 from typing import Any
 
 from avge_engine.schemas.service_results import DeleteDocumentsResult, DocumentSummary
-from avge_engine.scene.models import DocumentNode
+from avge_engine.document.models import DocumentNode
 from avge_engine.services.base import BaseService
 from avge_engine.services.document_load_service import DocumentLoadService
-from avge_engine.services.engine import (
-    list_stored_documents,
-    resolve_doc,
-    set_active_doc,
-)
+from avge_engine.services.engine import set_active_doc
 
 
 class DocumentService(BaseService):
@@ -43,8 +39,10 @@ class DocumentService(BaseService):
         return doc
 
     def get_document_summary(self, document_id: str | None = None, *, include_elements: bool = False) -> DocumentSummary:
-        doc_id = resolve_doc(document_id)
-        desc = self.graph.describe_scene(doc_id)
+        doc_id = self.documents.require_id(document_id)
+        from avge_engine.services.inspection_service import InspectionService
+
+        desc = InspectionService(self.graph).describe_scene(document_id=doc_id)
         return DocumentSummary(
             document=desc["document"],
             element_count=desc["element_count"],
@@ -52,7 +50,7 @@ class DocumentService(BaseService):
         )
 
     def list_documents(self) -> list[dict[str, Any]]:
-        return list_stored_documents()
+        return self.documents.list_stored()
 
     def clone_document(
         self,
@@ -61,15 +59,17 @@ class DocumentService(BaseService):
         name: str | None = None,
         set_active: bool = True,
     ) -> tuple[DocumentNode, str, int]:
-        source_id = resolve_doc(source_document_id)
+        source_id = self.documents.require_id(source_document_id)
         clone = self.graph.clone_document(source_id, name=name, set_active=set_active)
         if set_active:
             set_active_doc(clone.id)
-        desc = self.graph.describe_scene(clone.id)
+        from avge_engine.services.inspection_service import InspectionService
+
+        desc = InspectionService(self.graph).describe_scene(document_id=clone.id)
         return clone, source_id, desc["element_count"]
 
     def delete_documents(self, ids: list[str], *, confirm: bool = False) -> DeleteDocumentsResult:
-        stored = {d["id"]: d for d in list_stored_documents()}
+        stored = {d["id"]: d for d in self.documents.list_stored()}
         found = [stored[doc_id] for doc_id in ids if doc_id in stored]
         missing = [doc_id for doc_id in ids if doc_id not in stored]
 
@@ -87,7 +87,7 @@ class DocumentService(BaseService):
         for entry in found:
             doc_id = entry["id"]
             try:
-                if self.graph.delete_document(doc_id):
+                if self.documents.delete(doc_id):
                     deleted.append(doc_id)
                 else:
                     errors.append(f"{doc_id}: not deleted")
@@ -108,20 +108,19 @@ class DocumentService(BaseService):
         background: str | dict | None = "#FFFFFF",
         fill_gradient: Any | None = None,
     ) -> DocumentNode:
-        doc_id = resolve_doc(document_id)
-        if not self.graph.has_document(doc_id):
-            raise ValueError(f"Document '{doc_id}' not found")
+        doc_id = self.documents.require_id(document_id)
 
         resolved = self._resolve_background(background, fill_gradient)
         doc = self.graph.get_document(doc_id)
         object.__setattr__(doc, "background", resolved)
-        doc.version += 1
-        self.graph._persist(doc_id)
+        self.documents.commit(doc_id, action="set_background", target=doc_id)
         return doc
 
     def ensure_loaded_summary(self, document_id: str) -> DocumentSummary:
         DocumentLoadService(self.graph).ensure_loaded_from_storage(document_id)
-        desc = self.graph.describe_scene(document_id)
+        from avge_engine.services.inspection_service import InspectionService
+
+        desc = InspectionService(self.graph).describe_scene(document_id=document_id)
         return DocumentSummary(
             document=desc["document"],
             element_count=desc["element_count"],

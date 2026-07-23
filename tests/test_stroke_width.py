@@ -1,5 +1,5 @@
 from avge_engine.controllers import element, scene_ops, style
-from avge_engine.services.engine import reset_graph, stroke_width_to_norm
+from avge_engine.services.engine import get_document_operations, reset_documents, stroke_width_to_norm
 
 
 class _FakeMCP:
@@ -14,18 +14,18 @@ class _FakeMCP:
 
 
 def test_stroke_width_conversion_uses_shorter_canvas_dimension():
-    reset_graph()
-    graph = element.get_graph()
+    reset_documents()
+    graph = get_document_operations()
     doc = graph.create_document(width=1600, height=1000)
 
     assert stroke_width_to_norm(doc.id, 2) == 0.002
 
 
 def test_create_curve_accepts_stroke_width():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     element.create_tools(mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1600, height=1000)
 
     mcp.tools["create_curve"](
@@ -39,12 +39,12 @@ def test_create_curve_accepts_stroke_width():
 
 
 def test_restyle_accepts_stroke_width():
-    reset_graph()
+    reset_documents()
     element_mcp = _FakeMCP()
     style_mcp = _FakeMCP()
     element.create_tools(element_mcp)
     style.create_tools(style_mcp)
-    graph = element.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1200, height=800)
     graph.create_element(
         document_id=doc.id,
@@ -62,10 +62,10 @@ def test_restyle_accepts_stroke_width():
 
 
 def test_project_quad_accepts_stroke_width():
-    reset_graph()
+    reset_documents()
     mcp = _FakeMCP()
     scene_ops.create_tools(mcp)
-    graph = scene_ops.get_graph()
+    graph = get_document_operations()
     doc = graph.create_document(width=1600, height=1000)
 
     mcp.tools["project_quad"](

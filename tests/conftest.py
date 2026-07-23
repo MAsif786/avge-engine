@@ -11,10 +11,10 @@ def isolate_engine_storage(tmp_path):
     previous_dir = engine.STORAGE_DIR
     temp_storage = tmp_path / ".avge_data"
     engine.STORAGE_DIR = str(temp_storage)
-    engine.reset_graph()
+    engine.reset_documents()
     try:
         yield
     finally:
-        engine.reset_graph()
+        engine.reset_documents()
         shutil.rmtree(temp_storage, ignore_errors=True)
         engine.STORAGE_DIR = previous_dir

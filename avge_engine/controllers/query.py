@@ -4,8 +4,8 @@ from __future__ import annotations
 import json as _json
 from typing import Any, Literal
 
-from avge_engine.services.engine import get_graph, resolve_doc
-from avge_engine.services.selector_service import select_element_ids
+from avge_engine.services.document_structure_service import DocumentStructureService
+from avge_engine.services.inspection_service import InspectionService
 
 
 def create_tools(mcp):
@@ -59,21 +59,10 @@ def create_tools(mcp):
             layer: Filter by layer name.
             tags: JSON object of key/value tags to match (all must match, e.g. {"part":"handle"}).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
-        except RuntimeError:
-            return "Error: No active document — call create_document first"
-
-        if selector is not None:
-            target_ids = select_element_ids(scene, doc_id, selector)
-            all_results = scene.find_objects(document_id=doc_id)
-            target_set = set(target_ids)
-            results = [r for r in all_results if r["id"] in target_set]
-        else:
-            parsed_tags = dict(tags) if tags else None
-            results = scene.find_objects(
-                document_id=doc_id,
+            results = InspectionService().find_objects(
+                document_id=document_id,
+                selector=selector,
                 fill=fill,
                 min_x=min_x, max_x=max_x,
                 min_y=min_y, max_y=max_y,
@@ -82,8 +71,10 @@ def create_tools(mcp):
                 z_min=z_min, z_max=z_max,
                 has_stroke=has_stroke,
                 layer=layer,
-                tags=parsed_tags,
+                tags=tags,
             )
+        except RuntimeError:
+            return "Error: No active document — call create_document first"
 
         if not results:
             return "No matching elements found"
@@ -128,40 +119,33 @@ def create_tools(mcp):
             min_confidence: Hide visual findings below this confidence threshold.
             as_json: Return JSON for automated consumers.
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            result = InspectionService().critique(
+                document_id=document_id,
+                mode=mode,
+                min_confidence=min_confidence,
+            )
         except RuntimeError:
             return "Error: No active document — call create_document first"
 
-        include_rules = mode in ("rules", "both")
-        include_visual = mode in ("visual", "both")
-        rule_findings = scene.critique_composition(document_id=doc_id) if include_rules else []
-        visual_findings = [
-            f for f in scene.critique_preview_quality(document_id=doc_id)
-            if f.get("confidence", 0.0) >= min_confidence
-        ] if include_visual else []
+        rule_findings = result["rules"]["findings"]
+        visual_findings = result["visual"]["findings"]
 
         if as_json:
-            return _json.dumps({
-                "mode": mode,
-                "rules": {"findings": rule_findings, "count": len(rule_findings)},
-                "visual": {"findings": visual_findings, "count": len(visual_findings)},
-                "count": len(rule_findings) + len(visual_findings),
-            }, indent=2)
+            return _json.dumps(result, indent=2)
 
         if not rule_findings and not visual_findings:
             return f"No {mode} critique issues found."
 
         lines = [f"Critique ({mode}, {len(rule_findings) + len(visual_findings)} finding(s)):"]
-        if include_rules:
+        if mode in ("rules", "both"):
             lines.append(f"Rules ({len(rule_findings)} finding(s)):")
             if rule_findings:
                 for i, f in enumerate(rule_findings, 1):
                     lines.append(f"  {i}. {f}")
             else:
                 lines.append("  No rule-based issues found.")
-        if include_visual:
+        if mode in ("visual", "both"):
             lines.append(f"Visual ({len(visual_findings)} finding(s)):")
             if visual_findings:
                 for i, f in enumerate(visual_findings, 1):
@@ -189,13 +173,10 @@ def create_tools(mcp):
         Args:
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            layers = DocumentStructureService().list_layers(document_id=document_id)
         except RuntimeError:
             return "Error: No active document — call create_document first"
-
-        layers = scene.list_layers(document_id=doc_id)
 
         if not layers:
             return "(no layers)"
@@ -223,17 +204,15 @@ def create_tools(mcp):
             z_offset: Positive = move up (on top), negative = move back.
             document_id: Document UUID (omit to use active document).
         """
-        scene = get_graph()
         try:
-            doc_id = resolve_doc(document_id)
+            count = DocumentStructureService().shift_layer_z(
+                layer=layer,
+                z_offset=z_offset,
+                document_id=document_id,
+            )
         except RuntimeError:
             return "Error: No active document — call create_document first"
 
-        count = scene.reorder_layer(
-            layer=layer,
-            z_offset=z_offset,
-            document_id=doc_id,
-        )
         if count == 0:
             return f"No elements found in layer '{layer}'"
         return (
